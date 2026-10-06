@@ -4,7 +4,7 @@
 set -euo pipefail
 SRC="$1"; DST="$2"; DYLIB="${3:-}"
 MARK=".mcpekbm-generated"
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"  # repo root
 if [ -n "$DYLIB" ]; then
   [ -f "$DYLIB" ] || { echo "convert.sh: dylib $DYLIB not found"; exit 1; }
   DYLIB="$(cd "$(dirname "$DYLIB")" && pwd)/$(basename "$DYLIB")"

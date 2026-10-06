@@ -1,4 +1,4 @@
-#include "../src/keymap.h"
+#include <mcfm/input/keymap.h>
 #include <cstdio>
 #include <cstdlib>
 
@@ -7,7 +7,7 @@ static int fails = 0;
   std::printf("FAIL %s:%d %s == %ld, want %ld\n", __FILE__, __LINE__, #a, _a, _b); fails++; } } while (0)
 
 int main() {
-  using namespace mcpekbm;
+  using namespace mcfm;
   EXPECT_EQ(hid_to_vk(0x04), 'A');
   EXPECT_EQ(hid_to_vk(0x1A), 'W');
   EXPECT_EQ(hid_to_vk(0x1D), 'Z');

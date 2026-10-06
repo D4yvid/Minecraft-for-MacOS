@@ -55,7 +55,7 @@ bool init() {
   bool found = false;
   for (uint32_t i = 0; i < _dyld_image_count(); i++) {
     // Identify the game by LC_UUID (not its file name) before touching any hard-coded address.
-    if (mcpekbm::is_expected_game_image(_dyld_get_image_header(i))) {
+    if (mcfm::is_expected_game_image(_dyld_get_image_header(i))) {
       gSlide = _dyld_get_image_vmaddr_slide(i);
       found = true;
       break;

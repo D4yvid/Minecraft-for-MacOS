@@ -1,57 +1,75 @@
+# Minecraft for macOS / iOS / Android — mods for Minecraft PE 0.15.10.
+# Local paths (your own game files) go in config.mk; see config.example.mk.
+-include config.mk
+
+BUILD   ?= build
+GAME    ?=
+OUT_APP ?= $(CURDIR)/dist/minecraftpe.app
+
+SHARED_INC   := -Ishared/include -Ishared/apple
+SHARED_TESTS := keymap_test input_state_test
+MACOS_TESTS  := titlebar_test input_policy_test
+
+# ---------------------------------------------------------------- macOS (Mac Catalyst)
 SDK      := $(shell xcrun --sdk macosx --show-sdk-path)
 IOSFW    := $(SDK)/System/iOSSupport/System/Library/Frameworks
-TARGET   := arm64-apple-ios15.0-macabi
-BUILD    := build
-DYLIB    := $(BUILD)/libmcpekbm.dylib
-ORIG_APP ?= /Users/dayvid/Downloads/Payload/minecraftpe2.app
-OUT_APP  ?= /Users/dayvid/Downloads/Payload/MinecraftPE-Mac/minecraftpe.app
+MAC_TARGET := arm64-apple-ios15.0-macabi
+MAC_DYLIB  := $(BUILD)/macos/libmcpekbm.dylib
+MAC_SRCS := shared/src/keymap.cpp shared/apple/macho_uuid.cpp \
+            $(wildcard macos/src/*.mm)
+MAC_CXXFLAGS := -target $(MAC_TARGET) -isysroot $(SDK) -iframework $(IOSFW) $(SHARED_INC) \
+                -std=c++17 -fobjc-arc -O2 -Wall -Wextra -Wno-unused-parameter
+MAC_LDFLAGS  := -dynamiclib -F$(IOSFW) -framework Foundation -framework UIKit \
+                -framework GameController -framework QuartzCore \
+                -install_name @executable_path/Frameworks/libmcpekbm.dylib
 
-SRCS := src/keymap.cpp src/macho_uuid.cpp src/engine.mm src/pointer_lock.mm src/platform.mm \
-        src/resize.mm src/mac_input.mm src/titlebar.mm src/store.mm src/main.mm
+.PHONY: all macos app run check test clean
+all: macos
 
-CXXFLAGS := -target $(TARGET) -isysroot $(SDK) -iframework $(IOSFW) \
-            -std=c++17 -fobjc-arc -O2 -Wall -Wextra -Wno-unused-parameter
-LDFLAGS  := -dynamiclib -F$(IOSFW) -framework Foundation -framework UIKit \
-            -framework GameController -framework QuartzCore \
-            -install_name @executable_path/Frameworks/libmcpekbm.dylib
+macos: $(MAC_DYLIB)
 
-.PHONY: all test install smoke clean
-all: $(DYLIB)
+$(MAC_DYLIB): $(MAC_SRCS) $(wildcard macos/src/*.h shared/include/mcfm/*/*.h shared/apple/*.h)
+	@mkdir -p $(dir $@)
+	clang++ $(MAC_CXXFLAGS) $(MAC_LDFLAGS) $(MAC_SRCS) -o $@
 
-$(DYLIB): $(SRCS) $(wildcard src/*.h)
-	@mkdir -p $(BUILD)
-	clang++ $(CXXFLAGS) $(LDFLAGS) $(SRCS) -o $@
+app: $(MAC_DYLIB)
+	@test -n "$(GAME)" || { echo "Set GAME=<your decrypted minecraftpe2.app> (or put it in config.mk)"; exit 1; }
+	bash macos/tools/convert.sh "$(GAME)" "$(OUT_APP)" "$(MAC_DYLIB)"
 
-$(BUILD)/keymap_test: tests/keymap_test.cpp src/keymap.cpp src/keymap.h
-	@mkdir -p $(BUILD)
-	clang++ -std=c++17 -Wall -O1 tests/keymap_test.cpp src/keymap.cpp -o $@
+run:
+	open "$(OUT_APP)"
 
-$(BUILD)/titlebar_test: tests/titlebar_test.cpp src/titlebar_zone.h
-	@mkdir -p $(BUILD)
-	clang++ -std=c++17 -Wall -O1 tests/titlebar_test.cpp -o $@
+# Needs the built app (make app).
+check: $(BUILD)/test/macho_uuid_test $(BUILD)/test/keymap_test
+	$(BUILD)/test/macho_uuid_test "$(OUT_APP)/minecraftpe" $(BUILD)/test/keymap_test
+	bash macos/tests/bundle_test.sh "$(OUT_APP)"
+	bash macos/tests/smoke.sh "$(OUT_APP)"
 
-$(BUILD)/macho_uuid_test: tests/macho_uuid_test.cpp src/macho_uuid.cpp src/macho_uuid.h
-	@mkdir -p $(BUILD)
-	clang++ -std=c++17 -Wall -O1 tests/macho_uuid_test.cpp src/macho_uuid.cpp -o $@
+# ---------------------------------------------------------------- host tests (no game files)
+$(BUILD)/test/keymap_test: shared/tests/keymap_test.cpp shared/src/keymap.cpp shared/include/mcfm/input/keymap.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -O1 $(SHARED_INC) shared/tests/keymap_test.cpp shared/src/keymap.cpp -o $@
 
-$(BUILD)/input_policy_test: tests/input_policy_test.cpp src/input_policy.h
-	@mkdir -p $(BUILD)
-	clang++ -std=c++17 -Wall -O1 tests/input_policy_test.cpp -o $@
+$(BUILD)/test/input_state_test: shared/tests/input_state_test.cpp shared/include/mcfm/input/input_state.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -O1 $(SHARED_INC) shared/tests/input_state_test.cpp -o $@
 
-test: $(BUILD)/keymap_test $(BUILD)/titlebar_test $(BUILD)/macho_uuid_test $(BUILD)/input_policy_test
-	$(BUILD)/input_policy_test
-	$(BUILD)/keymap_test
-	$(BUILD)/titlebar_test
-	$(BUILD)/macho_uuid_test "$(OUT_APP)/minecraftpe" $(BUILD)/keymap_test
-	bash tests/inject_test.sh
-	bash tests/convert_guard_test.sh
+$(BUILD)/test/macho_uuid_test: shared/apple/macho_uuid_test.cpp shared/apple/macho_uuid.cpp shared/apple/macho_uuid.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -O1 $(SHARED_INC) shared/apple/macho_uuid_test.cpp shared/apple/macho_uuid.cpp -o $@
 
-install: $(DYLIB)
-	bash tools/convert.sh "$(ORIG_APP)" "$(OUT_APP)" "$(DYLIB)"
+$(BUILD)/test/titlebar_test: macos/tests/titlebar_test.cpp macos/src/titlebar_zone.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++17 -Wall -O1 macos/tests/titlebar_test.cpp -o $@
 
-smoke:
-	bash tests/bundle_test.sh "$(OUT_APP)"
-	bash tests/smoke.sh "$(OUT_APP)"
+$(BUILD)/test/input_policy_test: macos/tests/input_policy_test.cpp macos/src/input_policy.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++17 -Wall -O1 $(SHARED_INC) macos/tests/input_policy_test.cpp -o $@
+
+test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
+	@for t in $(SHARED_TESTS) $(MACOS_TESTS); do $(BUILD)/test/$$t || exit 1; done
+	bash tools/tests/inject_test.sh
+	bash macos/tests/convert_guard_test.sh
 
 clean:
 	rm -rf $(BUILD)

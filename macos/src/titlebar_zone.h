@@ -1,6 +1,6 @@
 #pragma once
 
-namespace mcpekbm {
+namespace mcfm {
 
 // Height of the (hidden) title bar strip in points.
 constexpr double kTitleStripPt = 28;
@@ -31,4 +31,4 @@ inline void window_center_cg(double x, double y, double w, double h, double prim
   *cy = primaryHeight - (y + h / 2);
 }
 
-}  // namespace mcpekbm
+}  // namespace mcfm

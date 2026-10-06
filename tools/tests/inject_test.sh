@@ -1,7 +1,7 @@
 #!/bin/bash
 # Builds a throwaway binary, injects /usr/lib/libz.1.dylib, checks it loads.
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"  # repo root
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 printf 'int main(void){return 0;}\n' > "$T/hello.c"
 clang -arch arm64 -Wl,-headerpad,0x400 "$T/hello.c" -o "$T/hello"

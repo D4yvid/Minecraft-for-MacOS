@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace mcpekbm {
+namespace mcfm {
 namespace {
 
 constexpr uint32_t kMagic64 = 0xFEEDFACF;
@@ -35,4 +35,4 @@ bool is_expected_game_image(const void *header) {
   return false;
 }
 
-}  // namespace mcpekbm
+}  // namespace mcfm

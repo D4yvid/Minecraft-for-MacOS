@@ -15,7 +15,7 @@ constexpr NSUInteger kFullSizeContentView = 1 << 15;  // NSWindowStyleMaskFullSi
 constexpr NSInteger kTitleVisible = 0;                // NSWindowTitleVisible
 
 __weak id gWindow = nil;
-mcpekbm::TitlebarReveal gReveal;
+mcfm::TitlebarReveal gReveal;
 
 id ns_window() {
   Class appClass = objc_getClass("NSApplication");
@@ -122,7 +122,7 @@ bool window_center(double *cgX, double *cgY) {
   if (screens.count == 0) return false;
   CGRect primary = ((CGRect (*)(id, SEL))objc_msgSend)(screens[0], sel_registerName("frame"));
   CGRect f = ((CGRect (*)(id, SEL))objc_msgSend)(w, sel_registerName("frame"));
-  mcpekbm::window_center_cg(f.origin.x, f.origin.y, f.size.width, f.size.height, primary.size.height, cgX, cgY);
+  mcfm::window_center_cg(f.origin.x, f.origin.y, f.size.width, f.size.height, primary.size.height, cgX, cgY);
   return true;
 }
 

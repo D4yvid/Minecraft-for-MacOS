@@ -1,7 +1,8 @@
 #include "mac_input.h"
 #include "engine.h"
 #include "input_policy.h"
-#include "keymap.h"
+#include <mcfm/input/input_state.h>
+#include <mcfm/input/keymap.h>
 #include "pointer_lock.h"
 #include "titlebar.h"
 
@@ -19,8 +20,8 @@ namespace {
 constexpr float kLookScale = 1.0f;  // tune with manual check M3
 bool gTextActive = false;
 bool gMouseConnected = false;
-mcpekbm::HeldSet gKeys, gButtons;
-mcpekbm::DeltaAccumulator gLook;
+mcfm::HeldSet gKeys, gButtons;
+mcfm::DeltaAccumulator gLook;
 Class gPressesSuper = Nil;  // UIViewController, captured once (KVO-safe)
 NSHashTable *gAttached;  // devices whose handlers are installed
 int gX = 0, gY = 0;  // last pointer position in game pixels
@@ -28,7 +29,7 @@ bool gInside = false;  // free cursor is over the game view
 double gXPt = -1, gYPt = -1;  // last pointer position in window points
 __weak UIView *gView = nil;
 __weak UIResponder *gVC = nil;
-mcpekbm::ScrollAccumulator gScroll{1.0f};
+mcfm::ScrollAccumulator gScroll{1.0f};
 std::map<SEL, IMP> *gOrig;
 
 float view_scale() {
@@ -38,8 +39,8 @@ float view_scale() {
   return s > 0 ? s : 1.0f;
 }
 
-bool feeds(mcpekbm::PointerEvent e) {
-  return mcpekbm::should_feed(e, mcpekbm::PointerState{pl::captured(), gInside, gXPt, gYPt});
+bool feeds(mcfm::PointerEvent e) {
+  return mcfm::should_feed(e, mcfm::PointerState{pl::captured(), gInside, gXPt, gYPt});
 }
 
 void pointer_moved(CGPoint p) {
@@ -48,18 +49,18 @@ void pointer_moved(CGPoint p) {
   float s = view_scale();
   gX = (int)(p.x * s);
   gY = (int)(p.y * s);
-  if (feeds(mcpekbm::PointerEvent::Move)) eng::mouse_move_abs(gX, gY);
+  if (feeds(mcfm::PointerEvent::Move)) eng::mouse_move_abs(gX, gY);
   if (!pl::captured()) titlebar::pointer_at(p.x, p.y);
 }
 
 void button(int btn, BOOL pressed) {
-  if (!feeds(pressed ? mcpekbm::PointerEvent::ButtonDown : mcpekbm::PointerEvent::ButtonUp)) return;
+  if (!feeds(pressed ? mcfm::PointerEvent::ButtonDown : mcfm::PointerEvent::ButtonUp)) return;
   if (gButtons.set(btn, pressed)) eng::mouse_button(btn, pressed, gX, gY);
 }
 
 void key(int vk, bool down) {
   // While typing, presses belong to the text field (except Esc); releases still go through.
-  if (gTextActive && down && !mcpekbm::passes_while_typing(vk)) return;
+  if (gTextActive && down && !mcfm::passes_while_typing(vk)) return;
   if (gKeys.set(vk, down)) eng::key(vk, down);
 }
 
@@ -77,7 +78,7 @@ bool claim(id device) {  // true the first time a device is seen
 void attach_keyboard(GCKeyboard *kb) {
   if (!kb || !claim(kb)) return;
   kb.keyboardInput.keyChangedHandler = ^(GCKeyboardInput *, GCControllerButtonInput *, GCKeyCode code, BOOL pressed) {
-    key(mcpekbm::hid_to_vk((long)code), pressed);
+    key(mcfm::hid_to_vk((long)code), pressed);
   };
 }
 
@@ -98,7 +99,7 @@ void attach_mouse(GCMouse *mouse) {
   in.scroll.yAxis.valueChangedHandler = ^(GCControllerAxisInput *, float v) {
     if (getenv("MCPEKBM_LOG_SCROLL")) NSLog(@"mcpekbm: scroll %f", v);
     int notches = gScroll.feed(v, CACurrentMediaTime());
-    if (notches && feeds(mcpekbm::PointerEvent::Scroll)) eng::mouse_wheel(notches, gX, gY);
+    if (notches && feeds(mcfm::PointerEvent::Scroll)) eng::mouse_wheel(notches, gX, gY);
   };
   NSLog(@"mcpekbm: mouse connected");
 }
@@ -128,7 +129,7 @@ void presses_swallow(id self, SEL cmd, NSSet *presses, UIPressesEvent *event) {
 void hover(id, SEL, UIHoverGestureRecognizer *g) {
   if (g.state == UIGestureRecognizerStateEnded || g.state == UIGestureRecognizerStateCancelled) {
     CGSize size = g.view.bounds.size;
-    if (mcpekbm::hover_end_is_exit(gXPt, gYPt, size.width, size.height)) {
+    if (mcfm::hover_end_is_exit(gXPt, gYPt, size.width, size.height)) {
       gInside = false;
       titlebar::pointer_at(-1, -1);
     }

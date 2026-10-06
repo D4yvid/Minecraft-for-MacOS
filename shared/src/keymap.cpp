@@ -1,6 +1,6 @@
-#include "keymap.h"
+#include <mcfm/input/keymap.h>
 
-namespace mcpekbm {
+namespace mcfm {
 
 int hid_to_vk(long u) {
   if (u >= 0x04 && u <= 0x1D) return 'A' + (int)(u - 0x04);
@@ -61,4 +61,4 @@ int ScrollAccumulator::feed(float v, double now) {
   return n;
 }
 
-}  // namespace mcpekbm
+}  // namespace mcfm
