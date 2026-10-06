@@ -24,7 +24,7 @@ MAC_LDFLAGS  := -dynamiclib -F$(IOSFW) -framework Foundation -framework UIKit \
                 -framework GameController -framework QuartzCore \
                 -install_name @executable_path/Frameworks/libmcfm.dylib
 
-.PHONY: all macos app run check test clean
+.PHONY: all macos app run check test clean ios ios-ipa ios-syntax
 all: macos
 
 macos: $(MAC_DYLIB)
@@ -40,10 +40,35 @@ app: $(MAC_DYLIB)
 run:
 	open "$(OUT_APP)"
 
+# ---------------------------------------------------------------- iOS
+IOS_SDK    := $(shell xcrun --sdk iphoneos --show-sdk-path 2>/dev/null)
+IOS_TARGET := arm64-apple-ios15.0
+IOS_DYLIB  := $(BUILD)/ios/libmcfm.dylib
+IOS_IPA    ?= $(CURDIR)/dist/minecraftpe-mcfm.ipa
+IOS_SRCS   := $(SHARED_CORE) $(APPLE_SRCS) ios/src/main.mm
+IOS_CXXFLAGS := -target $(IOS_TARGET) $(SHARED_INC) -std=c++17 -fobjc-arc -O2 -Wall -Wextra -Wno-unused-parameter
+
+ios: $(IOS_DYLIB)
+
+$(IOS_DYLIB): $(IOS_SRCS) $(wildcard shared/include/mcfm/*.h shared/apple/*.h)
+	@test -n "$(IOS_SDK)" || { echo "The iOS build needs the iPhoneOS SDK: install Xcode, then run xcode-select -s /Applications/Xcode.app"; exit 1; }
+	@mkdir -p $(dir $@)
+	clang++ $(IOS_CXXFLAGS) -isysroot $(IOS_SDK) -dynamiclib -framework Foundation \
+	  -install_name @executable_path/Frameworks/libmcfm.dylib $(IOS_SRCS) -o $@
+
+ios-ipa: $(IOS_DYLIB)
+	@test -n "$(GAME)" || { echo "Set GAME=<your decrypted Minecraft .app or .ipa> (or put it in config.mk)"; exit 1; }
+	bash ios/tools/make_ipa.sh "$(GAME)" "$(IOS_IPA)" "$(IOS_DYLIB)"
+
+# Compiles the iOS sources for the iOS target without linking (works without Xcode).
+ios-syntax:
+	clang++ $(IOS_CXXFLAGS) -isysroot $(SDK) -Wno-incompatible-sysroot -fsyntax-only $(IOS_SRCS)
+
 # Needs the built app (make app).
 check: $(BUILD)/test/macho_uuid_test $(BUILD)/test/keymap_test
 	$(BUILD)/test/macho_uuid_test "$(OUT_APP)/minecraftpe" $(BUILD)/test/keymap_test
 	bash macos/tests/bundle_test.sh "$(OUT_APP)"
+	bash ios/tests/ipa_test.sh "$(GAME)"
 	bash macos/tests/smoke.sh "$(OUT_APP)"
 
 # ---------------------------------------------------------------- host tests (no game files)
@@ -73,7 +98,9 @@ $(BUILD)/test/input_policy_test: macos/tests/input_policy_test.cpp macos/src/inp
 
 test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	@for t in $(SHARED_TESTS) $(MACOS_TESTS); do $(BUILD)/test/$$t || exit 1; done
+	$(MAKE) --no-print-directory ios-syntax
 	bash tools/tests/inject_test.sh
+	bash tools/tests/check_game_test.sh $(GAME)
 	bash macos/tests/convert_guard_test.sh
 
 clean:

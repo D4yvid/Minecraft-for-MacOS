@@ -29,6 +29,7 @@ if [ -e "$DST" ] && [ ! -e "$DST/$MARK" ] && [ ! -e "$DST/$OLD_MARK" ]; then
 fi
 
 pgrep -qx "minecraftpe|minecraftpe2" && die "Minecraft is running; quit it first so no progress is lost"
+[ -n "${MCFM_SKIP_GAME_CHECK:-}" ] || bash "$ROOT/tools/check_game.sh" "$SRC" || die "unsupported game"
 rm -rf "$DST"
 mkdir -p "$(dirname "$DST")"
 cp -R "$SRC" "$DST"

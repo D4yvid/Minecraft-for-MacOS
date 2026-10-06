@@ -11,7 +11,7 @@ printf '#!/bin/sh\n' > "$SRC/minecraftpe2"; chmod +x "$SRC/minecraftpe2"
 touch "$T/plain/keep" "$T/other.app/keep"
 fails=0
 refuses() {  # refuses <desc> <dst> <file that must survive>
-  if PATH="$T/bin:$PATH" bash "$ROOT/macos/tools/convert.sh" "$SRC" "$2" >/dev/null 2>&1; then
+  if MCFM_SKIP_GAME_CHECK=1 PATH="$T/bin:$PATH" bash "$ROOT/macos/tools/convert.sh" "$SRC" "$2" >/dev/null 2>&1; then
     echo "FAIL: $1 was accepted"; fails=$((fails+1))
   fi
   [ -e "$3" ] || { echo "FAIL: $1 deleted $3"; fails=$((fails+1)); }
