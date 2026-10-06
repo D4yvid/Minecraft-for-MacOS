@@ -2,7 +2,7 @@
 #include <cstdint>
 
 // Unslid addresses in minecraftpe2 0.15.10 (iOS arm64), image base 0x100000000.
-// Found with IDA; see docs/superpowers/specs/2026-10-06-mcpe-kbm-design.md.
+// Found with IDA (tools/ida); see docs/ARCHITECTURE.md. Only used after the LC_UUID guard.
 namespace addr {
 
 // AppPlatform

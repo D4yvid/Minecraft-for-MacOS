@@ -10,6 +10,6 @@ check "CFBundleDisplayName" "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDispla
 check "CFBundleIdentifier (keeps settings)" "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$P" 2>/dev/null)" "com.mojang.minecraftpe2"
 [ -x "$APP/minecraftpe" ] || { echo "FAIL: no executable minecraftpe"; fails=$((fails+1)); }
 [ ! -e "$APP/minecraftpe2" ] || { echo "FAIL: old executable minecraftpe2 still present"; fails=$((fails+1)); }
-otool -L "$APP/minecraftpe" 2>/dev/null | grep -q libmcpekbm || { echo "FAIL: mod not injected"; fails=$((fails+1)); }
+otool -L "$APP/minecraftpe" 2>/dev/null | grep -q libmcfm || { echo "FAIL: mod not injected"; fails=$((fails+1)); }
 codesign -v "$APP" 2>/dev/null || { echo "FAIL: bundle signature invalid"; fails=$((fails+1)); }
 [ $fails = 0 ] && echo "bundle_test: passed" || { echo "$fails failure(s)"; exit 1; }

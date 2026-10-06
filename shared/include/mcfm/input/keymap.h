@@ -10,7 +10,7 @@ int hid_to_vk(long hidUsage);
 // whole hotbar steps. A change of direction or a pause drops the stale remainder,
 // and notches are rate-limited so trackpad momentum cannot spin the hotbar.
 struct ScrollAccumulator {
-  explicit ScrollAccumulator(float stepSize) : step(stepSize), acc(0), lastEvent(-1e9), lastNotch(-1e9) {}
+  constexpr explicit ScrollAccumulator(float stepSize) : step(stepSize), acc(0), lastEvent(-1e9), lastNotch(-1e9) {}
   float step;
   float acc;
   double lastEvent, lastNotch;

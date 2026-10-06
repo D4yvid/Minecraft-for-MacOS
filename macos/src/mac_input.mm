@@ -1,5 +1,5 @@
 #include "mac_input.h"
-#include "engine.h"
+#include <mcfm/keyboard_mouse.h>
 #include "input_policy.h"
 #include <mcfm/input/input_state.h>
 #include <mcfm/input/keymap.h>
@@ -31,6 +31,7 @@ __weak UIView *gView = nil;
 __weak UIResponder *gVC = nil;
 mcfm::ScrollAccumulator gScroll{1.0f};
 std::map<SEL, IMP> *gOrig;
+namespace kbm = mcfm::keyboard_mouse;
 
 float view_scale() {
   if (!gVC) return 1.0f;
@@ -49,24 +50,24 @@ void pointer_moved(CGPoint p) {
   float s = view_scale();
   gX = (int)(p.x * s);
   gY = (int)(p.y * s);
-  if (feeds(mcfm::PointerEvent::Move)) eng::mouse_move_abs(gX, gY);
+  if (feeds(mcfm::PointerEvent::Move)) kbm::mouse_move_abs(gX, gY);
   if (!pl::captured()) titlebar::pointer_at(p.x, p.y);
 }
 
 void button(int btn, BOOL pressed) {
   if (!feeds(pressed ? mcfm::PointerEvent::ButtonDown : mcfm::PointerEvent::ButtonUp)) return;
-  if (gButtons.set(btn, pressed)) eng::mouse_button(btn, pressed, gX, gY);
+  if (gButtons.set(btn, pressed)) kbm::mouse_button(btn, pressed, gX, gY);
 }
 
 void key(int vk, bool down) {
   // While typing, presses belong to the text field (except Esc); releases still go through.
   if (gTextActive && down && !mcfm::passes_while_typing(vk)) return;
-  if (gKeys.set(vk, down)) eng::key(vk, down);
+  if (gKeys.set(vk, down)) kbm::key(vk, down);
 }
 
 void release_all() {
-  gKeys.release_all([](int vk) { eng::key(vk, false); });
-  gButtons.release_all([](int btn) { eng::mouse_button(btn, false, gX, gY); });
+  gKeys.release_all([](int vk) { kbm::key(vk, false); });
+  gButtons.release_all([](int btn) { kbm::mouse_button(btn, false, gX, gY); });
 }
 
 bool claim(id device) {  // true the first time a device is seen
@@ -91,17 +92,17 @@ void attach_mouse(GCMouse *mouse) {
     // GameController deltaY is positive upwards; the engine expects screen space.
     int ox, oy;
     gLook.add(dx * kLookScale, -dy * kLookScale, &ox, &oy);
-    eng::mouse_move_rel(ox, oy);
+    kbm::mouse_move_rel(ox, oy);
   };
   in.leftButton.pressedChangedHandler = ^(GCControllerButtonInput *, float, BOOL p) { button(1, p); };
   in.rightButton.pressedChangedHandler = ^(GCControllerButtonInput *, float, BOOL p) { button(2, p); };
   in.middleButton.pressedChangedHandler = ^(GCControllerButtonInput *, float, BOOL p) { button(3, p); };
   in.scroll.yAxis.valueChangedHandler = ^(GCControllerAxisInput *, float v) {
-    if (getenv("MCPEKBM_LOG_SCROLL")) NSLog(@"mcpekbm: scroll %f", v);
+    if (getenv("MCPEKBM_LOG_SCROLL")) NSLog(@"mcfm: scroll %f", v);
     int notches = gScroll.feed(v, CACurrentMediaTime());
-    if (notches && feeds(mcfm::PointerEvent::Scroll)) eng::mouse_wheel(notches, gX, gY);
+    if (notches && feeds(mcfm::PointerEvent::Scroll)) kbm::mouse_wheel(notches, gX, gY);
   };
-  NSLog(@"mcpekbm: mouse connected");
+  NSLog(@"mcfm: mouse connected");
 }
 
 // --- swizzles on minecraftpeViewController ---
@@ -170,7 +171,7 @@ void install() {
   for (NSNotificationName n : {UITextFieldTextDidBeginEditingNotification, UITextViewTextDidBeginEditingNotification})
     [nc addObserverForName:n object:nil queue:main usingBlock:^(NSNotification *) {
       gTextActive = true;
-      gKeys.release_all([](int vk) { eng::key(vk, false); });
+      gKeys.release_all([](int vk) { kbm::key(vk, false); });
     }];
   for (NSNotificationName n : {UITextFieldTextDidEndEditingNotification, UITextViewTextDidEndEditingNotification})
     [nc addObserverForName:n object:nil queue:main usingBlock:^(NSNotification *) {
@@ -188,13 +189,13 @@ void install() {
                 bool any = false;
                 for (GCMouse *m in GCMouse.mice) any |= (m != n.object);
                 gMouseConnected = any;  // no mouse left: the game's touch path takes over again
-                NSLog(@"mcpekbm: mouse disconnected (%s left)", any ? "others" : "none");
+                NSLog(@"mcfm: mouse disconnected (%s left)", any ? "others" : "none");
               }];
   dispatch_async(dispatch_get_main_queue(), ^{
     if (GCKeyboard.coalescedKeyboard) attach_keyboard(GCKeyboard.coalescedKeyboard);
     for (GCMouse *m in GCMouse.mice) attach_mouse(m);
   });
-  NSLog(@"mcpekbm: input ready");
+  NSLog(@"mcfm: input ready");
 }
 
 void attach_view(void *uiView) {

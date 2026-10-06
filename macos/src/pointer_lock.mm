@@ -29,7 +29,7 @@ void apply() {
   }
   gAssociate(!want);
   want ? gHide(0) : gShow(0);  // 0 = kCGDirectMainDisplay is ignored for cursor calls
-  NSLog(@"mcpekbm: pointer %s", want ? "captured" : "released");
+  NSLog(@"mcfm: pointer %s", want ? "captured" : "released");
 }
 
 }  // namespace
@@ -40,7 +40,7 @@ void install() {
   gHide = (CursorFn)dlsym(cg, "CGDisplayHideCursor");
   gShow = (CursorFn)dlsym(cg, "CGDisplayShowCursor");
   gWarp = (WarpFn)dlsym(cg, "CGWarpMouseCursorPosition");
-  if (!gAssociate || !gHide || !gShow) NSLog(@"mcpekbm: CoreGraphics cursor API missing, no capture");
+  if (!gAssociate || !gHide || !gShow) NSLog(@"mcfm: CoreGraphics cursor API missing, no capture");
 
   NSNotificationCenter *nc = NSNotificationCenter.defaultCenter;
   [nc addObserverForName:UIApplicationWillResignActiveNotification object:nil queue:NSOperationQueue.mainQueue

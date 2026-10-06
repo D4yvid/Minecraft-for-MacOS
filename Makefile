@@ -7,22 +7,22 @@ GAME    ?=
 OUT_APP ?= $(CURDIR)/dist/minecraftpe.app
 
 SHARED_INC   := -Ishared/include -Ishared/apple
-SHARED_CORE  := shared/src/client.cpp shared/modules/win10_ui.cpp shared/modules/keyboard_mouse.cpp
-SHARED_TESTS := keymap_test input_state_test client_test modules_test
+SHARED_CORE  := shared/src/platform.cpp shared/src/win10_ui.cpp shared/src/keyboard_mouse.cpp
+SHARED_TESTS := keymap_test input_state_test features_test
 MACOS_TESTS  := titlebar_test input_policy_test
 
 # ---------------------------------------------------------------- macOS (Mac Catalyst)
 SDK      := $(shell xcrun --sdk macosx --show-sdk-path)
 IOSFW    := $(SDK)/System/iOSSupport/System/Library/Frameworks
 MAC_TARGET := arm64-apple-ios15.0-macabi
-MAC_DYLIB  := $(BUILD)/macos/libmcpekbm.dylib
-MAC_SRCS := shared/src/keymap.cpp shared/apple/macho_uuid.cpp \
-            $(wildcard macos/src/*.mm)
+MAC_DYLIB  := $(BUILD)/macos/libmcfm.dylib
+APPLE_SRCS := shared/apple/macho_uuid.cpp shared/apple/address_platform.mm shared/apple/store.mm
+MAC_SRCS := $(SHARED_CORE) shared/src/keymap.cpp $(APPLE_SRCS) $(wildcard macos/src/*.mm)
 MAC_CXXFLAGS := -target $(MAC_TARGET) -isysroot $(SDK) -iframework $(IOSFW) $(SHARED_INC) \
                 -std=c++17 -fobjc-arc -O2 -Wall -Wextra -Wno-unused-parameter
 MAC_LDFLAGS  := -dynamiclib -F$(IOSFW) -framework Foundation -framework UIKit \
                 -framework GameController -framework QuartzCore \
-                -install_name @executable_path/Frameworks/libmcpekbm.dylib
+                -install_name @executable_path/Frameworks/libmcfm.dylib
 
 .PHONY: all macos app run check test clean
 all: macos
@@ -55,13 +55,9 @@ $(BUILD)/test/input_state_test: shared/tests/input_state_test.cpp shared/include
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -O1 $(SHARED_INC) shared/tests/input_state_test.cpp -o $@
 
-$(BUILD)/test/client_test: shared/tests/client_test.cpp shared/tests/fake_platform.h $(SHARED_CORE) $(wildcard shared/include/mcfm/*.h)
+$(BUILD)/test/features_test: shared/tests/features_test.cpp shared/tests/fake_platform.h $(SHARED_CORE) $(wildcard shared/include/mcfm/*.h)
 	@mkdir -p $(dir $@)
-	clang++ -std=c++11 -Wall -Wextra -O1 $(SHARED_INC) shared/tests/client_test.cpp $(SHARED_CORE) -o $@
-
-$(BUILD)/test/modules_test: shared/tests/modules_test.cpp shared/tests/fake_platform.h $(SHARED_CORE) $(wildcard shared/include/mcfm/*.h shared/include/mcfm/modules/*.h)
-	@mkdir -p $(dir $@)
-	clang++ -std=c++11 -Wall -Wextra -O1 $(SHARED_INC) shared/tests/modules_test.cpp $(SHARED_CORE) -o $@
+	clang++ -std=c++11 -Wall -Wextra -O1 $(SHARED_INC) shared/tests/features_test.cpp $(SHARED_CORE) -o $@
 
 $(BUILD)/test/macho_uuid_test: shared/apple/macho_uuid_test.cpp shared/apple/macho_uuid.cpp shared/apple/macho_uuid.h
 	@mkdir -p $(dir $@)

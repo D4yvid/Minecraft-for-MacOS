@@ -16,11 +16,11 @@ void skip_receipt_refresh(id, SEL) {}
 void install() {
   Method m = class_getInstanceMethod(objc_getClass("StoreManager"), @selector(startRefreshReceiptRequest));
   if (!m) {
-    NSLog(@"mcpekbm: StoreManager not found, receipt refresh left alone");
+    NSLog(@"mcfm: StoreManager not found, receipt refresh left alone");
     return;
   }
   method_setImplementation(m, (IMP)skip_receipt_refresh);
-  NSLog(@"mcpekbm: receipt refresh disabled");
+  NSLog(@"mcfm: receipt refresh disabled");
 }
 
 }  // namespace store

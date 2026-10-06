@@ -1,5 +1,5 @@
 #include "resize.h"
-#include "addresses.h"
+#include "addresses_0_15_10.h"
 #include "mac_input.h"
 #include "titlebar.h"
 
@@ -54,7 +54,7 @@ void notify_engine(UIView *view) {
   void **vt = *(void ***)*app;
   ((void (*)(void *, int, int))vt[addr::kAppSlotSetSize])(*app, w, h);
   ((void (*)(void *, int, int, float))vt[addr::kAppSlotSetSizeAndScale])(*app, w, h, 0.0f);
-  NSLog(@"mcpekbm: engine size %dx%d", w, h);
+  NSLog(@"mcfm: engine size %dx%d", w, h);
 }
 
 void hooked_layout(UIView *self, SEL cmd) {

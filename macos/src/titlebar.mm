@@ -111,7 +111,7 @@ void setup_window() {
   bool first = !gWindow;
   gWindow = w;
   fade_bar(w, gReveal.shown, false);
-  NSLog(first ? @"mcpekbm: titlebar hidden" : @"mcpekbm: titlebar style re-applied");
+  NSLog(first ? @"mcfm: titlebar hidden" : @"mcfm: titlebar style re-applied");
 }
 
 bool window_center(double *cgX, double *cgY) {
