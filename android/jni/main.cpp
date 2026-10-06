@@ -23,10 +23,6 @@ void init() {
     platform.log("not Minecraft PE 0.15.10 (no AppPlatform_android23 vtable), disabled");
     return;
   }
-  if (!mcfm::android::make_engine_writable()) {
-    platform.log("couldn't make libminecraftpe.so writable, disabled");
-    return;
-  }
   bool ok = mcfm::win10_ui::install(platform);
   platform.log(ok ? "patched" : "patched (some features failed)");
 }

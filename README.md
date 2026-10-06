@@ -11,7 +11,7 @@ the same desktop UI to iOS and Android. One shared C++ core, three thin platform
 |---|---|---|
 | macOS (Apple Silicon) | `dist/minecraftpe.app` | Win10 UI, keyboard + mouse (pointer capture), resizable window, auto-hiding title bar, no App Store sign-in prompt |
 | iOS | `dist/minecraftpe-mcfm.ipa` (unsigned) | Win10 UI, no App Store sign-in prompt |
-| Android (armeabi-v7a) | `dist/minecraftpe-mcfm.apk` (debug-signed) | Win10 UI |
+| Android 6+ (armeabi-v7a) | `dist/minecraftpe-mcfm.apk` (debug-signed) | Win10 UI |
 
 ## Requirements
 

@@ -31,4 +31,10 @@ otool -L "$APP/$EXE" | grep -q '@executable_path/Frameworks/libmcfm.dylib' || fa
 vtool -show-build "$APP/Frameworks/libmcfm.dylib" 2>/dev/null | grep -q 'platform IOS$' || fail "dylib is not an iOS build"
 vtool -show-build "$APP/$EXE" 2>/dev/null | grep -q 'MACCATALYST' && fail "main binary was retagged for Mac"
 [ ! -e "$APP/_CodeSignature" ] || fail "stale _CodeSignature left in the app"
+# Relative paths and a trailing slash on the .app must work too.
+APP_ABS="$(cd "$GAME" && pwd)"
+(cd "$(dirname "$APP_ABS")" && bash "$ROOT/ios/tools/make_ipa.sh" "$(basename "$APP_ABS")/" "$T/slash.ipa" "$T/libmcfm.dylib" >/dev/null) \
+  || fail "relative .app path with a trailing slash rejected"
+(cd "$T" && bash "$ROOT/ios/tools/make_ipa.sh" out.ipa again.ipa libmcfm.dylib >/dev/null) || fail "relative .ipa input rejected"
+[ -f "$T/again.ipa" ] || fail "no IPA written for relative paths"
 [ $fails = 0 ] && echo "ipa_test: passed" || { echo "$fails failure(s)"; exit 1; }

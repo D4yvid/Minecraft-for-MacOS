@@ -1,6 +1,9 @@
 # Android
 
 Adds the Windows 10 (desktop) UI to Minecraft PE 0.15.10 for Android (armeabi-v7a).
+Requires **Android 6.0 or newer**: the mod patches `AppPlatform_android23`, the platform
+class the game uses from Android 6; on Android 5 the game uses another class and the mod
+has no effect.
 Based on the injection code of [runet-client](https://github.com/D4yvid/runet-client).
 
 ## Build the library (no game files needed)

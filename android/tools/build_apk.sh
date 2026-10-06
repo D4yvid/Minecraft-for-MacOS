@@ -23,7 +23,16 @@ MAIN="$WORK/app/smali/com/mojang/minecraftpe/MainActivity.smali"
 [ -f "$WORK/app/lib/armeabi-v7a/libminecraftpe.so" ] || die "$APK has no armeabi-v7a libminecraftpe.so"
 bash "$ROOT/android/tools/check_apk_lib.sh" "$WORK/app/lib/armeabi-v7a/libminecraftpe.so" >/dev/null || die "unsupported APK"
 python3 -I "$ROOT/android/tools/patch_smali.py" "$MAIN" >/dev/null
-cp "$LIBS/librunet.so" "$LIBS/libgnustl_shared.so" "$WORK/app/lib/armeabi-v7a/"
+cp "$LIBS/librunet.so" "$WORK/app/lib/armeabi-v7a/"
+GAME_STL="$WORK/app/lib/armeabi-v7a/libgnustl_shared.so"
+STL="$(NDK="${NDK:-$HOME/Library/Android/ndk/android-ndk-r10c}" bash "$ROOT/android/tools/pick_gnustl.sh" \
+  "$GAME_STL" "$LIBS/libgnustl_shared.so" "$LIBS/librunet.so")"
+if [ "$STL" = "$GAME_STL" ]; then
+  echo "build_apk: keeping the game's own libgnustl_shared.so"
+else
+  echo "build_apk: using the NDK r10c libgnustl_shared.so (the game's lacks symbols librunet needs)"
+  cp "$LIBS/libgnustl_shared.so" "$GAME_STL"
+fi
 apktool b -o "$WORK/unsigned.apk" "$WORK/app" >/dev/null || die "apktool could not rebuild the APK"
 
 if [ ! -f "$KEYSTORE" ]; then

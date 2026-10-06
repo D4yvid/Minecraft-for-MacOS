@@ -26,8 +26,5 @@ class AndroidPlatform : public Platform {
   runet::hook::VirtualTable appPlatform_;
 };
 
-// Makes libminecraftpe.so's mappings writable (vtables live in read-only relro).
-bool make_engine_writable();
-
 }  // namespace android
 }  // namespace mcfm

@@ -138,8 +138,9 @@ namespace hook
 		/// @brief false when the vtable symbol does not exist (unsupported game build)
 		bool Valid() const { return data != nullptr; }
 
-		/// @brief Replaces the function at `index` (from FindIndex); ignores invalid indexes.
-		void Hook(int index, void* replacement, void** original);
+		/// @brief Replaces the function at `index` (from FindIndex), making only that slot's
+		/// page writable. false for an invalid index or when the page cannot be unprotected.
+		bool Hook(int index, void* replacement, void** original);
 
 		/// @brief Index of the function named `symbolName` in this vtable, or -1.
 		int FindIndex(std::string symbolName);

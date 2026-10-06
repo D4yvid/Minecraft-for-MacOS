@@ -8,6 +8,9 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"  # repo root
 die() { echo "make_ipa: $*" >&2; exit 1; }
 
 [ -f "$DYLIB" ] || die "dylib $DYLIB not found (build it with make ios)"
+[ -e "$GAME" ] || die "game $GAME not found"
+GAME="${GAME%/}"; GAME="${GAME%/}"
+GAME="$(cd "$(dirname "$GAME")" && pwd)/$(basename "$GAME")"  # absolute: we cd later
 case "$OUT" in *.ipa) ;; *) die "output must end in .ipa: $OUT" ;; esac
 DYLIB="$(cd "$(dirname "$DYLIB")" && pwd)/$(basename "$DYLIB")"
 OUT_DIR="$(mkdir -p "$(dirname "$OUT")" && cd "$(dirname "$OUT")" && pwd)"

@@ -8,6 +8,7 @@ OUT_APP ?= $(CURDIR)/dist/minecraftpe.app
 
 SHARED_INC   := -Ishared/include -Ishared/apple
 SHARED_CORE  := shared/src/platform.cpp shared/src/win10_ui.cpp shared/src/keyboard_mouse.cpp
+SHARED_HEADERS := $(wildcard shared/include/mcfm/*.h shared/include/mcfm/*/*.h shared/apple/*.h)
 SHARED_TESTS := keymap_test input_state_test features_test
 MACOS_TESTS  := titlebar_test input_policy_test
 
@@ -29,7 +30,7 @@ all: macos
 
 macos: $(MAC_DYLIB)
 
-$(MAC_DYLIB): $(MAC_SRCS) $(wildcard macos/src/*.h shared/include/mcfm/*/*.h shared/apple/*.h)
+$(MAC_DYLIB): $(MAC_SRCS) $(SHARED_HEADERS) $(wildcard macos/src/*.h)
 	@mkdir -p $(dir $@)
 	clang++ $(MAC_CXXFLAGS) $(MAC_LDFLAGS) $(MAC_SRCS) -o $@
 
@@ -50,7 +51,7 @@ IOS_CXXFLAGS := -target $(IOS_TARGET) $(SHARED_INC) -std=c++17 -fobjc-arc -O2 -W
 
 ios: $(IOS_DYLIB)
 
-$(IOS_DYLIB): $(IOS_SRCS) $(wildcard shared/include/mcfm/*.h shared/apple/*.h)
+$(IOS_DYLIB): $(IOS_SRCS) $(SHARED_HEADERS)
 	@test -n "$(IOS_SDK)" || { echo "The iOS build needs the iPhoneOS SDK: install Xcode, then run xcode-select -s /Applications/Xcode.app"; exit 1; }
 	@mkdir -p $(dir $@)
 	clang++ $(IOS_CXXFLAGS) -isysroot $(IOS_SDK) -dynamiclib -framework Foundation \
@@ -77,12 +78,13 @@ android:
 	cd android && $(HOST_X86) /bin/bash -c '"$(NDK)/ndk-build" -j8 NDK_PROJECT_PATH=. \
 	  NDK_OUT="$(ANDROID_OUT)/obj" NDK_LIBS_OUT="$(ANDROID_OUT)/libs" RELEASE_BUILD=$(RELEASE_BUILD)'
 	bash android/tests/lib_test.sh "$(ANDROID_LIB)" "$(NDK)"
+	bash android/tests/pick_gnustl_test.sh "$(NDK)" "$(dir $(ANDROID_LIB))"
 
 APK ?=
 ANDROID_APK ?= $(CURDIR)/dist/minecraftpe-mcfm.apk
 android-apk: android
 	@test -n "$(APK)" || { echo "Set APK=<your Minecraft PE 0.15.10 .apk> (or put it in config.mk)"; exit 1; }
-	bash android/tools/build_apk.sh "$(APK)" "$(dir $(ANDROID_LIB))" "$(ANDROID_APK)"
+	NDK="$(NDK)" bash android/tools/build_apk.sh "$(APK)" "$(dir $(ANDROID_LIB))" "$(ANDROID_APK)"
 
 # Needs the built app (make app).
 check: $(BUILD)/test/macho_uuid_test $(BUILD)/test/keymap_test
@@ -126,6 +128,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash android/tests/check_apk_lib_test.sh
 	clang++ -std=c++11 -Wall android/tests/vtable_scan_test.cpp -o $(BUILD)/test/vtable_scan_test && $(BUILD)/test/vtable_scan_test
 	bash tools/tests/config_example_test.sh
+	bash tools/tests/makefile_deps_test.sh
 	bash tools/tests/no_game_files_test.sh
 
 clean:

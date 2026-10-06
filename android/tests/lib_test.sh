@@ -18,4 +18,8 @@ strings "$LIB" | grep -q '_ZTV21AppPlatform_android23' || fail "AppPlatform vtab
 # Startup must not depend on Android's private target-SDK functions (absent/private on
 # many versions; runet's bypass could abort the game).
 strings "$LIB" | grep -q 'application_target_sdk_version' && fail "uses private target-SDK APIs"
+# All logs go to the documented tag (adb logcat -s mcfm).
+strings "$LIB" | grep -q 'runet\[' && fail "logs under the old runet[...] tag"
+# Only the vtable page is made writable; the game's code mappings are left alone.
+strings "$LIB" | grep -q '/proc/self/maps' && fail "rewrites libminecraftpe mappings from /proc/self/maps"
 [ $fails = 0 ] && echo "lib_test: passed" || { echo "$fails failure(s)"; exit 1; }
