@@ -13,7 +13,6 @@ namespace {
 constexpr NSUInteger kTitled = 1 << 0;                // NSWindowStyleMaskTitled
 constexpr NSUInteger kFullSizeContentView = 1 << 15;  // NSWindowStyleMaskFullSizeContentView
 constexpr NSInteger kTitleVisible = 0;                // NSWindowTitleVisible
-constexpr NSInteger kTitleHidden = 1;                 // NSWindowTitleHidden
 
 __weak id gWindow = nil;
 mcpekbm::TitlebarReveal gReveal;
@@ -38,16 +37,57 @@ id ns_window() {
   return nil;
 }
 
-// Shown: a normal opaque title bar with title and traffic lights, drawn over the
-// top of the game. Hidden: transparent, no title, no buttons.
-void apply_bar(id w, bool shown) {
-  ((void (*)(id, SEL, BOOL))objc_msgSend)(w, sel_registerName("setTitlebarAppearsTransparent:"), !shown);
-  ((void (*)(id, SEL, NSInteger))objc_msgSend)(w, sel_registerName("setTitleVisibility:"),
-                                               shown ? kTitleVisible : kTitleHidden);
-  for (NSInteger kind = 0; kind <= 2; kind++) {  // close, miniaturize, zoom
-    id button = ((id (*)(id, SEL, NSInteger))objc_msgSend)(w, sel_registerName("standardWindowButton:"), kind);
-    ((void (*)(id, SEL, BOOL))objc_msgSend)(button, sel_registerName("setHidden:"), !shown);
+constexpr double kFadeSeconds = 0.2;
+
+// The view holding the whole title bar (background, title, traffic lights):
+// close button -> NSTitlebarView -> NSTitlebarContainerView.
+id bar_view(id w) {
+  id close = ((id (*)(id, SEL, NSInteger))objc_msgSend)(w, sel_registerName("standardWindowButton:"), 0);
+  id titlebar = ((id (*)(id, SEL))objc_msgSend)(close, sel_registerName("superview"));
+  id container = ((id (*)(id, SEL))objc_msgSend)(titlebar, sel_registerName("superview"));
+  return container ?: titlebar;
+}
+
+void set_hidden(id view, bool hidden) {
+  ((void (*)(id, SEL, BOOL))objc_msgSend)(view, sel_registerName("setHidden:"), hidden);
+}
+
+void set_alpha(id view, CGFloat alpha) {
+  ((void (*)(id, SEL, CGFloat))objc_msgSend)(view, sel_registerName("setAlphaValue:"), alpha);
+}
+
+CGFloat alpha_of(id view) { return ((CGFloat (*)(id, SEL))objc_msgSend)(view, sel_registerName("alphaValue")); }
+
+// The bar is always a normal opaque title bar; showing/hiding fades the whole of it.
+// Once faded out it is also hidden, so its invisible buttons cannot be clicked.
+void fade_bar(id w, bool shown, bool animated) {
+  id view = bar_view(w);
+  Class ctxClass = objc_getClass("NSAnimationContext");
+  if (!view) return;
+  if (shown) set_hidden(view, false);
+  if (!animated || !ctxClass) {
+    set_alpha(view, shown ? 1 : 0);
+    if (!shown) set_hidden(view, true);
+    return;
   }
+  void (^changes)(id) = ^(id context) {
+    ((void (*)(id, SEL, double))objc_msgSend)(context, sel_registerName("setDuration:"), kFadeSeconds);
+    id animator = ((id (*)(id, SEL))objc_msgSend)(view, sel_registerName("animator"));
+    set_alpha(animator, shown ? 1 : 0);
+  };
+  void (^done)(void) = ^{
+    if (!gReveal.shown) set_hidden(view, true);  // a newer fade-in may have started meanwhile
+  };
+  ((void (*)(Class, SEL, id, id))objc_msgSend)(ctxClass, sel_registerName("runAnimationGroup:completionHandler:"),
+                                              changes, done);
+}
+
+bool style_applied(id w) {
+  NSUInteger mask = ((NSUInteger (*)(id, SEL))objc_msgSend)(w, sel_registerName("styleMask"));
+  BOOL transparent = ((BOOL (*)(id, SEL))objc_msgSend)(w, sel_registerName("titlebarAppearsTransparent"));
+  id view = bar_view(w);
+  bool alphaOk = !view || (alpha_of(view) > 0.5) == gReveal.shown;
+  return (mask & kFullSizeContentView) && !transparent && alphaOk;
 }
 
 }  // namespace
@@ -57,19 +97,20 @@ void apply_bar(id w, bool shown) {
 void setup_window() {
   id w = gWindow ?: ns_window();
   if (!w) return;  // window not on screen yet; next layout retries
-  NSUInteger mask = ((NSUInteger (*)(id, SEL))objc_msgSend)(w, sel_registerName("styleMask"));
-  BOOL transparent = ((BOOL (*)(id, SEL))objc_msgSend)(w, sel_registerName("titlebarAppearsTransparent"));
-  if (w == gWindow && (mask & kFullSizeContentView) && transparent == !gReveal.shown) return;
+  if (w == gWindow && style_applied(w)) return;
   for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
     if (![scene isKindOfClass:UIWindowScene.class]) continue;
     UITitlebar *tb = ((UIWindowScene *)scene).titlebar;
     tb.titleVisibility = UITitlebarTitleVisibilityHidden;
     tb.toolbar = nil;
   }
+  NSUInteger mask = ((NSUInteger (*)(id, SEL))objc_msgSend)(w, sel_registerName("styleMask"));
   ((void (*)(id, SEL, NSUInteger))objc_msgSend)(w, sel_registerName("setStyleMask:"), mask | kFullSizeContentView);
+  ((void (*)(id, SEL, BOOL))objc_msgSend)(w, sel_registerName("setTitlebarAppearsTransparent:"), NO);
+  ((void (*)(id, SEL, NSInteger))objc_msgSend)(w, sel_registerName("setTitleVisibility:"), kTitleVisible);
   bool first = !gWindow;
   gWindow = w;
-  apply_bar(w, gReveal.shown);
+  fade_bar(w, gReveal.shown, false);
   NSLog(first ? @"mcpekbm: titlebar hidden" : @"mcpekbm: titlebar style re-applied");
 }
 
@@ -87,7 +128,7 @@ bool window_center(double *cgX, double *cgY) {
 
 void pointer_at(double xPt, double yPt) {
   bool was = gReveal.shown;
-  if (gReveal.update(xPt, yPt) != was && gWindow) apply_bar(gWindow, gReveal.shown);
+  if (gReveal.update(xPt, yPt) != was && gWindow) fade_bar(gWindow, gReveal.shown, true);
 }
 
 }  // namespace titlebar
