@@ -13,6 +13,9 @@ class AndroidPlatform : public Platform {
  public:
   explicit AndroidPlatform(runet::hook::soinfo *minecraftpe);
 
+  // false when this is not the supported game build (AppPlatform vtable symbol missing).
+  bool valid() const { return appPlatform_.Valid(); }
+
   void log(const char *msg);
   bool patch_slot(engine::Slot slot, void *replacement, void **original);
   void *global(engine::Global g);

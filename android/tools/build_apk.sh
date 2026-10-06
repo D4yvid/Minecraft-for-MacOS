@@ -21,6 +21,7 @@ apktool d -f -r -o "$WORK/app" "$APK" >/dev/null || die "apktool could not decom
 MAIN="$WORK/app/smali/com/mojang/minecraftpe/MainActivity.smali"
 [ -f "$MAIN" ] || die "$APK is not Minecraft PE (no MainActivity)"
 [ -f "$WORK/app/lib/armeabi-v7a/libminecraftpe.so" ] || die "$APK has no armeabi-v7a libminecraftpe.so"
+bash "$ROOT/android/tools/check_apk_lib.sh" "$WORK/app/lib/armeabi-v7a/libminecraftpe.so" >/dev/null || die "unsupported APK"
 python3 -I "$ROOT/android/tools/patch_smali.py" "$MAIN" >/dev/null
 cp "$LIBS/librunet.so" "$LIBS/libgnustl_shared.so" "$WORK/app/lib/armeabi-v7a/"
 apktool b -o "$WORK/unsigned.apk" "$WORK/app" >/dev/null || die "apktool could not rebuild the APK"

@@ -1,35 +1,28 @@
 // Android entry point: loaded by MainActivity (System.loadLibrary("runet")), it attaches to
 // libminecraftpe.so and installs the shared hardcoded Win10 (desktop) UI.
+#include <dlfcn.h>
 #include <jni.h>
 
 #include <mcfm/win10_ui.h>
 
-#include "android.hpp"
 #include "android_platform.hpp"
-#include "hook.hpp"
-#include "jni.hpp"
 #include "log.hpp"
 
 namespace {
 
-void init(JavaVM *vm) {
-  if (!runet::android::InitializeFunctions()) {
-    LOGE("couldn't initialise android functions");
-    return;
-  }
-  runet::jni::JavaEnviroment *java = new runet::jni::JavaEnviroment(vm);
-  java->SetCurrentJavaEnviroment();
-  if (!runet::hook::InitializeBaseHooking()) {
-    LOGE("couldn't initialise hooking");
-    return;
-  }
-  runet::hook::soinfo *minecraftpe = runet::hook::LoadLibrary("libminecraftpe.so", RTLD_LAZY | RTLD_NOW);
+void init() {
+  // Only dlsym is used on the handle, so the plain (possibly opaque) dlopen handle is fine.
+  runet::hook::soinfo *minecraftpe = (runet::hook::soinfo *)::dlopen("libminecraftpe.so", RTLD_NOW);
   if (!minecraftpe) {
-    LOGE("couldn't open libminecraftpe.so");
+    LOGE("couldn't open libminecraftpe.so: %s", dlerror());
     return;
   }
   // Function-local static: constructed on first use, never before the C++ runtime is up.
   static mcfm::android::AndroidPlatform platform(minecraftpe);
+  if (!platform.valid()) {
+    platform.log("not Minecraft PE 0.15.10 (no AppPlatform_android23 vtable), disabled");
+    return;
+  }
   if (!mcfm::android::make_engine_writable()) {
     platform.log("couldn't make libminecraftpe.so writable, disabled");
     return;
@@ -40,8 +33,8 @@ void init(JavaVM *vm) {
 
 }  // namespace
 
-extern "C" jint JNI_OnLoad(JavaVM *vm, void *) {
-  init(vm);
+extern "C" jint JNI_OnLoad(JavaVM *, void *) {
+  init();
   return JNI_VERSION_1_2;
 }
 

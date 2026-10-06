@@ -15,4 +15,7 @@ NEEDED="$("$BIN/arm-linux-androideabi-readelf" -d "$LIB" | grep NEEDED)"
 grep -q 'libminecraftpe' <<<"$NEEDED" && fail "links against libminecraftpe.so (must be dlsym only)"
 grep -q 'libgnustl_shared.so' <<<"$NEEDED" || fail "not built against gnustl_shared (std::string ABI)"
 strings "$LIB" | grep -q '_ZTV21AppPlatform_android23' || fail "AppPlatform vtable symbol name missing"
+# Startup must not depend on Android's private target-SDK functions (absent/private on
+# many versions; runet's bypass could abort the game).
+strings "$LIB" | grep -q 'application_target_sdk_version' && fail "uses private target-SDK APIs"
 [ $fails = 0 ] && echo "lib_test: passed" || { echo "$fails failure(s)"; exit 1; }

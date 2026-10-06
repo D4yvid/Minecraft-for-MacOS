@@ -125,6 +125,7 @@ namespace hook
 	};
 	/*============================= END ANDROID CODE =============================*/
 
+	// A class's vtable, located with dlsym("_ZTV...") on the game library.
 	class VirtualTable
 	{
 	private:
@@ -134,51 +135,14 @@ namespace hook
 	public:
 		VirtualTable(hook::soinfo* handle, std::string symbolName);
 
+		/// @brief false when the vtable symbol does not exist (unsupported game build)
+		bool Valid() const { return data != nullptr; }
+
+		/// @brief Replaces the function at `index` (from FindIndex); ignores invalid indexes.
 		void Hook(int index, void* replacement, void** original);
-		void Hook(int index, void* replacement);
 
-		void* GetFunctionAtIndex(int index);
-
+		/// @brief Index of the function named `symbolName` in this vtable, or -1.
 		int FindIndex(std::string symbolName);
 	};
-
-	class HookManager
-	{
-	private:
-		std::map<std::string, VirtualTable> vtables;
-
-	};
-
-	// struct FunctionHook
-	// {
-	// 	void* function;
-	// 	void* originalFunction;
-	// 	bool  hooked;
-	// };
-
-	// struct Hook
-	// {
-	// 	std::string symbolName;
-	// 	FunctionHook hook;
-	// };
-
-	// class Hooker
-	// {
-	// private:
-	// 	std::vector<Hook> hooks;
-	// 	hook::soinfo* libraryHandle;
-
-	// public:
-	// 	Hooker(hook::soinfo *libraryHandle, std::initializer_list<Hook> hooks);
-
-	// 	bool Apply();
-	// 	bool Restore();
-	// };
-
-	constexpr int32_t ANDROID_MARSHMALLOW_MR1_TARGET = 23;
-
-	bool InitializeBaseHooking();
-
-	soinfo *LoadLibrary(std::string filename, int flags);
 }; // namespace hook
 }; // namespace runet

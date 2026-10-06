@@ -123,6 +123,9 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/check_game_test.sh $(GAME)
 	bash macos/tests/convert_guard_test.sh
 	bash android/tests/patch_smali_test.sh
+	bash android/tests/check_apk_lib_test.sh
+	clang++ -std=c++11 -Wall android/tests/vtable_scan_test.cpp -o $(BUILD)/test/vtable_scan_test && $(BUILD)/test/vtable_scan_test
+	bash tools/tests/config_example_test.sh
 	bash tools/tests/no_game_files_test.sh
 
 clean:
