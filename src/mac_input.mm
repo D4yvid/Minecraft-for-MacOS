@@ -1,5 +1,6 @@
 #include "mac_input.h"
 #include "engine.h"
+#include "input_policy.h"
 #include "keymap.h"
 #include "pointer_lock.h"
 #include "titlebar.h"
@@ -8,7 +9,9 @@
 #import <UIKit/UIKit.h>
 #include <objc/message.h>
 #include <objc/runtime.h>
+#include <cstdlib>
 #include <map>
+#import <QuartzCore/QuartzCore.h>
 
 namespace macin {
 namespace {
@@ -18,9 +21,11 @@ bool gTextActive = false;
 bool gMouseConnected = false;
 bool gHeld[256] = {};
 int gX = 0, gY = 0;  // last pointer position in game pixels
+bool gInside = false;  // free cursor is over the game view
+double gXPt = -1, gYPt = -1;  // last pointer position in window points
 __weak UIView *gView = nil;
 __weak UIResponder *gVC = nil;
-mcpekbm::ScrollAccumulator gScroll{1.0f, 0.0f};
+mcpekbm::ScrollAccumulator gScroll{1.0f};
 std::map<SEL, IMP> *gOrig;
 
 float view_scale() {
@@ -28,6 +33,25 @@ float view_scale() {
   Ivar iv = class_getInstanceVariable(object_getClass(gVC), "viewScale");
   float s = iv ? *(float *)((uint8_t *)(__bridge void *)gVC + ivar_getOffset(iv)) : 1.0f;
   return s > 0 ? s : 1.0f;
+}
+
+bool feeds(mcpekbm::PointerEvent e) {
+  return mcpekbm::should_feed(e, mcpekbm::PointerState{pl::captured(), gInside, gXPt, gYPt});
+}
+
+void pointer_moved(CGPoint p) {
+  gXPt = p.x;
+  gYPt = p.y;
+  float s = view_scale();
+  gX = (int)(p.x * s);
+  gY = (int)(p.y * s);
+  if (feeds(mcpekbm::PointerEvent::Move)) eng::mouse_move_abs(gX, gY);
+  if (!pl::captured()) titlebar::pointer_at(p.x, p.y);
+}
+
+void button(int btn, BOOL pressed) {
+  if (feeds(pressed ? mcpekbm::PointerEvent::ButtonDown : mcpekbm::PointerEvent::ButtonUp))
+    eng::mouse_button(btn, pressed, gX, gY);
 }
 
 void key(int vk, bool down) {
@@ -54,11 +78,13 @@ void attach_mouse(GCMouse *mouse) {
     // GameController deltaY is positive upwards; the engine expects screen space.
     if (pl::captured()) eng::mouse_move_rel((int)(dx * kLookScale), (int)(-dy * kLookScale));
   };
-  in.leftButton.pressedChangedHandler = ^(GCControllerButtonInput *, float, BOOL p) { eng::mouse_button(1, p, gX, gY); };
-  in.rightButton.pressedChangedHandler = ^(GCControllerButtonInput *, float, BOOL p) { eng::mouse_button(2, p, gX, gY); };
-  in.middleButton.pressedChangedHandler = ^(GCControllerButtonInput *, float, BOOL p) { eng::mouse_button(3, p, gX, gY); };
+  in.leftButton.pressedChangedHandler = ^(GCControllerButtonInput *, float, BOOL p) { button(1, p); };
+  in.rightButton.pressedChangedHandler = ^(GCControllerButtonInput *, float, BOOL p) { button(2, p); };
+  in.middleButton.pressedChangedHandler = ^(GCControllerButtonInput *, float, BOOL p) { button(3, p); };
   in.scroll.yAxis.valueChangedHandler = ^(GCControllerAxisInput *, float v) {
-    eng::mouse_wheel(gScroll.feed(v), gX, gY);
+    if (getenv("MCPEKBM_LOG_SCROLL")) NSLog(@"mcpekbm: scroll %f", v);
+    int notches = gScroll.feed(v, CACurrentMediaTime());
+    if (notches && feeds(mcpekbm::PointerEvent::Scroll)) eng::mouse_wheel(notches, gX, gY);
   };
   NSLog(@"mcpekbm: mouse connected");
 }
@@ -66,7 +92,12 @@ void attach_mouse(GCMouse *mouse) {
 // --- swizzles on minecraftpeViewController ---
 
 void touches_gate(id self, SEL cmd, NSSet *touches, UIEvent *event) {
-  if (gMouseConnected) return;  // clicks come from GCMouse; don't double-feed
+  if (gMouseConnected) {  // clicks come from GCMouse; don't double-feed
+    // Hover stops while a button is held, so drags take positions from the touch stream.
+    if (cmd == @selector(touchesMoved:withEvent:))
+      pointer_moved([touches.anyObject locationInView:((UIViewController *)self).view]);
+    return;
+  }
   ((void (*)(id, SEL, NSSet *, UIEvent *))(*gOrig)[cmd])(self, cmd, touches, event);
 }
 
@@ -81,19 +112,16 @@ void presses_swallow(id self, SEL cmd, NSSet *presses, UIPressesEvent *event) {
 }
 
 void hover(id, SEL, UIHoverGestureRecognizer *g) {
-  UIView *v = g.view;
   if (g.state == UIGestureRecognizerStateEnded || g.state == UIGestureRecognizerStateCancelled) {
-    titlebar::pointer_at(-1, -1);
+    CGSize size = g.view.bounds.size;
+    if (mcpekbm::hover_end_is_exit(gXPt, gYPt, size.width, size.height)) {
+      gInside = false;
+      titlebar::pointer_at(-1, -1);
+    }
     return;
   }
-  CGPoint p = [g locationInView:v];
-  float s = view_scale();
-  gX = (int)(p.x * s);
-  gY = (int)(p.y * s);
-  if (!pl::captured()) {
-    eng::mouse_move_abs(gX, gY);
-    titlebar::pointer_at(p.x, p.y);
-  }
+  gInside = true;
+  pointer_moved([g locationInView:g.view]);
 }
 
 void swizzle(Class c, SEL sel, IMP imp) {

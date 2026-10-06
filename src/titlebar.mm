@@ -58,6 +58,18 @@ void setup_window() {
   NSLog(@"mcpekbm: titlebar hidden");
 }
 
+bool window_center(double *cgX, double *cgY) {
+  id w = gWindow ?: ns_window();
+  Class screenClass = objc_getClass("NSScreen");
+  if (!w || !screenClass) return false;
+  NSArray *screens = ((NSArray * (*)(Class, SEL)) objc_msgSend)(screenClass, sel_registerName("screens"));
+  if (screens.count == 0) return false;
+  CGRect primary = ((CGRect (*)(id, SEL))objc_msgSend)(screens[0], sel_registerName("frame"));
+  CGRect f = ((CGRect (*)(id, SEL))objc_msgSend)(w, sel_registerName("frame"));
+  mcpekbm::window_center_cg(f.origin.x, f.origin.y, f.size.width, f.size.height, primary.size.height, cgX, cgY);
+  return true;
+}
+
 void pointer_at(double xPt, double yPt) { show_buttons(mcpekbm::in_titlebar_hot_zone(xPt, yPt)); }
 
 }  // namespace titlebar

@@ -13,6 +13,15 @@ int main() {
   EXPECT(!in_titlebar_hot_zone(10, 30));    // below the title bar
   EXPECT(!in_titlebar_hot_zone(500, 5));    // top edge, middle of window
   EXPECT(!in_titlebar_hot_zone(-1, -1));    // pointer gone / captured
+  // window centre: AppKit frame (bottom-left origin) -> CoreGraphics global (top-left origin)
+  double cx = 0, cy = 0;
+  mcpekbm::window_center_cg(100, 200, 800, 500, 1080, &cx, &cy);
+  EXPECT(cx == 500);   // 100 + 800/2
+  EXPECT(cy == 630);   // 1080 - (200 + 500/2)
+  mcpekbm::window_center_cg(-1920, 0, 1920, 1080, 1080, &cx, &cy);  // display left of the primary
+  EXPECT(cx == -960);
+  EXPECT(cy == 540);
+
   if (fails) { std::printf("%d failure(s)\n", fails); return 1; }
   std::printf("titlebar_test: all passed\n");
   return 0;

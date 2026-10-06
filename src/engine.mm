@@ -1,5 +1,6 @@
 #include "engine.h"
 #include "addresses.h"
+#include "macho_uuid.h"
 
 #import <Foundation/Foundation.h>
 #include <mach-o/dyld.h>
@@ -56,6 +57,8 @@ bool init() {
     const char *name = _dyld_get_image_name(i);
     size_t n = strlen(name);
     if (n >= 13 && strcmp(name + n - 13, "/minecraftpe2") == 0) {
+      // Identify the build by LC_UUID before touching any hard-coded address.
+      if (!mcpekbm::is_expected_game_image(_dyld_get_image_header(i))) return false;
       gSlide = _dyld_get_image_vmaddr_slide(i);
       found = true;
       break;

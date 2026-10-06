@@ -44,13 +44,20 @@ int hid_to_vk(long u) {
   }
 }
 
-int ScrollAccumulator::feed(float v) {
-  if ((v > 0 && acc < 0) || (v < 0 && acc > 0)) acc = 0;  // direction change
+int ScrollAccumulator::feed(float v, double now) {
+  constexpr double kIdleReset = 0.15, kMinGap = 0.08;
+  if (now - lastEvent > kIdleReset || (v > 0 && acc < 0) || (v < 0 && acc > 0)) acc = 0;
+  lastEvent = now;
   acc += v;
-  int n = 0;
-  if (acc >= step) { n = 1; acc -= step; }
-  else if (acc <= -step) { n = -1; acc += step; }
+  if (acc < step && acc > -step) return 0;
+  if (now - lastNotch < kMinGap) {  // too soon: hold at one step, emit on a later event
+    acc = acc > 0 ? step : -step;
+    return 0;
+  }
+  int n = acc > 0 ? 1 : -1;
+  acc -= n * step;
   if (acc >= step || acc <= -step) acc = 0;  // big wheel jumps: one notch per event
+  lastNotch = now;
   return n;
 }
 

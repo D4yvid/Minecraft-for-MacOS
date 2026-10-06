@@ -34,22 +34,28 @@ int main() {
   EXPECT_EQ(hid_to_vk(0x00), 0);
   EXPECT_EQ(hid_to_vk(0x1000), 0);
 
-  // trackpad: many tiny events -> one notch per full step, remainder kept
-  ScrollAccumulator s{1.0f, 0.0f};
+  // Times are seconds. Steady trackpad drag: 0.25 per event every 30 ms -> notch per full step
+  ScrollAccumulator s{1.0f};
   int total = 0;
-  for (int i = 0; i < 10; i++) total += s.feed(0.25f);
+  for (int i = 0; i < 10; i++) total += s.feed(0.25f, 0.03 * i);
   EXPECT_EQ(total, 2);
-  EXPECT_EQ(s.feed(-0.25f), 0);       // acc 0.25
-  EXPECT_EQ(s.feed(-1.5f), -1);       // same direction, -1.75 -> one notch
-  // mouse wheel: one big event -> one notch (not 3)
-  ScrollAccumulator w{1.0f, 0.0f};
-  EXPECT_EQ(w.feed(3.0f), 1);
-  EXPECT_EQ(w.acc, 0);
-  // direction change discards stale remainder
-  ScrollAccumulator d{1.0f, 0.0f};
-  d.feed(0.9f);
-  EXPECT_EQ(d.feed(-0.2f), 0);
-  EXPECT_EQ(d.feed(-0.9f), -1);
+  // direction change resets; same direction -1.75 -> one notch
+  EXPECT_EQ(s.feed(-0.25f, 0.31), 0);
+  EXPECT_EQ(s.feed(-1.5f, 0.42), -1);
+  // mouse wheel: one big event -> one notch (not 3), nothing left over
+  ScrollAccumulator w{1.0f};
+  EXPECT_EQ(w.feed(3.0f, 0.0), 1);
+  EXPECT_EQ(w.feed(0.5f, 0.1), 0);
+  // stale remainder decays: 0.9 then a tiny nudge a second later is not a notch
+  ScrollAccumulator d{1.0f};
+  EXPECT_EQ(d.feed(0.9f, 0.0), 0);
+  EXPECT_EQ(d.feed(0.2f, 1.0), 0);
+  // momentum flood: 1.5 every 10 ms for 1 s -> at most one notch per 80 ms
+  ScrollAccumulator m{1.0f};
+  int notches = 0;
+  for (int i = 0; i < 100; i++) notches += m.feed(1.5f, 0.01 * i);
+  EXPECT_EQ(notches <= 13, 1);
+  EXPECT_EQ(notches >= 10, 1);
 
   if (fails) { std::printf("%d failure(s)\n", fails); return 1; }
   std::printf("keymap_test: all passed\n");
