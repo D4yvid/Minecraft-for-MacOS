@@ -54,11 +54,8 @@ uintptr_t at(uintptr_t unslid) { return unslid + gSlide; }
 bool init() {
   bool found = false;
   for (uint32_t i = 0; i < _dyld_image_count(); i++) {
-    const char *name = _dyld_get_image_name(i);
-    size_t n = strlen(name);
-    if (n >= 13 && strcmp(name + n - 13, "/minecraftpe2") == 0) {
-      // Identify the build by LC_UUID before touching any hard-coded address.
-      if (!mcpekbm::is_expected_game_image(_dyld_get_image_header(i))) return false;
+    // Identify the game by LC_UUID (not its file name) before touching any hard-coded address.
+    if (mcpekbm::is_expected_game_image(_dyld_get_image_header(i))) {
       gSlide = _dyld_get_image_vmaddr_slide(i);
       found = true;
       break;

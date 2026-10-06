@@ -5,8 +5,8 @@
 set -uo pipefail
 APP="$1"; EXPECT="${2:-mcpekbm: patched}"
 LOG="$(mktemp)"
-pkill -x minecraftpe2 2>/dev/null; sleep 1
-"$APP/minecraftpe2" >"$LOG" 2>&1 &
+pkill -x minecraftpe 2>/dev/null; sleep 1
+"$APP/minecraftpe" >"$LOG" 2>&1 &
 PID=$!
 for _ in $(seq 1 15); do kill -0 $PID 2>/dev/null || break; sleep 1; done
 ALIVE=0; kill -0 $PID 2>/dev/null && ALIVE=1

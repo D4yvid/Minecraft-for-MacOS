@@ -4,7 +4,7 @@ TARGET   := arm64-apple-ios15.0-macabi
 BUILD    := build
 DYLIB    := $(BUILD)/libmcpekbm.dylib
 ORIG_APP ?= /Users/dayvid/Downloads/Payload/minecraftpe2.app
-OUT_APP  ?= /Users/dayvid/Downloads/Payload/MinecraftPE-Mac/minecraftpe2.app
+OUT_APP  ?= /Users/dayvid/Downloads/Payload/MinecraftPE-Mac/minecraftpe.app
 
 SRCS := src/keymap.cpp src/macho_uuid.cpp src/engine.mm src/pointer_lock.mm src/platform.mm \
         src/resize.mm src/mac_input.mm src/titlebar.mm src/store.mm src/main.mm
@@ -42,7 +42,7 @@ test: $(BUILD)/keymap_test $(BUILD)/titlebar_test $(BUILD)/macho_uuid_test $(BUI
 	$(BUILD)/input_policy_test
 	$(BUILD)/keymap_test
 	$(BUILD)/titlebar_test
-	$(BUILD)/macho_uuid_test "$(OUT_APP)/minecraftpe2" $(BUILD)/keymap_test
+	$(BUILD)/macho_uuid_test "$(OUT_APP)/minecraftpe" $(BUILD)/keymap_test
 	bash tests/inject_test.sh
 	bash tests/convert_guard_test.sh
 
@@ -50,6 +50,7 @@ install: $(DYLIB)
 	bash tools/convert.sh "$(ORIG_APP)" "$(OUT_APP)" "$(DYLIB)"
 
 smoke:
+	bash tests/bundle_test.sh "$(OUT_APP)"
 	bash tests/smoke.sh "$(OUT_APP)"
 
 clean:

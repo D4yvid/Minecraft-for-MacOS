@@ -6,9 +6,9 @@ Minecraft PE 0.15.10 running natively on Apple Silicon macOS.
 ## Build and install
 
     make test       # host tests
-    make install    # rebuilds MinecraftPE-Mac/minecraftpe2.app from the original + dylib
+    make install    # rebuilds MinecraftPE-Mac/minecraftpe.app from the original + dylib
     make smoke      # launches it and checks the mod loaded
-    open /Users/dayvid/Downloads/Payload/MinecraftPE-Mac/minecraftpe2.app
+    open /Users/dayvid/Downloads/Payload/MinecraftPE-Mac/minecraftpe.app
 
 `make install` refuses to run while the game is open (quit it first so nothing is lost).
 `make smoke` launches the game itself and closes it after 15 seconds.
