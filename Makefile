@@ -1,6 +1,6 @@
 SDK      := $(shell xcrun --sdk macosx --show-sdk-path)
 IOSFW    := $(SDK)/System/iOSSupport/System/Library/Frameworks
-TARGET   := arm64-apple-ios14.0-macabi
+TARGET   := arm64-apple-ios15.0-macabi
 BUILD    := build
 DYLIB    := $(BUILD)/libmcpekbm.dylib
 ORIG_APP ?= /Users/dayvid/Downloads/Payload/minecraftpe2.app
