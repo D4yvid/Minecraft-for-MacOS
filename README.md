@@ -24,7 +24,10 @@ Shift sneak · 1–9 / scroll hotbar · E inventory · Esc pause · T chat
 ## Window
 
 Resizable; the title bar is hidden and the game uses the full window. Move the pointer
-to the top-left corner to reveal the close / minimise / full-screen buttons.
+to the top-left corner to reveal the title bar; it stays until the pointer moves below it.
+
+The launch-time App Store receipt check ("Sign in with your Apple Account") is skipped;
+in-app purchases are unavailable in this copy anyway.
 
 ## How it works
 

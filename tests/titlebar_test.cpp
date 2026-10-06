@@ -22,6 +22,17 @@ int main() {
   EXPECT(cx == -960);
   EXPECT(cy == 540);
 
+  // reveal: enter through the traffic-light zone, stay while anywhere in the strip
+  mcpekbm::TitlebarReveal r;
+  EXPECT(!r.update(500, 10));   // top strip but not the hot zone: stays hidden
+  EXPECT(r.update(20, 10));     // hover the traffic lights: shown
+  EXPECT(r.update(500, 10));    // slide along the bar: still shown
+  EXPECT(r.update(900, 27));    // far end of the bar: still shown
+  EXPECT(!r.update(900, 28));   // moved below the bar: hidden
+  EXPECT(!r.update(500, 10));   // back in the strip without the hot zone: stays hidden
+  EXPECT(r.update(5, 5));
+  EXPECT(!r.update(-1, -1));    // pointer left the window / captured: hidden
+
   if (fails) { std::printf("%d failure(s)\n", fails); return 1; }
   std::printf("titlebar_test: all passed\n");
   return 0;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "titlebar_zone.h"  // kTitleStripPt: clicks in the strip drag the window, not play
+
 namespace mcpekbm {
 
 enum class PointerEvent { Move, ButtonDown, ButtonUp, Scroll };
@@ -10,8 +12,6 @@ struct PointerState {
   double xPt, yPt;  // free cursor position in window points
 };
 
-// Height of the (hidden) title bar strip: clicks there drag the window, not play.
-constexpr double kTitleStripPt = 28;
 
 // Whether a Mac pointer event should be forwarded to the engine.
 inline bool should_feed(PointerEvent e, const PointerState &s) {
