@@ -1,4 +1,5 @@
 #include "pointer_lock.h"
+#include "titlebar.h"
 
 #import <UIKit/UIKit.h>
 #include <dlfcn.h>
@@ -18,6 +19,7 @@ void apply() {
   bool want = gWanted && gActive;
   if (want == gApplied || !gAssociate) return;
   gApplied = want;
+  if (want) titlebar::pointer_at(-1, -1);
   gAssociate(!want);
   want ? gHide(0) : gShow(0);  // 0 = kCGDirectMainDisplay is ignored for cursor calls
   NSLog(@"mcpekbm: pointer %s", want ? "captured" : "released");

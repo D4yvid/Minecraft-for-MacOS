@@ -18,6 +18,11 @@ so `make install` keeps them.
 WASD move · mouse look · left click break/attack · right click place/use · Space jump ·
 Shift sneak · 1–9 / scroll hotbar · E inventory · Esc pause · T chat
 
+## Window
+
+Resizable; the title bar is hidden and the game uses the full window. Move the pointer
+to the top-left corner to reveal the close / minimise / full-screen buttons.
+
 ## How it works
 
 See `docs/superpowers/specs/2026-10-06-mcpe-kbm-design.md`.

@@ -1,6 +1,7 @@
 #include "resize.h"
 #include "addresses.h"
 #include "mac_input.h"
+#include "titlebar.h"
 
 #import <UIKit/UIKit.h>
 #include <objc/runtime.h>
@@ -60,6 +61,7 @@ void hooked_layout(UIView *self, SEL cmd) {
   ((void (*)(id, SEL))gOrigLayout)(self, cmd);
   set_min_window_size();
   macin::attach_view((__bridge void *)self);
+  titlebar::setup_window();
   notify_engine(self);
 }
 

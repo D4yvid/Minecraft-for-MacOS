@@ -2,6 +2,7 @@
 #include "engine.h"
 #include "keymap.h"
 #include "pointer_lock.h"
+#include "titlebar.h"
 
 #import <GameController/GameController.h>
 #import <UIKit/UIKit.h>
@@ -81,11 +82,18 @@ void presses_swallow(id self, SEL cmd, NSSet *presses, UIPressesEvent *event) {
 
 void hover(id, SEL, UIHoverGestureRecognizer *g) {
   UIView *v = g.view;
+  if (g.state == UIGestureRecognizerStateEnded || g.state == UIGestureRecognizerStateCancelled) {
+    titlebar::pointer_at(-1, -1);
+    return;
+  }
   CGPoint p = [g locationInView:v];
   float s = view_scale();
   gX = (int)(p.x * s);
   gY = (int)(p.y * s);
-  if (!pl::captured()) eng::mouse_move_abs(gX, gY);
+  if (!pl::captured()) {
+    eng::mouse_move_abs(gX, gY);
+    titlebar::pointer_at(p.x, p.y);
+  }
 }
 
 void swizzle(Class c, SEL sel, IMP imp) {

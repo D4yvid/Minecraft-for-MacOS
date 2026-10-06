@@ -7,7 +7,7 @@ ORIG_APP ?= /Users/dayvid/Downloads/Payload/minecraftpe2.app
 OUT_APP  ?= /Users/dayvid/Downloads/Payload/MinecraftPE-Mac/minecraftpe2.app
 
 SRCS := src/keymap.cpp src/engine.mm src/pointer_lock.mm src/platform.mm \
-        src/resize.mm src/mac_input.mm src/main.mm
+        src/resize.mm src/mac_input.mm src/titlebar.mm src/main.mm
 
 CXXFLAGS := -target $(TARGET) -isysroot $(SDK) -iframework $(IOSFW) \
             -std=c++17 -fobjc-arc -O2 -Wall -Wextra -Wno-unused-parameter
@@ -26,8 +26,13 @@ $(BUILD)/keymap_test: tests/keymap_test.cpp src/keymap.cpp src/keymap.h
 	@mkdir -p $(BUILD)
 	clang++ -std=c++17 -Wall -O1 tests/keymap_test.cpp src/keymap.cpp -o $@
 
-test: $(BUILD)/keymap_test
+$(BUILD)/titlebar_test: tests/titlebar_test.cpp src/titlebar_zone.h
+	@mkdir -p $(BUILD)
+	clang++ -std=c++17 -Wall -O1 tests/titlebar_test.cpp -o $@
+
+test: $(BUILD)/keymap_test $(BUILD)/titlebar_test
 	$(BUILD)/keymap_test
+	$(BUILD)/titlebar_test
 	bash tests/inject_test.sh
 
 install: $(DYLIB)
