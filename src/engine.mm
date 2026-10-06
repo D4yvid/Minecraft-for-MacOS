@@ -76,6 +76,16 @@ bool init() {
 bool patch_slot(uintptr_t vtableUnslid, uintptr_t byteOffset, void *fn) {
   uintptr_t slot = at(vtableUnslid + byteOffset);
   vm_address_t page = slot & ~(vm_address_t)(vm_page_size - 1);
+  // Remember the page's protection so it can be put back after the write.
+  vm_address_t region = page;
+  vm_size_t regionSize = 0;
+  vm_region_basic_info_data_64_t info;
+  mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
+  mach_port_t object = MACH_PORT_NULL;
+  vm_prot_t original = VM_PROT_READ;
+  if (vm_region_64(mach_task_self(), &region, &regionSize, VM_REGION_BASIC_INFO_64,
+                   (vm_region_info_t)&info, &count, &object) == KERN_SUCCESS)
+    original = info.protection;
   kern_return_t kr = vm_protect(mach_task_self(), page, vm_page_size, false,
                                 VM_PROT_READ | VM_PROT_WRITE | VM_PROT_COPY);
   if (kr != KERN_SUCCESS) {
@@ -83,6 +93,7 @@ bool patch_slot(uintptr_t vtableUnslid, uintptr_t byteOffset, void *fn) {
     return false;
   }
   *(void **)slot = fn;
+  vm_protect(mach_task_self(), page, vm_page_size, false, original);
   return true;
 }
 

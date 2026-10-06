@@ -19,7 +19,10 @@ namespace {
 constexpr float kLookScale = 1.0f;  // tune with manual check M3
 bool gTextActive = false;
 bool gMouseConnected = false;
-bool gHeld[256] = {};
+mcpekbm::HeldSet gKeys, gButtons;
+mcpekbm::DeltaAccumulator gLook;
+Class gPressesSuper = Nil;  // UIViewController, captured once (KVO-safe)
+NSHashTable *gAttached;  // devices whose handlers are installed
 int gX = 0, gY = 0;  // last pointer position in game pixels
 bool gInside = false;  // free cursor is over the game view
 double gXPt = -1, gYPt = -1;  // last pointer position in window points
@@ -50,33 +53,44 @@ void pointer_moved(CGPoint p) {
 }
 
 void button(int btn, BOOL pressed) {
-  if (feeds(pressed ? mcpekbm::PointerEvent::ButtonDown : mcpekbm::PointerEvent::ButtonUp))
-    eng::mouse_button(btn, pressed, gX, gY);
+  if (!feeds(pressed ? mcpekbm::PointerEvent::ButtonDown : mcpekbm::PointerEvent::ButtonUp)) return;
+  if (gButtons.set(btn, pressed)) eng::mouse_button(btn, pressed, gX, gY);
 }
 
 void key(int vk, bool down) {
-  if (vk <= 0 || vk > 255 || gHeld[vk] == down) return;
-  gHeld[vk] = down;
-  eng::key(vk, down);
+  // While typing, presses belong to the text field (except Esc); releases still go through.
+  if (gTextActive && down && !mcpekbm::passes_while_typing(vk)) return;
+  if (gKeys.set(vk, down)) eng::key(vk, down);
 }
 
-void release_all_keys() {
-  for (int vk = 1; vk < 256; vk++) if (gHeld[vk]) key(vk, false);
+void release_all() {
+  gKeys.release_all([](int vk) { eng::key(vk, false); });
+  gButtons.release_all([](int btn) { eng::mouse_button(btn, false, gX, gY); });
+}
+
+bool claim(id device) {  // true the first time a device is seen
+  if ([gAttached containsObject:device]) return false;
+  [gAttached addObject:device];
+  return true;
 }
 
 void attach_keyboard(GCKeyboard *kb) {
+  if (!kb || !claim(kb)) return;
   kb.keyboardInput.keyChangedHandler = ^(GCKeyboardInput *, GCControllerButtonInput *, GCKeyCode code, BOOL pressed) {
-    if (gTextActive && pressed) return;  // releases still go through so nothing sticks
     key(mcpekbm::hid_to_vk((long)code), pressed);
   };
 }
 
 void attach_mouse(GCMouse *mouse) {
+  if (!mouse || !claim(mouse)) return;
   gMouseConnected = true;
   GCMouseInput *in = mouse.mouseInput;
   in.mouseMovedHandler = ^(GCMouseInput *, float dx, float dy) {
+    if (!pl::captured()) return;
     // GameController deltaY is positive upwards; the engine expects screen space.
-    if (pl::captured()) eng::mouse_move_rel((int)(dx * kLookScale), (int)(-dy * kLookScale));
+    int ox, oy;
+    gLook.add(dx * kLookScale, -dy * kLookScale, &ox, &oy);
+    eng::mouse_move_rel(ox, oy);
   };
   in.leftButton.pressedChangedHandler = ^(GCControllerButtonInput *, float, BOOL p) { button(1, p); };
   in.rightButton.pressedChangedHandler = ^(GCControllerButtonInput *, float, BOOL p) { button(2, p); };
@@ -105,7 +119,7 @@ BOOL can_become_first_responder(id, SEL) { return YES; }
 
 void presses_swallow(id self, SEL cmd, NSSet *presses, UIPressesEvent *event) {
   if (gTextActive) {  // let UIKit deliver to the text field normally
-    struct objc_super sup = {self, class_getSuperclass(object_getClass(self))};
+    struct objc_super sup = {self, gPressesSuper};
     ((void (*)(struct objc_super *, SEL, NSSet *, UIPressesEvent *))objc_msgSendSuper)(&sup, cmd, presses, event);
   }
   // otherwise swallow: GCKeyboard already fed the engine; prevents the macOS beep
@@ -137,7 +151,9 @@ void add_or_replace(Class c, SEL sel, IMP imp, const char *types) {
 
 void install() {
   gOrig = new std::map<SEL, IMP>();
+  gAttached = [NSHashTable weakObjectsHashTable];
   Class vc = objc_getClass("minecraftpeViewController");
+  gPressesSuper = class_getSuperclass(vc);
   swizzle(vc, @selector(touchesBegan:withEvent:), (IMP)touches_gate);
   swizzle(vc, @selector(touchesMoved:withEvent:), (IMP)touches_gate);
   swizzle(vc, @selector(touchesEnded:withEvent:), (IMP)touches_gate);
@@ -153,7 +169,7 @@ void install() {
   for (NSNotificationName n : {UITextFieldTextDidBeginEditingNotification, UITextViewTextDidBeginEditingNotification})
     [nc addObserverForName:n object:nil queue:main usingBlock:^(NSNotification *) {
       gTextActive = true;
-      release_all_keys();
+      gKeys.release_all([](int vk) { eng::key(vk, false); });
     }];
   for (NSNotificationName n : {UITextFieldTextDidEndEditingNotification, UITextViewTextDidEndEditingNotification})
     [nc addObserverForName:n object:nil queue:main usingBlock:^(NSNotification *) {
@@ -161,11 +177,18 @@ void install() {
       [gVC becomeFirstResponder];
     }];
   [nc addObserverForName:UIApplicationWillResignActiveNotification object:nil queue:main
-              usingBlock:^(NSNotification *) { release_all_keys(); }];
+              usingBlock:^(NSNotification *) { release_all(); }];
   [nc addObserverForName:GCKeyboardDidConnectNotification object:nil queue:main
               usingBlock:^(NSNotification *n) { attach_keyboard(n.object); }];
   [nc addObserverForName:GCMouseDidConnectNotification object:nil queue:main
               usingBlock:^(NSNotification *n) { attach_mouse(n.object); }];
+  [nc addObserverForName:GCMouseDidDisconnectNotification object:nil queue:main
+              usingBlock:^(NSNotification *n) {
+                bool any = false;
+                for (GCMouse *m in GCMouse.mice) any |= (m != n.object);
+                gMouseConnected = any;  // no mouse left: the game's touch path takes over again
+                NSLog(@"mcpekbm: mouse disconnected (%s left)", any ? "others" : "none");
+              }];
   dispatch_async(dispatch_get_main_queue(), ^{
     if (GCKeyboard.coalescedKeyboard) attach_keyboard(GCKeyboard.coalescedKeyboard);
     for (GCMouse *m in GCMouse.mice) attach_mouse(m);

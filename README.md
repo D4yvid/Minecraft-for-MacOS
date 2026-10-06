@@ -10,6 +10,9 @@ Minecraft PE 0.15.10 running natively on Apple Silicon macOS.
     make smoke      # launches it and checks the mod loaded
     open /Users/dayvid/Downloads/Payload/MinecraftPE-Mac/minecraftpe2.app
 
+`make install` refuses to run while the game is open (quit it first so nothing is lost).
+`make smoke` launches the game itself and closes it after 15 seconds.
+
 The original `minecraftpe2.app` is never modified. Worlds live outside the bundle,
 so `make install` keeps them.
 

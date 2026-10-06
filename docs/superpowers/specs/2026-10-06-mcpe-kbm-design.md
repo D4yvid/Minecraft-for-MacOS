@@ -62,10 +62,11 @@ Key codes are Windows virtual-key codes (Enter = 13 confirmed in iOS text-view c
    A `UIHoverGestureRecognizer` on the game view feeds absolute position (points × contentScaleFactor,
    same scale as the touch path) while not captured. Game's `touches*` methods on
    `minecraftpeViewController` are swizzled to no-ops so clicks don't double-feed.
-6. **`pointer_lock`**: hide/show slots set a `captured` flag, then on main:
-   override `prefersPointerLocked` on `minecraftpeViewController` + `setNeedsUpdateOfPrefersPointerLocked`;
-   fallback `CGAssociateMouseAndMouseCursorPosition(false)` + `CGDisplayHideCursor` (dlsym).
-   Window losing focus releases capture.
+6. **`pointer_lock`**: hide/show slots set a `wanted` flag; capture applies while the app is active:
+   warp the cursor to the window centre (`CGWarpMouseCursorPosition`), then
+   `CGAssociateMouseAndMouseCursorPosition(false)` + `CGDisplayHideCursor` (all via dlsym; works windowed
+   and full screen). Window losing focus releases capture; regaining it re-captures if still wanted.
+   (`prefersPointerLocked` was dropped: CoreGraphics covers both cases.)
 
 7. **`window_resize`**: window resizing.
    - Background: `-[EAGLView layoutSubviews]` already deletes the framebuffer and
