@@ -4,6 +4,7 @@
 Play the Catalyst-converted `minecraftpe2.app` (0.15.10, iOS arm64, decrypted) with PC-style
 controls and the Win10 desktop GUI: WASD, mouse look with captured cursor, left/right click,
 scroll/number-key hotbar, E inventory, Esc back/pause, normal cursor with hover in menus.
+Resizable window with the game following the window size.
 Single-player focus. The original `minecraftpe2.app` is never modified.
 
 ## Non-goals
@@ -66,6 +67,21 @@ Key codes are Windows virtual-key codes (Enter = 13 confirmed in iOS text-view c
    fallback `CGAssociateMouseAndMouseCursorPosition(false)` + `CGDisplayHideCursor` (dlsym).
    Window losing focus releases capture.
 
+7. **`window_resize`**: window resizing.
+   - Background: `-[EAGLView layoutSubviews]` already deletes the framebuffer and
+     `setFramebuffer` recreates it at the new size. But the engine is told its size only once, in
+     `-[minecraftpeViewController initView]`, via `App` vtable slots 21 (`(app, w, h)`) and
+     20 (`(app, w, h, float 0)`). `-[minecraftpeViewController width/height]` use
+     `max/min(UIScreen.mainScreen.bounds) * viewScale`, i.e. the display, not the window. Result
+     today: the game renders at the launch size in the bottom-left corner, with black around it.
+   - Swizzle `width` / `height` to return `view.bounds.size.{width,height} * viewScale`.
+   - Swizzle `-[EAGLView layoutSubviews]`: call the original, then if the new pixel size differs
+     from the last one sent, call App slots 21 and 20 exactly as `initView` does (main thread, same
+     as drawFrame, so no race).
+   - Set `windowScene.sizeRestrictions.minimumSize` to 800×500 points.
+   - Bundle step: delete `UIRequiresFullScreen` from the converted copy's Info.plist (Catalyst
+     otherwise locks the window size).
+
 ### Injection
 Dev: `DYLD_INSERT_LIBRARIES=libmcpekbm.dylib ./minecraftpe2`. Final: `tools/inject.py` adds
 `LC_LOAD_DYLIB @executable_path/Frameworks/libmcpekbm.dylib` into header padding of the
@@ -78,4 +94,4 @@ GCMouse/GCKeyboard: log and keep touch path (do not swizzle touches). All loggin
 ### Testing
 - Host unit test for `keymap`.
 - Launch test: log shows `mcpekbm: patched`, app stays alive >15 s, no crash report.
-- Manual (user): desktop GUI visible, menu hover/click, world: WASD/mouse look/click/E/Esc/1-9/scroll, chat typing.
+- Manual (user): window resize re-lays out the game with no black area; desktop GUI visible, menu hover/click, world: WASD/mouse look/click/E/Esc/1-9/scroll, chat typing.
