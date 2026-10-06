@@ -7,7 +7,8 @@ GAME    ?=
 OUT_APP ?= $(CURDIR)/dist/minecraftpe.app
 
 SHARED_INC   := -Ishared/include -Ishared/apple
-SHARED_TESTS := keymap_test input_state_test
+SHARED_CORE  := shared/src/client.cpp
+SHARED_TESTS := keymap_test input_state_test client_test
 MACOS_TESTS  := titlebar_test input_policy_test
 
 # ---------------------------------------------------------------- macOS (Mac Catalyst)
@@ -53,6 +54,10 @@ $(BUILD)/test/keymap_test: shared/tests/keymap_test.cpp shared/src/keymap.cpp sh
 $(BUILD)/test/input_state_test: shared/tests/input_state_test.cpp shared/include/mcfm/input/input_state.h
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -O1 $(SHARED_INC) shared/tests/input_state_test.cpp -o $@
+
+$(BUILD)/test/client_test: shared/tests/client_test.cpp shared/tests/fake_platform.h $(SHARED_CORE) $(wildcard shared/include/mcfm/*.h)
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -Wextra -O1 $(SHARED_INC) shared/tests/client_test.cpp $(SHARED_CORE) -o $@
 
 $(BUILD)/test/macho_uuid_test: shared/apple/macho_uuid_test.cpp shared/apple/macho_uuid.cpp shared/apple/macho_uuid.h
 	@mkdir -p $(dir $@)
