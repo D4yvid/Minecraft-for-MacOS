@@ -1,4 +1,22 @@
+# build output and local config
 build/
 dist/
 config.mk
 .superpowers/
+.venv/
+__pycache__/
+
+# never commit game files (see tools/tests/no_game_files_test.sh)
+*.ipa
+*.apk
+*.app/
+Payload/
+*.i64
+*.id0
+*.id1
+*.id2
+*.nam
+*.til
+lib*.so
+android/Application/
+*.keystore

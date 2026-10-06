@@ -123,6 +123,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/check_game_test.sh $(GAME)
 	bash macos/tests/convert_guard_test.sh
 	bash android/tests/patch_smali_test.sh
+	bash tools/tests/no_game_files_test.sh
 
 clean:
 	rm -rf $(BUILD)

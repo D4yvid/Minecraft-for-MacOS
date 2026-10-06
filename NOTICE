@@ -1,0 +1,14 @@
+Minecraft for macOS
+Copyright 2026 Dayvid Albuquerque
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+The Android injection code in android/jni (android, hook, jni, maps) comes from
+runet-client by the same author, relicensed here under Apache-2.0.
+
+android/jni/hook.hpp contains code from the Android Open Source Project:
+  Copyright (C) 2008 The Android Open Source Project. All rights reserved.
+  (BSD-style license, reproduced in that file.)
+
+Minecraft is a trademark of Mojang Synergies AB / Microsoft. This project is not
+affiliated with or endorsed by them and contains none of their files.

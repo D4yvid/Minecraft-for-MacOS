@@ -98,3 +98,13 @@ Host tests for all shared pure logic and both modules against a `FakePlatform` (
 slots, owns fake Keyboard vectors, records mouse_feed calls). macOS: existing bundle + smoke tests.
 iOS: compile + `ios-ipa` structure test (dylib injected, LC_LOAD_DYLIB present). Android: compile
 with NDK r10c when available; otherwise documented as untested.
+
+## Changes during implementation (user decisions)
+- No Module/Client registry: features are plain `install()` functions; a better module
+  system comes later.
+- Win10 UI is hardcoded on (as in the macOS mod) on every platform: no iPad/defaults
+  toggle on iOS, no Options toggle on Android. It also patches PlatformType and
+  UseMetadataDrivenScreens where known (Android).
+- Android: runet's Client/modules, Substrate and minecraft headers are not imported; the
+  library finds everything with dlsym and no longer links against libminecraftpe.so.
+- Targets: Mac Catalyst and iOS 15.0 (current libc++ minimum).
