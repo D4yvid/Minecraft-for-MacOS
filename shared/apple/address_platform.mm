@@ -19,7 +19,10 @@ uintptr_t slot_offset(engine::Slot s) {
     case engine::Slot::UIScalingRules: return addr::kSlotUIScalingRules;
     case engine::Slot::HideMousePointer: return addr::kSlotHideMousePointer;
     case engine::Slot::ShowMousePointer: return addr::kSlotShowMousePointer;
-    case engine::Slot::UseCenteredGUI: return 0;  // not located in the iOS binary yet
+    case engine::Slot::UseCenteredGUI:  // not located in the iOS binary yet
+    case engine::Slot::PlatformType:
+    case engine::Slot::UseMetadataDrivenScreens:
+      return 0;
   }
   return 0;
 }

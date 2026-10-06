@@ -11,6 +11,8 @@ enum class Slot {
   DefaultInputMode,  // int () — 1 mouse, 2 touch, 3 gamepad
   UIScalingRules,    // int () — 0 desktop, 1-2 pocket
   UseCenteredGUI,    // bool () const — true on desktop
+  PlatformType,      // int () const — 0 desktop, 1 mobile
+  UseMetadataDrivenScreens,  // bool () const — true for the desktop screens
   HideMousePointer,  // void () — game grabs the mouse (in-world)
   ShowMousePointer,  // void () — game releases the mouse (menus)
 };

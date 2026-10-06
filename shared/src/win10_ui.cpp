@@ -11,6 +11,8 @@ namespace {
 std::string get_edition(void *) { return "win10"; }
 int ui_scaling_rules(void *) { return 0; }  // 0 desktop, 1-2 pocket
 bool use_centered_gui(void *) { return true; }
+int platform_type(void *) { return 0; }  // 0 desktop, 1 mobile
+bool use_metadata_driven_screens(void *) { return true; }
 
 bool patch(Platform &p, engine::Slot slot, const char *slotName, void *fn) {
   if (p.patch_slot(slot, fn, 0)) return true;
@@ -24,6 +26,9 @@ bool install(Platform &p) {
   bool edition = patch(p, engine::Slot::GetEdition, "GetEdition", (void *)&get_edition);
   patch(p, engine::Slot::UIScalingRules, "UIScalingRules", (void *)&ui_scaling_rules);
   patch(p, engine::Slot::UseCenteredGUI, "UseCenteredGUI", (void *)&use_centered_gui);
+  patch(p, engine::Slot::PlatformType, "PlatformType", (void *)&platform_type);
+  patch(p, engine::Slot::UseMetadataDrivenScreens, "UseMetadataDrivenScreens",
+        (void *)&use_metadata_driven_screens);
   logf(p, "win10_ui: %s", edition ? "installed" : "FAILED");
   return edition;
 }

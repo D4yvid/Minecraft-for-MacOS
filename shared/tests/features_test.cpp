@@ -15,6 +15,8 @@ static std::string orig_edition(void *) { return "pocket"; }
 static int orig_scaling(void *) { return 2; }
 static bool orig_centered(void *) { return false; }
 static int orig_input_mode(void *) { return 2; }
+static int orig_platform_type(void *) { return 1; }
+static bool orig_metadata_screens(void *) { return false; }
 static void orig_noop(void *) {}
 
 static int hides = 0, shows = 0;
@@ -28,6 +30,8 @@ static void pocket_vtable(FakePlatform &p) {
   p.set_slot(Slot::UIScalingRules, (void *)&orig_scaling);
   p.set_slot(Slot::UseCenteredGUI, (void *)&orig_centered);
   p.set_slot(Slot::DefaultInputMode, (void *)&orig_input_mode);
+  p.set_slot(Slot::PlatformType, (void *)&orig_platform_type);
+  p.set_slot(Slot::UseMetadataDrivenScreens, (void *)&orig_metadata_screens);
   p.set_slot(Slot::HideMousePointer, (void *)&orig_noop);
   p.set_slot(Slot::ShowMousePointer, (void *)&orig_noop);
 }
@@ -42,6 +46,8 @@ static void test_win10_ui() {
   EXPECT(slot_fn<EditionFn>(p, Slot::GetEdition)(0) == "win10");
   EXPECT(slot_fn<IntFn>(p, Slot::UIScalingRules)(0) == 0);
   EXPECT(slot_fn<BoolFn>(p, Slot::UseCenteredGUI)(0) == true);
+  EXPECT(slot_fn<IntFn>(p, Slot::PlatformType)(0) == 0);
+  EXPECT(slot_fn<BoolFn>(p, Slot::UseMetadataDrivenScreens)(0) == true);
   // input mode is not the Win10 UI's business
   EXPECT(slot_fn<IntFn>(p, Slot::DefaultInputMode)(0) == 2);
 }
@@ -52,6 +58,7 @@ static void test_win10_ui_missing_slot() {
   p.set_slot(Slot::UIScalingRules, (void *)&orig_scaling);  // no UseCenteredGUI here
   EXPECT(mcfm::win10_ui::install(p));
   EXPECT(p.logged("UseCenteredGUI"));
+  EXPECT(p.logged("PlatformType") && p.logged("UseMetadataDrivenScreens"));
   EXPECT(((std::string(*)(void *))p.slot(Slot::GetEdition))(0) == "win10");
   FakePlatform none;  // without GetEdition the module cannot work
   EXPECT(!mcfm::win10_ui::install(none));

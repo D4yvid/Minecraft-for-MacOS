@@ -24,7 +24,7 @@ MAC_LDFLAGS  := -dynamiclib -F$(IOSFW) -framework Foundation -framework UIKit \
                 -framework GameController -framework QuartzCore \
                 -install_name @executable_path/Frameworks/libmcfm.dylib
 
-.PHONY: all macos app run check test clean ios ios-ipa ios-syntax
+.PHONY: all macos app run check test clean ios ios-ipa ios-syntax android android-apk
 all: macos
 
 macos: $(MAC_DYLIB)
@@ -64,6 +64,26 @@ ios-ipa: $(IOS_DYLIB)
 ios-syntax:
 	clang++ $(IOS_CXXFLAGS) -isysroot $(SDK) -Wno-incompatible-sysroot -fsyntax-only $(IOS_SRCS)
 
+# ---------------------------------------------------------------- Android
+# NDK r10c (x86_64 host build; runs under Rosetta on Apple Silicon).
+NDK ?= $(HOME)/Library/Android/ndk/android-ndk-r10c
+RELEASE_BUILD ?= 0
+ANDROID_OUT := $(CURDIR)/$(BUILD)/android
+ANDROID_LIB := $(ANDROID_OUT)/libs/armeabi-v7a/librunet.so
+HOST_X86 := $(if $(filter arm64,$(shell uname -m)),/usr/bin/arch -x86_64,)
+
+android:
+	@test -x "$(NDK)/ndk-build" || { echo "Set NDK=<path to android-ndk-r10c> (or put it in config.mk)"; exit 1; }
+	cd android && $(HOST_X86) /bin/bash -c '"$(NDK)/ndk-build" -j8 NDK_PROJECT_PATH=. \
+	  NDK_OUT="$(ANDROID_OUT)/obj" NDK_LIBS_OUT="$(ANDROID_OUT)/libs" RELEASE_BUILD=$(RELEASE_BUILD)'
+	bash android/tests/lib_test.sh "$(ANDROID_LIB)" "$(NDK)"
+
+APK ?=
+ANDROID_APK ?= $(CURDIR)/dist/minecraftpe-mcfm.apk
+android-apk: android
+	@test -n "$(APK)" || { echo "Set APK=<your Minecraft PE 0.15.10 .apk> (or put it in config.mk)"; exit 1; }
+	bash android/tools/build_apk.sh "$(APK)" "$(dir $(ANDROID_LIB))" "$(ANDROID_APK)"
+
 # Needs the built app (make app).
 check: $(BUILD)/test/macho_uuid_test $(BUILD)/test/keymap_test
 	$(BUILD)/test/macho_uuid_test "$(OUT_APP)/minecraftpe" $(BUILD)/test/keymap_test
@@ -102,6 +122,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/inject_test.sh
 	bash tools/tests/check_game_test.sh $(GAME)
 	bash macos/tests/convert_guard_test.sh
+	bash android/tests/patch_smali_test.sh
 
 clean:
 	rm -rf $(BUILD)
