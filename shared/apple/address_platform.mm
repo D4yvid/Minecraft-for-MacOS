@@ -1,5 +1,6 @@
 #include "address_platform.h"
 #include "addresses_0_15_10.h"
+#include "engine_mouse.h"
 #include "macho_uuid.h"
 
 #import <Foundation/Foundation.h>
@@ -27,16 +28,6 @@ uintptr_t slot_offset(engine::Slot s) {
   return 0;
 }
 
-struct MouseAction {  // MouseDevice::_inputs element
-  int16_t x, y, dx, dy;
-  int8_t button, data;
-  uint8_t pad[6];
-};
-static_assert(sizeof(MouseAction) == 16, "MouseAction layout");
-
-template <class T> struct RawVector { T *begin, *end, *cap; };
-
-int16_t clamp16(int v) { return v > 32767 ? 32767 : (v < -32768 ? -32768 : (int16_t)v); }
 
 }  // namespace
 
@@ -103,23 +94,8 @@ void *AddressPlatform::global(engine::Global g) {
 
 void AddressPlatform::mouse_feed(int btn, int state, int x, int y, int dx, int dy) {
   if (!attached_) return;
-  if (dx || dy) {
-    // MouseDevice::feed in this build has no dx/dy, so relative look motion is pushed
-    // straight into Mouse::_instance's queue (the engine's slow path grows it).
-    MouseAction a{};
-    a.dx = clamp16(dx);
-    a.dy = clamp16(dy);
-    auto *v = (RawVector<MouseAction> *)at(addr::kMouseInputs);
-    if (v->end < v->cap) {
-      *v->end = a;
-      v->end++;
-    } else {
-      ((void (*)(void *, MouseAction *))at(addr::kMouseInputsGrow))(v, &a);
-    }
-    return;
-  }
-  ((void (*)(void *, int, int, int, int))at(addr::kMouseDeviceFeed))(
-      (void *)at(addr::kMouseDevice), btn, state, clamp16(x), clamp16(y));
+  apple::feed_mouse(at(addr::kMouseInputs), at(addr::kMouseInputsGrow), at(addr::kMouseDevice),
+                    at(addr::kMouseDeviceFeed), btn, state, x, y, dx, dy);
 }
 
 }  // namespace apple

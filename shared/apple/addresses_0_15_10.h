@@ -23,6 +23,7 @@ constexpr uintptr_t kFnUIScalingRulesIOS = 0x1007074EC;    // returns 1 (pocket)
 // Keyboard
 constexpr uintptr_t kKeyboardInputs = 0x100F59FF8;      // std::vector<KeyEvent>
 constexpr uintptr_t kKeyboardStates = 0x100F59BF8;      // int32_t[256]
+constexpr uintptr_t kKeyboardText = 0x100F5A010;        // std::vector<{std::string; bool}> typed text
 
 // Mouse
 constexpr uintptr_t kMouseDevice = 0x100F5A040;        // MouseDevice Mouse::_instance

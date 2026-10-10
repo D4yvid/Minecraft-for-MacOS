@@ -23,6 +23,7 @@ class Engine {
   void resize(int width, int height);   // setRenderingSize + setUISizeAndScale
   void *app() const { return app_; }
   void *platform() const { return platform_; }
+  void **vtable() { return vtable_; }    // our AppPlatform vtable (LauncherPlatform patches it)
 
  private:
   void *platform_ = nullptr, *context_ = nullptr, *app_ = nullptr;
