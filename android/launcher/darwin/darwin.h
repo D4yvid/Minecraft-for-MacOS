@@ -31,6 +31,63 @@ static_assert(sizeof(sched_param) == kSizeof_sched_param, "sched_param");
 static_assert(sizeof(pthread_key) == kSizeof_pthread_key_t, "pthread_key_t");
 static_assert(sizeof(pthread_t) == kSizeof_pthread_t, "pthread_t");
 
+// Files and system (system.cpp).
+struct timespec { long tv_sec, tv_nsec; };
+struct stat {
+  int32_t st_dev;
+  uint16_t st_mode, st_nlink;
+  uint64_t st_ino;
+  uint32_t st_uid, st_gid;
+  int32_t st_rdev;
+  timespec st_atimespec, st_mtimespec, st_ctimespec, st_birthtimespec;
+  int64_t st_size, st_blocks;
+  int32_t st_blksize;
+  uint32_t st_flags, st_gen;
+  int32_t st_lspare;
+  int64_t st_qspare[2];
+};
+static_assert(sizeof(stat) == kSizeof_stat, "stat");
+static_assert(offsetof(stat, st_ino) == kOffsetof_stat_st_ino && offsetof(stat, st_atimespec) == kOffsetof_stat_st_atimespec &&
+                  offsetof(stat, st_birthtimespec) == kOffsetof_stat_st_birthtimespec &&
+                  offsetof(stat, st_size) == kOffsetof_stat_st_size && offsetof(stat, st_blksize) == kOffsetof_stat_st_blksize &&
+                  offsetof(stat, st_gen) == kOffsetof_stat_st_gen,
+              "stat fields");
+struct dirent {
+  uint64_t d_ino, d_seekoff;
+  uint16_t d_reclen, d_namlen;
+  uint8_t d_type;
+  char d_name[1024];
+};
+static_assert(sizeof(dirent) == kSizeof_dirent && offsetof(dirent, d_namlen) == kOffsetof_dirent_d_namlen &&
+                  offsetof(dirent, d_type) == kOffsetof_dirent_d_type && offsetof(dirent, d_name) == kOffsetof_dirent_d_name,
+              "dirent");
+struct utsname { char sysname[256], nodename[256], release[256], version[256], machine[256]; };
+static_assert(sizeof(utsname) == kSizeof_utsname, "utsname");
+// struct sigaction as user code sees it: handler (or sigaction), a 32-bit mask, flags.
+struct sigaction_t {
+  void (*handler)(int);
+  uint32_t mask;
+  int flags;
+};
+static_assert(sizeof(sigaction_t) == kSizeof_sigaction && offsetof(sigaction_t, mask) == kOffsetof_sigaction_sa_mask &&
+                  offsetof(sigaction_t, flags) == kOffsetof_sigaction_sa_flags,
+              "sigaction");
+// Darwin's siginfo_t (bionic defines the si_* names as macros, so the fields are renamed).
+struct siginfo {
+  int signo, error, code;
+  int pid;
+  unsigned uid;
+  int status;
+  void *addr;
+  void *value;
+  long band;
+  unsigned long pad[7];
+};
+static_assert(sizeof(siginfo) == kSizeof_siginfo_t && offsetof(siginfo, code) == kOffsetof_siginfo_t_si_code &&
+                  offsetof(siginfo, pid) == kOffsetof_siginfo_t_si_pid && offsetof(siginfo, addr) == kOffsetof_siginfo_t_si_addr &&
+                  offsetof(siginfo, value) == kOffsetof_siginfo_t_si_value,
+              "siginfo");
+
 }  // namespace darwin
 
 extern "C" {
@@ -73,6 +130,28 @@ int mcfm_darwin_pthread_join(darwin::pthread_t thread, void **result);
 int mcfm_darwin_pthread_detach(darwin::pthread_t thread);
 darwin::pthread_t mcfm_darwin_pthread_self(void);
 int mcfm_darwin_pthread_setname_np(const char *name);
+
+// system.cpp. Failures leave bionic's errno set (translated by ___error).
+int mcfm_darwin_stat(const char *path, darwin::stat *out);
+int mcfm_darwin_lstat(const char *path, darwin::stat *out);
+int mcfm_darwin_fstat(int fd, darwin::stat *out);
+void *mcfm_darwin_opendir(const char *path);
+darwin::dirent *mcfm_darwin_readdir(void *dir);
+int mcfm_darwin_readdir_r(void *dir, darwin::dirent *entry, darwin::dirent **result);
+int mcfm_darwin_closedir(void *dir);
+void *mcfm_darwin_mmap(void *address, size_t length, int prot, int flags, int fd, long offset);
+long mcfm_darwin_sysconf(int name);
+int mcfm_darwin_getpagesize(void);
+int mcfm_darwin_uname(darwin::utsname *out);
+int mcfm_darwin_sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
+int mcfm_darwin_sigaction(int signo, const darwin::sigaction_t *act, darwin::sigaction_t *old);
+void (*mcfm_darwin_signal(int signo, void (*handler)(int)))(int);
+int mcfm_darwin_raise(int signo);
+int mcfm_darwin_tcgetattr(int fd, void *termios);
+int mcfm_darwin_tcsetattr(int fd, int action, const void *termios);
+// Signal numbers: Darwin <-> bionic (0 when the other system has no such signal).
+int mcfm_bionic_signal(int darwin_signo);
+int mcfm_darwin_signal_number(int bionic_signo);
 
 // symbols.cpp: the address for a libSystem import (name without the Mach-O '_'), or null.
 void *mcfm_darwin_symbol(const char *name);

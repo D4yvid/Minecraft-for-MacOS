@@ -3,7 +3,14 @@
 // (real Darwin) the transcript is the reference; on Android, loaded by mcfm-run with the Darwin
 // layer and the Apple-ABI runtime, it must be identical (tools/tests/android_launcher_test.sh).
 // No addresses, pids, times or paths in the output. Works in the current directory.
+#include <dirent.h>
 #include <errno.h>
+#include <signal.h>
+#include <sys/mman.h>
+#include <sys/sysctl.h>
+#include <sys/utsname.h>
+#include <termios.h>
+#include <time.h>
 #include <fcntl.h>
 #include <math.h>
 #include <stdarg.h>
@@ -17,7 +24,9 @@
 #include <libkern/OSAtomic.h>
 
 #include <stdexcept>
+#include <algorithm>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -124,11 +133,128 @@ void part1_stdio_errno() {
   LINE("qsort %d %d %d %d %d", values[0], values[1], values[2], values[3], values[4]);
 }
 
+volatile int g_signal = 0;
+volatile int g_info_signo = 0;
+void on_signal(int signo) { g_signal = signo; }
+void on_signal_info(int signo, siginfo_t *info, void *) { g_signal = signo; g_info_signo = info ? info->si_signo : -1; }
+
+void part2_files_system_signals() {
+  LINE("== 2 files, mmap, system, signals, time");
+  umask(022);  // adb shell's may differ from the Mac's
+  mkdir("c2", 0755);
+  FILE *f = fopen("c2/file.txt", "w");
+  fputs("twelve bytes", f);
+  fclose(f);
+  symlink("file.txt", "c2/link");
+  mkdir("c2/sub", 0700);
+  struct stat st;
+  memset(&st, 0xAB, sizeof st);
+  LINE("stat file %d size %lld reg %d mode %o nlink %d blocks>0 %d blksize>0 %d", stat("c2/file.txt", &st),
+       static_cast<long long>(st.st_size), S_ISREG(st.st_mode), st.st_mode & 0777, st.st_nlink, st.st_blocks > 0,
+       st.st_blksize > 0);
+  LINE("stat mtime recent %d", st.st_mtimespec.tv_sec > 1700000000);
+  LINE("lstat link %d lnk %d size %lld", lstat("c2/link", &st), S_ISLNK(st.st_mode), static_cast<long long>(st.st_size));
+  LINE("stat via link %d reg %d", stat("c2/link", &st), S_ISREG(st.st_mode));
+  LINE("stat dir %d dir %d mode %o", stat("c2/sub", &st), S_ISDIR(st.st_mode), st.st_mode & 0777);
+  LINE("stat missing %d errno %d", stat("c2/missing", &st), errno);
+  int fd = open("c2/file.txt", O_RDONLY);
+  LINE("fstat %d size %lld", fstat(fd, &st), static_cast<long long>(st.st_size));
+  void *map = mmap(nullptr, 12, PROT_READ, MAP_PRIVATE, fd, 0);
+  LINE("mmap file %.6s", map == MAP_FAILED ? "failed" : static_cast<const char *>(map));
+  munmap(map, 12);
+  close(fd);
+  char *anon = static_cast<char *>(mmap(nullptr, 1 << 16, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0));
+  if (anon != MAP_FAILED) strcpy(anon + 40000, "anonymous");
+  LINE("mmap anon %s", anon == MAP_FAILED ? "failed" : anon + 40000);
+  munmap(anon, 1 << 16);
+
+  for (int k = 0; k < 40; k++) {
+    char name[32];
+    snprintf(name, sizeof name, "c2/sub/f%02d", k);
+    close(open(name, O_CREAT | O_WRONLY, 0644));
+  }
+  DIR *dir = opendir("c2");
+  std::vector<std::string> entries;
+  while (struct dirent *e = readdir(dir)) {
+    char line[300];
+    snprintf(line, sizeof line, "%s:%d:%d", e->d_name, e->d_type, e->d_namlen);
+    entries.push_back(line);
+  }
+  closedir(dir);
+  std::sort(entries.begin(), entries.end());
+  std::string all;
+  for (const std::string &e : entries) all += e + " ";
+  LINE("readdir c2 %s", all.c_str());
+  dir = opendir("c2/sub");
+  int count = 0;
+  struct dirent entry, *result = nullptr;
+  while (readdir_r(dir, &entry, &result) == 0 && result) count += entry.d_name[0] == 'f' && entry.d_namlen == 3;
+  closedir(dir);
+  LINE("readdir_r c2/sub files %d", count);
+  LINE("opendir missing %s errno %d", opendir("c2/nope") ? "opened" : "null", errno);
+  for (int k = 0; k < 40; k++) {
+    char name[32];
+    snprintf(name, sizeof name, "c2/sub/f%02d", k);
+    unlink(name);
+  }
+  rmdir("c2/sub");
+  unlink("c2/link");
+  unlink("c2/file.txt");
+  rmdir("c2");
+
+  LINE("sysconf cpus %d page %d", sysconf(_SC_NPROCESSORS_ONLN) > 0, sysconf(_SC_PAGESIZE) == getpagesize());
+  struct utsname u;
+  LINE("uname %d sysname %s machine %s", uname(&u), u.sysname, u.machine);
+  char machine[64] = {0};
+  size_t len = sizeof machine;
+  int cputype = 0;
+  size_t ilen = sizeof cputype;
+  LINE("sysctl hw.machine %d %s", sysctlbyname("hw.machine", machine, &len, nullptr, 0), machine);
+  LINE("sysctl hw.cputype %d %d", sysctlbyname("hw.cputype", &cputype, &ilen, nullptr, 0), cputype);
+  LINE("sysctl hw.cpusubtype %d", sysctlbyname("hw.cpusubtype", &cputype, &ilen, nullptr, 0));
+  len = sizeof machine;
+  LINE("sysctl unknown %d errno %d", sysctlbyname("mcfm.nothing", machine, &len, nullptr, 0), errno);
+
+  struct sigaction sa, old;
+  memset(&sa, 0, sizeof sa);
+  sa.sa_handler = on_signal;
+  sigemptyset(&sa.sa_mask);
+  LINE("sigaction SIGUSR1 %d", sigaction(SIGUSR1, &sa, nullptr));
+  raise(SIGUSR1);
+  LINE("raise SIGUSR1 handled %d (SIGUSR1 %d)", g_signal, SIGUSR1);
+  LINE("sigaction query %d same %d", sigaction(SIGUSR1, nullptr, &old), old.sa_handler == on_signal);
+  memset(&sa, 0, sizeof sa);
+  sa.sa_sigaction = on_signal_info;
+  sa.sa_flags = SA_SIGINFO;
+  sigaction(SIGUSR2, &sa, nullptr);
+  raise(SIGUSR2);
+  LINE("siginfo SIGUSR2 %d %d (SIGUSR2 %d)", g_signal, g_info_signo, SIGUSR2);
+  void (*previous)(int) = signal(SIGPIPE, SIG_IGN);
+  LINE("signal SIGPIPE previous default %d", previous == SIG_DFL);
+  LINE("signal SIGPIPE now ignored %d", signal(SIGPIPE, SIG_DFL) == SIG_IGN);
+  struct termios t;
+  fd = open("c2.tty", O_CREAT | O_RDWR, 0644);  // a regular file: not a terminal on either system
+  LINE("tcgetattr %d errno %d", tcgetattr(fd, &t), errno);
+  close(fd);
+  unlink("c2.tty");
+
+  time_t when = 1234567890;
+  struct tm tmv;
+  gmtime_r(&when, &tmv);
+  char text[64];
+  strftime(text, sizeof text, "%Y-%m-%d %H:%M:%S %a %j", &tmv);
+  LINE("gmtime_r %s yday %d", text, tmv.tm_yday);
+  LINE("timegm %ld", static_cast<long>(timegm(&tmv)));
+  struct timeval tv;
+  LINE("gettimeofday %d recent %d", gettimeofday(&tv, nullptr), tv.tv_sec > 1700000000 && tv.tv_usec < 1000000);
+}
+
 }  // namespace
 
 // part 0: all parts. Returns 0.
 extern "C" int conformance_main(int part) {
   if (part == 0 || part == 1) part1_stdio_errno();
+  if (part == 0 || part == 2) part2_files_system_signals();
   fflush(stdout);
   return 0;
 }

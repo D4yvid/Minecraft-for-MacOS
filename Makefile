@@ -213,7 +213,7 @@ android-runtime: $(RT_LIB)
 $(RT_LIB): $(RT_DEPS)
 	@test -d "$(LLVM_RUNTIMES)/libcxx" || { echo "LLVM runtimes not found in $(LLVM_RUNTIMES) (make llvm-runtimes)"; exit 1; }
 	bash android/launcher/runtime/build_runtime.sh "$(LLVM_RUNTIMES)" "$(NDK64_BIN)" "$(RT_OUT)"
-$(ALAUNCH_OUT)/tests/runtime_test: android/launcher/tests/runtime_test.cpp $(RT_LIB)
+$(ALAUNCH_OUT)/tests/%_test: android/launcher/tests/%_test.cpp $(RT_LIB)
 	@mkdir -p $(dir $@)
 	$(ACXX) $(RT_CXXFLAGS) $< $(RT_LDFLAGS) -o $@
 
@@ -223,7 +223,7 @@ $(MCFM_RUN): android/launcher/run.cpp android/launcher/loader_android.cpp androi
 	$(ACXX) $(RT_CXXFLAGS) -Ishared/loader -Ishared/apple -Iandroid/launcher android/launcher/run.cpp \
 	  android/launcher/loader_android.cpp $(LOADER_SRCS) $(RT_LDFLAGS) -ldl -o $@
 
-ANDROID_TESTS := pthread_test runtime_test
+ANDROID_TESTS := pthread_test runtime_test files_test
 .PHONY: android-test
 # Needs a running emulator or device (make android-emulator).
 android-test: $(addprefix $(ALAUNCH_OUT)/tests/,$(ANDROID_TESTS)) $(MCFM_RUN)

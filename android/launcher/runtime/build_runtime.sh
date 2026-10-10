@@ -38,7 +38,7 @@ LIBCXX=(algorithm any bind call_once charconv chrono error_category exception fi
 LIBCXXABI=(cxa_aux_runtime cxa_default_handlers cxa_demangle cxa_exception_storage cxa_guard cxa_handlers
   cxa_vector cxa_virtual stdlib_exception stdlib_stdexcept stdlib_typeinfo abort_message fallback_malloc
   private_typeinfo stdlib_new_delete cxa_exception cxa_personality cxa_thread_atexit)
-DARWIN=(pthread errno ctype symbols files misc)
+DARWIN=(pthread errno ctype symbols files misc system)
 DARWIN_C=(stdio)
 
 jobs=()

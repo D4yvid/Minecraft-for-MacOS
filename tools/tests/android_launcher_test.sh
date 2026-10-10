@@ -49,10 +49,10 @@ expect "$OUTPUT" "weak _Znwm=runtime"
 clang++ -arch arm64 -std=c++17 -O1 -dynamiclib -mmacosx-version-min=11.0 -Wl,-no_fixup_chains \
   "$ROOT/tools/tests/darwin_conformance.cpp" -o "$T/conformance.dylib" || { echo "FAIL: build conformance"; exit 1; }
 clang -arch arm64 "$ROOT/tools/tests/conformance_host.c" -o "$T/conformance_host" || { echo "FAIL: build host"; exit 1; }
-mkdir -p "$T/mac" && (cd "$T/mac" && ../conformance_host ../conformance.dylib > ../mac.txt 2>&1) \
+mkdir -p "$T/mac" && (cd "$T/mac" && ../conformance_host ../conformance.dylib < /dev/null > ../mac.txt 2>&1) \
   || { echo "FAIL: conformance on the Mac"; cat "$T/mac.txt"; exit 1; }
 "${RUN[@]}" --push "$OUT/runtime/libmcfm_runtime.so" --push "$T/conformance.dylib" "$OUT/mcfm-run" \
-  @DIR@/conformance.dylib --call conformance_main=0 > "$T/android.raw" 2>&1 \
+  @DIR@/conformance.dylib --call conformance_main=0 < /dev/null > "$T/android.raw" 2>&1 \
   || { echo "FAIL: conformance on Android exited $?"; sed 's/^/  | /' "$T/android.raw"; fails=$((fails+1)); }
 grep -v -e '^mcfm: ' -e '^conformance_main=' "$T/android.raw" > "$T/android.txt"
 if ! diff -u "$T/mac.txt" "$T/android.txt" > "$T/diff.txt"; then

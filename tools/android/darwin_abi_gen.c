@@ -90,6 +90,7 @@ static void header(void) {
   CX(IFF_UP); CX(IFF_BROADCAST); CX(IFF_LOOPBACK); CX(IFF_POINTOPOINT); CX(IFF_RUNNING);
   CX(IFF_MULTICAST);
   // signals
+  C(SIGUSR1); C(SIGUSR2); C(SIGPIPE); C(SIGALRM); C(SIGCHLD); C(SIGSEGV); C(SIGBUS);
   C(SIG_BLOCK); C(SIG_UNBLOCK); C(SIG_SETMASK); CX(SA_ONSTACK); CX(SA_RESTART); CX(SA_RESETHAND);
   CX(SA_NOCLDSTOP); CX(SA_NODEFER); CX(SA_NOCLDWAIT); CX(SA_SIGINFO); C(NSIG);
   // locale
@@ -172,6 +173,11 @@ static void header(void) {
   FIELD("sigaction", struct sigaction, __sigaction_u); FIELD("sigaction", struct sigaction, sa_mask);
   FIELD("sigaction", struct sigaction, sa_flags);
   SZ("sigset_t", sigset_t);
+  SZ("siginfo_t", siginfo_t);
+  FIELD("siginfo_t", siginfo_t, si_signo); FIELD("siginfo_t", siginfo_t, si_errno);
+  FIELD("siginfo_t", siginfo_t, si_code); FIELD("siginfo_t", siginfo_t, si_pid);
+  FIELD("siginfo_t", siginfo_t, si_uid); FIELD("siginfo_t", siginfo_t, si_status);
+  FIELD("siginfo_t", siginfo_t, si_addr); FIELD("siginfo_t", siginfo_t, si_value);
   SZ("utsname", struct utsname);
   FIELD("utsname", struct utsname, sysname); FIELD("utsname", struct utsname, nodename);
   FIELD("utsname", struct utsname, release); FIELD("utsname", struct utsname, version);
