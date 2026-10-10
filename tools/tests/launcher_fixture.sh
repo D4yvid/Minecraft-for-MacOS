@@ -25,11 +25,15 @@ int (*const fixture_callbacks[])(void) = {fakekit_callback};
 @implementation MCFMFixture
 + (void)poke {}
 @end
+// Long enough (>= 12 bytes at -O0) to carry a hook; called by the initializer below.
+__attribute__((noinline)) int fixture_answer(int x) { return x * 3 + 41; }
 __attribute__((constructor)) static void fixture_init(void) {
   fakekit_hello();
   volatile char first = kFakeKitValue[0];  // a real read, so the data import exists
   (void)first;
   [MCFMFixture poke];
+  volatile int answer = fixture_answer(0);
+  (void)answer;
 }
 int main(void) { return 0; }
 EOF

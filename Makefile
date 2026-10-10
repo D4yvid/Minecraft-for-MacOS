@@ -178,6 +178,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/launcher_stubs_test.sh
 	bash tools/tests/launcher_image_test.sh
 	bash tools/tests/mcfm_launch_test.sh
+	bash tools/tests/launcher_hooks_test.sh
 	bash tools/tests/no_game_files_test.sh
 	bash tools/tests/setup_game_files_test.sh
 

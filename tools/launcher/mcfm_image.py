@@ -3,7 +3,8 @@
 
 usage: mcfm_image.py imports <macho>              imports as TSV: lib, symbol, fn|data
        mcfm_image.py stubs <imports.tsv> <outdir> one C stub source per stubbed library
-       mcfm_image.py dylib <executable> <out>     executable -> dylib loadable on macOS
+       mcfm_image.py dylib <executable> <out> [--hooks <hooks.tsv>]
+                                                  executable -> dylib loadable on macOS
 Exit 2 when the input is unsuitable.
 """
 import os
@@ -128,6 +129,57 @@ PAD_SIZE = 0x4000
 IMAGE_ID = "@rpath/libminecraftpe.dylib"
 
 
+def read_hooks(path):
+    """[(name, unslid address)] from '<name>\\t0x<address>' lines."""
+    hooks = []
+    try:
+        lines = open(path).read().splitlines()
+    except OSError as e:
+        fail("cannot read %s: %s" % (path, e))
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            name, addr = line.split("\t")
+            hooks.append((name, int(addr, 16)))
+        except ValueError:
+            fail("bad line in %s: %r" % (path, line))
+    return hooks
+
+
+def segment_info(cmds, name):
+    """(vmaddr, vmsize, fileoff, [(addr, size)] sections) of an LC_SEGMENT_64, or None."""
+    for c in cmds:
+        if struct.unpack_from("<I", c)[0] == LC_SEGMENT_64 and segment_name(c) == name:
+            vmaddr, vmsize, fileoff = struct.unpack_from("<QQQ", c, 24)
+            nsects = struct.unpack_from("<I", c, 64)[0]
+            sects = [struct.unpack_from("<QQ", c, 72 + 80 * k + 32) for k in range(nsects)]
+            return vmaddr, vmsize, fileoff, sects
+    return None
+
+
+def patch_hooks(data, cmds, hooks):
+    """Replace each hooked function's first 12 bytes with adrp x16 / ldr x16 / br x16 through
+    the hook table (end of __DATA; same rule as shared/apple/hook_table.cpp)."""
+    text, data_seg = segment_info(cmds, "__TEXT"), segment_info(cmds, "__DATA")
+    if not text or not data_seg:
+        fail("no __TEXT or __DATA segment")
+    dvm, dsize, _, dsects = data_seg
+    table = (max([dvm] + [a + s for a, s in dsects]) + 15) & ~15
+    if len(hooks) > (dvm + dsize - table) // 8:
+        fail("hook table full: %d hooks, room for %d" % (len(hooks), (dvm + dsize - table) // 8))
+    tvm, tsize, tfileoff, _ = text
+    for i, (name, addr) in enumerate(hooks):
+        if not (tvm <= addr and addr + 12 <= tvm + tsize):
+            fail("hook %s at 0x%x is not in __TEXT" % (name, addr))
+        slot = table + 8 * i
+        pages = (slot >> 12) - (addr >> 12)
+        adrp = 0x90000000 | ((pages & 3) << 29) | (((pages >> 2) & 0x7FFFF) << 5) | 16
+        ldr = 0xF9400000 | (((slot & 0xFFF) // 8) << 10) | (16 << 5) | 16
+        br = 0xD61F0200
+        struct.pack_into("<III", data, addr - tvm + tfileoff, adrp, ldr, br)
+
+
 def dylib_command(cmd, name):
     raw = name.encode() + b"\0"
     size = (24 + len(raw) + 7) & ~7
@@ -138,7 +190,7 @@ def segment_name(cmd_bytes):
     return cmd_bytes[8:24].rstrip(b"\0").decode()
 
 
-def cmd_dylib(src, dst):
+def cmd_dylib(src, dst, hooks=()):
     try:
         data = bytearray(open(src, "rb").read())
     except OSError as e:
@@ -194,6 +246,8 @@ def cmd_dylib(src, dst):
     if 32 + len(blob) > first_data:
         fail("not enough header padding (%d bytes of load commands, %d available): %s"
              % (len(blob), first_data - 32, src))
+    if hooks:
+        patch_hooks(data, cmds, hooks)
     data[32:32 + max(sizeofcmds, len(blob))] = b"\0" * max(sizeofcmds, len(blob))
     data[32:32 + len(blob)] = blob
     struct.pack_into("<IiiIIIII", data, 0, magic, cpu, sub, MH_DYLIB, len(out), len(blob), flags & ~MH_PIE, res)
@@ -206,8 +260,13 @@ def main(argv):
         return cmd_imports(argv[2])
     if len(argv) == 4 and argv[1] == "stubs":
         return cmd_stubs(argv[2], argv[3])
-    if len(argv) == 4 and argv[1] == "dylib":
-        return cmd_dylib(argv[2], argv[3])
+    if len(argv) in (4, 6) and argv[1] == "dylib":
+        hooks = ()
+        if len(argv) == 6:
+            if argv[4] != "--hooks":
+                fail(__doc__.strip())
+            hooks = read_hooks(argv[5])
+        return cmd_dylib(argv[2], argv[3], hooks)
     fail(__doc__.strip())
 
 
