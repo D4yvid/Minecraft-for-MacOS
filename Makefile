@@ -86,6 +86,22 @@ $(LAUNCHER_BIN): macos/launcher/main.cpp shared/apple/macho_uuid.cpp shared/appl
 	clang++ $(LAUNCHER_CXXFLAGS) macos/launcher/main.cpp shared/apple/macho_uuid.cpp \
 	  -Wl,-rpath,@executable_path -o $@
 
+LAUNCHER_OUT ?= $(CURDIR)/dist/launcher
+
+.PHONY: launcher launcher-check
+launcher: $(LAUNCHER_BIN)
+	@test -n "$(GAME)" || { echo "Set GAME=<your decrypted minecraftpe2.app> (or put it in config.mk)"; exit 1; }
+	bash macos/tools/make_launcher.sh "$(GAME)" "$(LAUNCHER_OUT)" "$(LAUNCHER_BIN)"
+
+# Loads the image built by make launcher; the census lists every stub the game called.
+launcher-check:
+	@rm -f $(BUILD)/launcher/census.txt
+	@OUT="$$(MCFM_CENSUS="$(CURDIR)/$(BUILD)/launcher/census.txt" "$(LAUNCHER_OUT)/mcfm-launch" 2>&1)"; \
+	  echo "$$OUT" | grep "^mcfm: game image" ; \
+	  echo "$$OUT" | grep -q "game image loaded" || { echo "$$OUT" | tail -20; echo "launcher-check: FAILED"; exit 1; }
+	@grep -qxF "libobjc:_objc_autoreleasePoolPush" $(BUILD)/launcher/census.txt || { echo "launcher-check: initializers did not reach the stubs"; exit 1; }
+	@echo "launcher-check: passed ($$(wc -l < $(BUILD)/launcher/census.txt | tr -d ' ') stubs called, see $(BUILD)/launcher/census.txt)"
+
 # ---------------------------------------------------------------- Android
 # NDK r10c (x86_64 host build; runs under Rosetta on Apple Silicon).
 NDK ?= $(HOME)/Library/Android/ndk/android-ndk-r10c

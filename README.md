@@ -36,6 +36,10 @@ The Mac Catalyst build is **deprecated**: it works and is how the game runs toda
 standalone launcher will replace it ([docs/LAUNCHER.md](docs/LAUNCHER.md)). `make app`,
 `make check` and `make run` are aliases for now.
 
+**Launcher (in progress):** `make launcher` then `make launcher-check` load the game without
+Catalyst or any Apple framework (everything is stubbed). Nothing is playable yet; see
+[docs/LAUNCHER.md](docs/LAUNCHER.md).
+
 Controls: WASD move · mouse look · left click break/attack · right click place/use ·
 Space jump · Shift sneak · 1–9 / scroll hotbar · E inventory · Esc pause · T chat.
 Hover the top-left corner to reveal the title bar.

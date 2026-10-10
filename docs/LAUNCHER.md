@@ -66,20 +66,28 @@ working until the launcher replaces it; `make app`/`run`/`check` are its aliases
 Done 2026-10-10: imports, where Apple APIs are used, seams, boot sequence, layout, unwinding,
 string ABI. Tool: `tools/ida/survey.py`. Results: [research/macho-launcher.md](research/macho-launcher.md).
 
-## Stage 1 — macOS launcher on Apple's loader ☐
+## Stage 1 — macOS launcher on Apple's loader ◐
 Let dyld do the loading so we can focus on the platform layer, the boot and rendering.
 
-1. ☐ **Image preparation** (`tools/` script, run at install time like `convert.sh`): copy the
+Stage 1 is split into three plans: **1a** load the image ☑
+([plan](superpowers/plans/2026-10-10-launcher-stage1a-load.md); `make launcher` /
+`make launcher-check`: the real game image loads in a plain macOS process with all 18 non-host
+libraries stubbed and all static initializers run), **1b** AppPlatform + boot + ANGLE window +
+input, **1c** seams, audio, census-driven fixes.
+
+1. ☑ **Image preparation** (`tools/` script, run at install time like `convert.sh`): copy the
    binary; `MH_EXECUTE` → `MH_DYLIB` with an `LC_ID_DYLIB`; drop `LC_MAIN`; retag the platform
    to macOS (`LC_BUILD_VERSION`); point each framework's `LC_LOAD_DYLIB` at our stub library;
    ad hoc sign. Test with a small arm64 iOS executable we compile ourselves (no game files).
-2. ☐ **Stub libraries**, generated from the import list (Apple API names only, safe to
+2. ☑ **Stub libraries**, generated from the import list (Apple API names only, safe to
    commit): functions log `mcfm: unimplemented <lib>:<symbol>` once and return 0/NULL; data
    symbols are zeroed; ObjC classes the image subclasses (`UIViewController`, `UIView`, …) are
    empty `NSObject` subclasses. Test: every import of the reference list resolves.
-   **Decided 2026-10-10**: stub every framework, including those macOS also has; only
-   libSystem, libc++, libobjc and libz bind to the host. Stage 1 thereby proves the binary runs
-   without Apple frameworks.
+   **Decided 2026-10-10**: stub every framework, including those macOS also has, and libobjc;
+   only libSystem, libc++ and libz bind to the host. Stage 1 thereby proves the binary runs
+   without Apple frameworks. As built (1a): stubs log `mcfm: stub <lib>:<symbol>` once (and
+   `objc_msgSend` once per selector); ObjC classes are plain data stubs because the image's
+   ObjC metadata is hidden from the runtime (below).
 3. ☐ **GL**: bind the 84 engine `gl*` imports to ANGLE (GLES 3 on Metal). **Decided**: prebuilt
    ANGLE binaries, fetched by a script into a git-ignored folder (pinned version + checksum).
    Shaders ship as GLSL ES in the game data.
@@ -100,7 +108,7 @@ Let dyld do the loading so we can focus on the platform layer, the boot and rend
 8. ☐ **Audio**: FMOD's output uses a RemoteIO AudioUnit and `AudioSession*`: our AudioToolbox
    wrappers implement the subset it calls (RemoteIO → CoreAudio default output; session calls
    succeed) — the same wrapper API is reimplemented on AAudio for Android.
-9. ☐ **Runtime census**: play a session (menus, world creation, gameplay, chat, settings) and
+9. ◐ **Runtime census**: play a session (menus, world creation, gameplay, chat, settings) and
    collect every `unimplemented` log line → the real shim list for Stages 2–3.
 
 Acceptance: `make launcher IPA=…` (CLI, no UI) builds `dist/MinecraftPE.app` (no Catalyst, no UIKit) that
@@ -160,7 +168,11 @@ Acceptance: an APK that installs on Android 6+ arm64, imports a user-supplied IP
 
 ## Decisions
 - 2026-10-10: Android targets SDK 28 (sideload only).
-- 2026-10-10: Stage 1 stubs every framework (host: libSystem, libc++, libobjc, libz only).
+- 2026-10-10: Stage 1 stubs every framework and libobjc (host: libSystem, libc++, libz only).
+- 2026-10-10 (Stage 1a spike): libobjc is stubbed too and the image's `__objc_*` sections are
+  renamed `__xbjc_*`, so the system libobjc never reads the game's ObjC metadata (it crashed in
+  `readClass` on the stub superclasses). `__PAGEZERO` becomes a 16 KB no-access `__MCFM_PAD`
+  segment instead of being removed, because fixup opcodes address segments by index.
 - 2026-10-10: ANGLE from prebuilt binaries, fetched into a git-ignored folder.
 - 2026-10-10: CLI only; the IPA goes through `make` targets, no launcher UI for now.
 - 2026-10-10: Microsoft account, Xbox Live, TCUI and telemetry are dropped (see Patch policy).

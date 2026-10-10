@@ -75,6 +75,8 @@ make test        # all host tests, no game files (~1 min)
 make catalyst        # dist/minecraftpe.app from GAME; refuses while the game runs (alias: app)
 make catalyst-check  # bundle/IPA/UUID tests + 15 s launch — CLOSES a running game (alias: check)
 make catalyst-run    # (alias: run)
+make launcher        # Mach-O launcher: dist/launcher (converted image + stubs + mcfm-launch)
+make launcher-check  # loads it; stub census in build/launcher/census.txt
 # The Catalyst build is a deprecated build mode until the launcher replaces it (LAUNCHER.md).
 make android     # librunet.so + tests      make android-apk APK=…   make ios-ipa
 ```
@@ -150,8 +152,9 @@ make android     # librunet.so + tests      make android-apk APK=…   make ios-
 ### 6.0 Mach-O launcher
 The owner's main direction since 2026-10-10. See [LAUNCHER.md](LAUNCHER.md) (stages, tasks,
 acceptance, decisions). The Catalyst build is now a deprecated build mode (`make catalyst`).
-Stage 0 found the engine uses no Apple framework at all; Stage 1
-(macOS launcher on dyld with stub frameworks) is next.
+Stage 0 found the engine uses no Apple framework at all. Stage 1a is done: the game image
+loads in a plain macOS process with every framework and libobjc stubbed (`make launcher`,
+`make launcher-check`). Stage 1b (AppPlatform, boot, ANGLE window, input) is next.
 
 ### 6.1 Generic AppPlatform
 Goal: one shared, platform-neutral `AppPlatform` behaviour definition instead of ad-hoc slot
