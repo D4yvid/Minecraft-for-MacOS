@@ -149,6 +149,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/config_example_test.sh
 	bash tools/tests/makefile_deps_test.sh
 	bash tools/tests/catalyst_deprecated_test.sh
+	bash tools/tests/launcher_imports_test.sh
 	bash tools/tests/no_game_files_test.sh
 	bash tools/tests/setup_game_files_test.sh
 
