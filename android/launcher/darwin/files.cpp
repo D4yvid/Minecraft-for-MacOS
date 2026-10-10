@@ -104,6 +104,8 @@ int mcfm_darwin_fcntl_impl(int fd, int cmd, intptr_t arg) {
 int mcfm_darwin_ioctl_impl(int fd, unsigned long request, intptr_t arg) {
   if (request == static_cast<unsigned long>(darwin::kFIONBIO)) return ioctl(fd, FIONBIO, reinterpret_cast<int *>(arg));
   if (request == static_cast<unsigned long>(darwin::kFIONREAD)) return ioctl(fd, FIONREAD, reinterpret_cast<int *>(arg));
+  int result;
+  if (mcfm_darwin_interface_ioctl(fd, request, reinterpret_cast<void *>(arg), &result)) return result;
   mcfm_darwin_log_once("ioctl: unsupported Darwin request");
   errno = ENOTTY;
   return -1;

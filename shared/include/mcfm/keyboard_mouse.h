@@ -12,8 +12,9 @@ struct PointerCallbacks {
   void (*show)();  // game wants a free cursor (menus)
 };
 
-// false when the Keyboard globals or the DefaultInputMode slot are unknown.
-bool install(Platform &platform, PointerCallbacks callbacks);
+// false when the Keyboard globals or the DefaultInputMode slot are unknown. set_mouse_mode false
+// keeps the platform's input mode (Android: touch, with keys and a mouse still fed).
+bool install(Platform &platform, PointerCallbacks callbacks, bool set_mouse_mode = true);
 
 void key(int vk, bool down);  // Windows virtual-key code 1..255
 void mouse_button(int button, bool down, int x, int y);

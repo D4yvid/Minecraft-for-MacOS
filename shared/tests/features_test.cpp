@@ -78,6 +78,11 @@ static void test_keyboard_mouse_slots() {
   pocket_vtable(noGlobals);
   noGlobals.hasGlobals = false;
   EXPECT(!mcfm::keyboard_mouse::install(noGlobals, cb));
+  // Keys and mouse without forcing the mouse input mode (Android keeps touch).
+  FakePlatform touch;
+  pocket_vtable(touch);
+  EXPECT(mcfm::keyboard_mouse::install(touch, cb, false));
+  EXPECT(((int (*)(void *))touch.slot(Slot::DefaultInputMode))(0) == 2);
 }
 
 static void test_keys_grow_engine_vector() {

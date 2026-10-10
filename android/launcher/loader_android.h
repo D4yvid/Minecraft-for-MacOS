@@ -7,7 +7,8 @@
 //                         because Android's system libc++ uses the same std::__1 names with
 //                         another ABI and system libraries (EGL, ...) must never bind to ours
 //   libz               -> the system's libz.so
-//   mcfm_stub_<lib>    -> <dir>/mcfm_stub_<lib>.so (symbols keep their Mach-O names), except
+//   mcfm_stub_<lib>    -> <dir>/libmcfm_stub_<lib>.so, or by name when dir is empty (the app:
+//                         the APK's libraries) (symbols keep their Mach-O names), except
 //                         OpenGLES's gl* functions: the system's GLES 3 (libGLESv3.so);
 //                         AudioToolbox: ours on AAudio (audio_toolbox.cpp)
 // Unwind info is served to the runtime's libunwind through its dynamic section finder.
@@ -36,7 +37,7 @@ class AndroidLoaderOS : public LoaderOS {
   void log(const std::string &line) override;
 
  private:
-  std::string dir_;          // where mcfm_stub_*.so and libmcfm_stubrt.so live
+  std::string dir_;          // where libmcfm_stub_*.so and libmcfm_stubrt.so live ("": by name)
   std::set<void *> stubs_;   // dlopen handles of stub libraries
   void *gles_stub_ = nullptr, *audio_stub_ = nullptr;
 };

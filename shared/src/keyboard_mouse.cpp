@@ -38,7 +38,7 @@ void push(RawVector<engine::KeyEvent> *v, const engine::KeyEvent &e) {
 
 }  // namespace
 
-bool install(Platform &p, PointerCallbacks callbacks) {
+bool install(Platform &p, PointerCallbacks callbacks, bool set_mouse_mode) {
   gPlatform = 0;  // until this install succeeds
   gCallbacks = callbacks;
   gInputs = p.global(engine::Global::KeyboardInputs);
@@ -47,7 +47,7 @@ bool install(Platform &p, PointerCallbacks callbacks) {
     p.log("keyboard_mouse: Keyboard globals unknown on this platform");
     return false;
   }
-  if (!p.patch_slot(engine::Slot::DefaultInputMode, (void *)&default_input_mode, 0)) {
+  if (set_mouse_mode && !p.patch_slot(engine::Slot::DefaultInputMode, (void *)&default_input_mode, 0)) {
     p.log("keyboard_mouse: DefaultInputMode unknown on this platform");
     return false;
   }

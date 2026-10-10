@@ -125,9 +125,12 @@ void *AndroidLoaderOS::open_library(const std::string &name) {
     return nullptr;
   }
   // Stubs need libmcfm_stubrt.so: load it from our directory first, so its soname is known.
-  static bool stubrt = dlopen((dir_ + "/libmcfm_stubrt.so").c_str(), RTLD_NOW | RTLD_GLOBAL) != nullptr;
+  static bool stubrt =
+      dlopen(dir_.empty() ? "libmcfm_stubrt.so" : (dir_ + "/libmcfm_stubrt.so").c_str(), RTLD_NOW | RTLD_GLOBAL) != nullptr;
   (void)stubrt;
-  std::string path = dir_ + "/" + name + ".so";
+  // Stubs are lib<name>.so (the APK installer only takes lib*.so); with no directory (the app)
+  // they are loaded by name from the APK's native libraries.
+  std::string path = dir_.empty() ? "lib" + name + ".so" : dir_ + "/lib" + name + ".so";
   void *h = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
   if (!h) log("cannot load " + path + ": " + dlerror());
   else stubs_.insert(h);

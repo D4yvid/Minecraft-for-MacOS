@@ -38,7 +38,7 @@ ANDROID_CC="$ANDROID_CC" bash "$ROOT/tools/launcher/build_stubs.sh" --target and
 HOOK="$(awk '$1=="_fixture_answer"{print $2}' "$T/lf/symbols.txt")"
 ARGS=(@DIR@/libminecraftpe.dylib --hook "$HOOK" --call fixture_thrower --call fixture_answer=5 --int fixture_init_answer --weak _Znwm)
 OUTPUT="$("${RUN[@]}" --push "$OUT/libmcfm_launcher.so" --push "$T/lf/libminecraftpe.dylib" \
-  --push "$T/lf/android/libmcfm_stubrt.so" --push "$T/lf/android/mcfm_stub_FakeKit.so" "$OUT/mcfm-run" "${ARGS[@]}" 2>&1)" \
+  --push "$T/lf/android/libmcfm_stubrt.so" --push "$T/lf/android/libmcfm_stub_FakeKit.so" "$OUT/mcfm-run" "${ARGS[@]}" 2>&1)" \
   || { echo "FAIL: mcfm-run loader fixture exited $?"; fails=$((fails+1)); }
 expect "$OUTPUT" "mcfm: 1 initializers ran"
 expect "$OUTPUT" "fixture_thrower=41"
@@ -51,7 +51,7 @@ bash "$ROOT/tools/tests/gl_fixture.sh" "$T/gl" >/dev/null || { echo "FAIL: gl fi
 ANDROID_CC="$ANDROID_CC" bash "$ROOT/tools/launcher/build_stubs.sh" --target android "$T/gl/imports.tsv" "$T/gl/android" >/dev/null \
   || { echo "FAIL: gl stubs"; exit 1; }
 OUTPUT="$("${RUN[@]}" --push "$OUT/libmcfm_launcher.so" --push "$T/gl/libminecraftpe.dylib" \
-  --push "$T/gl/android/libmcfm_stubrt.so" --push "$T/gl/android/mcfm_stub_OpenGLES.so" "$OUT/mcfm-run" \
+  --push "$T/gl/android/libmcfm_stubrt.so" --push "$T/gl/android/libmcfm_stub_OpenGLES.so" "$OUT/mcfm-run" \
   @DIR@/libminecraftpe.dylib --gl --call gl_check 2>&1)" || { echo "FAIL: mcfm-run gl fixture exited $?"; fails=$((fails+1)); }
 expect "$OUTPUT" "gl_check=$((0x4080bf))"
 if grep -q "^mcfm: stub OpenGLES:_gl" <<<"$OUTPUT"; then echo "FAIL: a gl* call reached a stub:"; grep "stub OpenGLES" <<<"$OUTPUT"; fails=$((fails+1)); fi
@@ -60,7 +60,7 @@ bash "$ROOT/tools/tests/gl_fixture.sh" "$T/glm" missing >/dev/null || { echo "FA
 ANDROID_CC="$ANDROID_CC" bash "$ROOT/tools/launcher/build_stubs.sh" --target android "$T/glm/imports.tsv" "$T/glm/android" >/dev/null \
   || { echo "FAIL: gl stubs (missing)"; exit 1; }
 OUTPUT="$("${RUN[@]}" --push "$OUT/libmcfm_launcher.so" --push "$T/glm/libminecraftpe.dylib" \
-  --push "$T/glm/android/libmcfm_stubrt.so" --push "$T/glm/android/mcfm_stub_OpenGLES.so" "$OUT/mcfm-run" \
+  --push "$T/glm/android/libmcfm_stubrt.so" --push "$T/glm/android/libmcfm_stub_OpenGLES.so" "$OUT/mcfm-run" \
   @DIR@/libminecraftpe.dylib --gl --call gl_check 2>&1)" && { echo "FAIL: an image calling a missing gl function loaded"; fails=$((fails+1)); }
 grep -q "missing symbol: mcfm_stub_OpenGLES: _glMcfmMissingOES" <<<"$OUTPUT" || { echo "FAIL: no missing-symbol error:"; sed 's/^/  | /' <<<"$OUTPUT"; fails=$((fails+1)); }
 

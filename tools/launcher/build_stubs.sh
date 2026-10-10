@@ -3,8 +3,9 @@
 # Builds libmcfm_stubrt.dylib and mcfm_stub_<lib>.dylib for every stubbed library listed
 # in imports.tsv (mcfm_image.py imports). A provider's exports are not stubbed: the stub
 # re-exports the provider (e.g. OpenGLES=libGLESv2.dylib from ANGLE). Install names @rpath/….
-# --target android (Stage 3): ELF .so files for arm64 (soname = file name, 16 KB pages) built
-# with $ANDROID_CC; symbols keep their Mach-O names (leading '_'). No providers yet.
+# --target android (Stage 3): ELF libmcfm_stub_<lib>.so files for arm64 (soname = file name,
+# 16 KB pages; the lib prefix the APK installer needs) built with $ANDROID_CC; symbols keep their
+# Mach-O names (leading '_'). No providers.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TARGET=macos
@@ -46,7 +47,7 @@ for c in "$OUT"/src/*.c; do
   done
   if [ "$TARGET" = android ]; then
     "${CC[@]}" -I "$ROOT/macos/launcher" -Wno-unused-parameter "$c" -L"$OUT" -lmcfm_stubrt \
-      -Wl,-soname,"mcfm_stub_$lib.so" -o "$OUT/mcfm_stub_$lib.so"
+      -Wl,-soname,"libmcfm_stub_$lib.so" -o "$OUT/libmcfm_stub_$lib.so"
   else
     "${CC[@]}" -I "$ROOT/macos/launcher" -Wno-unused-parameter "$c" "$OUT/libmcfm_stubrt.dylib" \
       ${extra[@]+"${extra[@]}"} -install_name "@rpath/mcfm_stub_$lib.dylib" -o "$OUT/mcfm_stub_$lib.dylib"

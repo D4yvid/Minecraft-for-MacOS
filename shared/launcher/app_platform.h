@@ -16,6 +16,7 @@ struct HostInfo {
   std::string temp_dir;
   std::string region;        // language_REGION, e.g. en_US (as iOS reports it)
   std::string device_id;
+  int input_mode = 1;        // getDefaultInputMode: 1 mouse (desktop), 2 touch (Android)
 };
 
 constexpr size_t kBaseSlots = 101;  // base AppPlatform vtable (iOS adds 101-102)

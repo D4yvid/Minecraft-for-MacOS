@@ -31,6 +31,9 @@ constexpr uintptr_t kMouseInputs = 0x100F5A058;        // its std::vector<MouseA
 constexpr uintptr_t kMouseInputsGrow = 0x100020404;    // push_back slow path (vec*, elem*)
 constexpr uintptr_t kMouseDeviceFeed = 0x1000201BC;    // (dev, btn, state, x, y)
 
+// Touch
+constexpr uintptr_t kMultitouchFeed = 0x100020EFC;     // Multitouch::feed(btn, state, x, y, slot 0-11)
+
 // App (C++ object held in minecraftpeViewController->_app), vtable indices
 constexpr int kAppSlotSetSize = 21;          // (app, int w, int h)
 constexpr int kAppSlotSetSizeAndScale = 20;  // (app, int w, int h, float 0)

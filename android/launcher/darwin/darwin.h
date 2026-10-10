@@ -168,6 +168,10 @@ void *mcfm_darwin_symbol(const char *name);
 // Every name in the table, sorted (for tests); returns the count.
 size_t mcfm_darwin_symbol_names(const char **names, size_t capacity);
 
+// The interface ioctls (Darwin SIOCGIFCONF, SIOCGIFNETMASK) in Darwin layouts; false when
+// `request` is not one of them (net.cpp, called by the ioctl shim).
+bool mcfm_darwin_interface_ioctl(int fd, unsigned long request, void *arg, int *result);
+
 // Logs "mcfm: <message>" once per call site key (the message itself).
 void mcfm_darwin_log_once(const char *message);
 

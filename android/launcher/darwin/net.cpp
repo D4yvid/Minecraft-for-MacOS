@@ -12,6 +12,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
+#include <sys/ioctl.h>
 #include <sys/select.h>
 #include <stdlib.h>
 #include <string.h>
@@ -279,9 +280,65 @@ hostent *darwin_hostent(hostent *b) {
   return &t_hostent;
 }
 
+// Darwin's struct ifreq: the name, then a sockaddr (its union is 16 bytes); SIOCGIFCONF lists
+// IPv4 interfaces in these. bionic's is larger (a 24-byte union).
+struct DarwinIfreq {
+  char name[IFNAMSIZ];
+  uint8_t addr[16];
+};
+static_assert(sizeof(DarwinIfreq) == darwin::kSizeof_ifreq, "ifreq");
+
+void ifreq_to_darwin(const ifreq &b, DarwinIfreq *d) {
+  memset(d, 0, sizeof *d);
+  memcpy(d->name, b.ifr_name, IFNAMSIZ);
+  socklen_t len = sizeof d->addr;
+  to_darwin(&b.ifr_addr, sizeof(sockaddr_in), d->addr, &len);
+}
+
+// struct ifconf {int ifc_len; char *ifc_buf;}, packed: the pointer sits at offset 4.
+int interface_list(int fd, uint8_t *conf) {
+  int room;
+  char *out;
+  memcpy(&room, conf, sizeof room);
+  memcpy(&out, conf + darwin::kOffsetof_ifconf_ifc_buf, sizeof out);
+  ifreq list[64];
+  ifconf lc;
+  lc.ifc_len = sizeof list;
+  lc.ifc_req = list;
+  if (ioctl(fd, SIOCGIFCONF, &lc) < 0) return -1;
+  int used = 0;
+  for (size_t i = 0; i < lc.ifc_len / sizeof(ifreq); i++) {
+    if (list[i].ifr_addr.sa_family != AF_INET) continue;
+    if (used + static_cast<int>(sizeof(DarwinIfreq)) > room) break;
+    DarwinIfreq d;
+    ifreq_to_darwin(list[i], &d);
+    memcpy(out + used, &d, sizeof d);
+    used += sizeof d;
+  }
+  memcpy(conf, &used, sizeof used);
+  return 0;
+}
+
+int interface_netmask(int fd, DarwinIfreq *d) {
+  ifreq b;
+  memset(&b, 0, sizeof b);
+  memcpy(b.ifr_name, d->name, IFNAMSIZ);
+  b.ifr_name[IFNAMSIZ - 1] = 0;
+  if (ioctl(fd, SIOCGIFNETMASK, &b) < 0) return -1;
+  ifreq_to_darwin(b, d);
+  return 0;
+}
+
 }  // namespace
 
 extern "C" {
+
+bool mcfm_darwin_interface_ioctl(int fd, unsigned long request, void *arg, int *result) {
+  if (request == static_cast<unsigned long>(darwin::kSIOCGIFCONF)) *result = interface_list(fd, static_cast<uint8_t *>(arg));
+  else if (request == static_cast<unsigned long>(darwin::kSIOCGIFNETMASK)) *result = interface_netmask(fd, static_cast<DarwinIfreq *>(arg));
+  else return false;
+  return true;
+}
 
 int mcfm_darwin_socket(int domain, int type, int protocol) {
   int family = to_bionic_family(domain);

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Our Android app (docs/LAUNCHER.md, Stage 3c): imports the user's Minecraft PE 0.15.10 IPA and
+     runs its iOS game image with libmcfm_launcher.so. SDK versions are set by tools/android/build_app.sh. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="io.github.d4yvid.mcfm">
+
+    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+    <!-- Sockets (RakNet: LAN games and the Play screen's server discovery; without it the game
+         gets EPERM and crashes) and receiving LAN broadcasts on Wi-Fi. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
+    <application
+        android:label="@string/app_name"
+        android:allowBackup="false"
+        android:extractNativeLibs="false"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+
+        <activity
+            android:name=".ImportActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- One game per process (the native side runs one): opening the app again, after
+             ImportActivity has finished, brings back this instance instead of a second one. -->
+        <activity
+            android:name=".GameActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
+            android:windowSoftInputMode="adjustNothing|stateHidden"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
+    </application>
+</manifest>

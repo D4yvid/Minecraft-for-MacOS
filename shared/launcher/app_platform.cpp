@@ -23,7 +23,7 @@ std::string asset_full_path(void *, const std::string &rel) { return host().data
 bool yes(void *) { return true; }
 bool no(void *) { return false; }
 int zero(void *) { return 0; }
-int mouse_input(void *) { return 1; }
+int input_mode(void *) { return host().input_mode; }  // 1 mouse, 2 touch
 std::string application_id(void *) { return "com.mojang.minecraftpe"; }
 std::string device_id(void *) { return host().device_id; }
 std::string edition(void *) { return "win10"; }
@@ -108,7 +108,7 @@ void build_vtable(void **out, void *const *base, const EngineFns &fns) {
   out[83] = fn(&no);                // hasHardwareInformationChanged
   out[84] = fn(&no);                // isTablet
   out[93] = fn(&edition);           // getEdition
-  out[96] = fn(&mouse_input);       // getDefaultInputMode
+  out[96] = fn(&input_mode);        // getDefaultInputMode
   out[99] = fn(&zero);              // getPlatformUIScalingRules: desktop
   out[100] = fn(&temp_dir);         // getPlatformTempPath
 }

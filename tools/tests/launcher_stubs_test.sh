@@ -67,14 +67,14 @@ if [ -x "$ANDROID_CC" ]; then
   READELF="$(dirname "$ANDROID_CC")/llvm-readelf"
   ANDROID_CC="$ANDROID_CC" bash "$ROOT/tools/launcher/build_stubs.sh" --target android "$T/imports.tsv" "$T/astubs" >/dev/null \
     || { echo "FAIL: build_stubs --target android"; fails=$((fails+1)); }
-  for so in mcfm_stub_FakeKit.so libmcfm_stubrt.so; do
+  for so in libmcfm_stub_FakeKit.so libmcfm_stubrt.so; do
     H="$("$READELF" -h "$T/astubs/$so" 2>/dev/null)"
     grep -q "Machine:.*AArch64" <<<"$H" && grep -q "Class:.*ELF64" <<<"$H" || { echo "FAIL: $so is not an arm64 ELF"; fails=$((fails+1)); }
     "$READELF" -lW "$T/astubs/$so" | awk '$1=="LOAD" && $NF!="0x4000" {bad=1} END {exit bad}' || { echo "FAIL: $so LOAD alignment is not 16 KB"; fails=$((fails+1)); }
     DYN="$("$READELF" -d "$T/astubs/$so")"  # no grep -q in a pipe: SIGPIPE under pipefail
     grep -q "SONAME.*\[$so\]" <<<"$DYN" || { echo "FAIL: $so soname"; fails=$((fails+1)); }
   done
-  SYMS="$("$READELF" -sW --dyn-syms "$T/astubs/mcfm_stub_FakeKit.so")"
+  SYMS="$("$READELF" -sW --dyn-syms "$T/astubs/libmcfm_stub_FakeKit.so")"
   grep -q " _fakekit_hello$" <<<"$SYMS" || { echo "FAIL: stub keeps the Mach-O name"; fails=$((fails+1)); }
 else
   echo "launcher_stubs_test: NDK r27d not found, Android stubs not checked"

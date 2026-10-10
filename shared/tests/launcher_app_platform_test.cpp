@@ -53,10 +53,17 @@ int main() {
   EXPECT(u != v);
   EXPECT(!call<bool>(vt, 82) && !call<bool>(vt, 83) && !call<bool>(vt, 84));
   EXPECT(call<std::string>(vt, 93) == "win10");
-  EXPECT(call<int>(vt, 96) == 1);
+  EXPECT(call<int>(vt, 96) == 1);  // mouse by default (macOS)
   EXPECT(call<int>(vt, 99) == 0);
   call<void>(vt, 18);
   call<void, void *>(vt, 25, nullptr);
+  // Android (Stage 3c): the host chooses touch.
+  {
+    mcfm::launcher::HostInfo touch = mcfm::launcher::make_host_info("/s", "/game/data/", "/s/tmp");
+    touch.input_mode = 2;
+    mcfm::launcher::set_host_info(touch);
+    EXPECT(call<int>(vt, 96) == 2);
+  }
   // Storage layout as AppPlatform_iOS builds it from Documents: the engine appends names
   // ("minecraftWorlds", "minecraftpe") straight to the user-data path, so it ends with '/'.
   HostInfo h = make_host_info("/S", "/game/data/", "/S/tmp");

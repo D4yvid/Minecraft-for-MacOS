@@ -232,14 +232,16 @@ $(ALAUNCH_OUT)/tests/%_test: android/launcher/tests/%_test.cpp $(RT_LIB)
 # libmcfm_launcher.so: the loader, the launcher and the whole runtime, exporting only its entry
 # points (android/launcher/launcher.map). mcfm-run is a C program that dlopens it.
 LAUNCHER_SO := $(ALAUNCH_OUT)/libmcfm_launcher.so
-LAUNCHER_SO_SRCS := android/launcher/run.cpp android/launcher/boot.cpp android/launcher/app.cpp android/launcher/loader_android.cpp \
+LAUNCHER_SO_SRCS := android/launcher/run.cpp android/launcher/boot.cpp android/launcher/app.cpp android/launcher/game_thread.cpp \
+  android/launcher/input_events.cpp android/launcher/loader_android.cpp shared/launcher/launcher_platform.cpp \
+  shared/src/keyboard_mouse.cpp shared/src/platform.cpp \
   android/launcher/audio_toolbox.cpp $(LOADER_SRCS) shared/apple/macho_uuid.cpp shared/launcher/app_platform.cpp \
   shared/launcher/engine.cpp shared/launcher/seams.cpp shared/launcher/text_input.cpp shared/launcher/game_import.cpp \
   shared/loader/convert.cpp
 $(LAUNCHER_SO): $(LAUNCHER_SO_SRCS) $(wildcard android/launcher/*.h shared/launcher/*.h shared/include/mcfm/*.h) android/launcher/launcher.map $(LOADER_HDRS) $(RT_LIB)
 	@mkdir -p $(dir $@)
 	$(ACXX) $(RT_CXXFLAGS) -fPIC -shared -Ishared/loader -Ishared/apple -Ishared/launcher -Ishared/include -Iandroid/launcher $(LAUNCHER_SO_SRCS) \
-	  $(RT_LDFLAGS) -Wl,--version-script,android/launcher/launcher.map -Wl,-soname,libmcfm_launcher.so -Wl,-z,defs -lEGL -lGLESv3 -laaudio -lc -lm -o $@
+	  $(RT_LDFLAGS) -Wl,--version-script,android/launcher/launcher.map -Wl,-soname,libmcfm_launcher.so -Wl,-z,defs -lEGL -lGLESv3 -laaudio -landroid -llog -lc -lm -o $@
 MCFM_RUN := $(ALAUNCH_OUT)/mcfm-run
 $(MCFM_RUN): android/launcher/mcfm_run.c $(LAUNCHER_SO)
 	$(ACC) -Wall -O1 $(ANDROID_LDFLAGS) $< -ldl -o $@
@@ -252,6 +254,27 @@ android-boot-check: $(MCFM_RUN)
 $(ALAUNCH_OUT)/tests/audio_test: android/launcher/tests/audio_test.cpp android/launcher/audio_toolbox.cpp android/launcher/audio_toolbox.h $(RT_LIB)
 	@mkdir -p $(dir $@)
 	$(ACXX) $(RT_CXXFLAGS) -Iandroid/launcher $< android/launcher/audio_toolbox.cpp $(RT_LDFLAGS) -laaudio -o $@
+
+# The app (Stage 3c): dist/android/mcfm.apk with the launcher library and the game's stubs,
+# built from the committed import list android/launcher/game_imports.tsv (mcfm_image.py imports on
+# the game, minus libSystem/libc++/libz, which the launcher provides).
+APP_APK := $(CURDIR)/dist/android/mcfm.apk
+APP_STUBS := $(ALAUNCH_OUT)/app-stubs
+APP_SRCS := $(wildcard android/app/AndroidManifest.xml android/app/res/*/* android/app/kotlin/io/github/d4yvid/mcfm/*.kt)
+.PHONY: android-app
+android-app: $(APP_APK)
+$(APP_APK): $(APP_SRCS) $(LAUNCHER_SO) android/launcher/game_imports.tsv tools/android/build_app.sh tools/launcher/build_stubs.sh macos/launcher/stub_runtime.c
+	@test -x "$(KOTLINC)" -a -f "$(ANDROID_JAR)" || { echo "App toolchain missing (make android-app-sdk)"; exit 1; }
+	rm -rf $(APP_STUBS)
+	ANDROID_CC="$(ACC)" bash tools/launcher/build_stubs.sh --target android android/launcher/game_imports.tsv $(APP_STUBS) >/dev/null
+	BUILD_TOOLS="$(BUILD_TOOLS)" ANDROID_JAR="$(ANDROID_JAR)" KOTLINC="$(KOTLINC)" JAVA_HOME="$(JAVA_HOME_APP)" \
+	  LAUNCHER_SO="$(LAUNCHER_SO)" STUBS_DIR="$(APP_STUBS)" bash tools/android/build_app.sh $@
+
+.PHONY: android-app-check
+# Stage 3c acceptance on the running emulator/device: import, title screen, a new world, background/resume.
+IPA ?= $(firstword $(wildcard $(GAME_FILES)/ios/*.ipa))
+android-app-check: $(APP_APK)
+	bash tools/android/app_check.sh $(APP_APK) "$(IPA)" $(ALAUNCH_OUT)
 
 .PHONY: android-frames-check
 # Stage 3b acceptance: the converted game (make app) boots and renders 120 frames on the device.
@@ -365,6 +388,10 @@ $(BUILD)/test/game_import_test: shared/tests/game_import_test.cpp shared/launche
 	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=address,undefined -Ishared/loader -Ishared/launcher -Ishared/apple \
 	  shared/tests/game_import_test.cpp shared/launcher/game_import.cpp shared/loader/convert.cpp shared/apple/macho_uuid.cpp -o $@
 
+$(BUILD)/test/input_events_test: android/launcher/tests/input_events_test.cpp android/launcher/input_events.cpp android/launcher/input_events.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=thread -Iandroid/launcher $< android/launcher/input_events.cpp -o $@
+
 $(BUILD)/test/convert_tool: tools/loader/convert_tool.cpp shared/loader/convert.cpp shared/loader/convert.h
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=undefined -Ishared/loader \
@@ -411,6 +438,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/thin_arm64_test.sh
 	bash tools/tests/loader_test.sh
 	bash tools/tests/convert_test.sh
+	$(MAKE) --no-print-directory $(BUILD)/test/input_events_test && $(BUILD)/test/input_events_test
 	$(MAKE) --no-print-directory $(AUDIO_PROVIDER) $(BUILD)/test/audio_toolbox_test && $(BUILD)/test/audio_toolbox_test $(AUDIO_PROVIDER) && MCFM_AUDIO_DISABLE=1 $(BUILD)/test/audio_toolbox_test $(AUDIO_PROVIDER)
 	bash tools/tests/launcher_provider_test.sh
 	bash tools/tests/fetch_angle_test.sh
