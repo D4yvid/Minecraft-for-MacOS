@@ -24,7 +24,9 @@ segment's protection; no code signatures. The Mach-O segments are 16 KB aligned,
 
 ## Our loader on Android (spike `run`, 2026-10-10)
 `shared/loader` built unchanged with NDK r27 loaded a small macOS arm64 dylib (classic fixups)
-on the emulator: rebases, binds to bionic (`strlen`), an initializer, all correct. ✅
+on the emulator: rebases and binds to bionic (`strlen`) correct. ✅ (The spike's initializer
+had been evaluated away by clang at compile time; fixtures make an external call in their
+initializers so they really run.)
 
 ## Darwin arm64 ABI vs Android (AAPCS64)
 - **Variadic calls**: Darwin passes every variadic argument on the stack in 8-byte slots; AAPCS64

@@ -200,11 +200,35 @@ $(ALAUNCH_OUT)/tests/pthread_test: android/launcher/tests/pthread_test.cpp $(DAR
 	@mkdir -p $(dir $@)
 	$(ACXX) $(DARWIN_CXXFLAGS) $(ANDROID_LDFLAGS) -static-libstdc++ $< $(DARWIN_PTHREAD_SRCS) -o $@
 
-ANDROID_TESTS := pthread_test
+# libmcfm_runtime.so: Apple-ABI libc++/libc++abi/libunwind + the Darwin layer (Stage 3a).
+RT_OUT := $(ALAUNCH_OUT)/runtime
+RT_LIB := $(RT_OUT)/libmcfm_runtime.so
+RT_DEPS := $(wildcard android/launcher/runtime/* android/launcher/runtime/include/* android/launcher/darwin/*)
+RT_CXXFLAGS := -std=c++17 -Wall -Wextra -O1 -g -fsigned-char -nostdinc++ -isystem $(RT_OUT)/include \
+  -isystem $(RT_OUT)/src/libcxx/include -isystem $(RT_OUT)/src/libcxxabi/include -Iandroid/launcher/darwin
+RT_LDFLAGS := $(ANDROID_LDFLAGS) -nostdlib++ --unwindlib=none -L$(RT_OUT) -lmcfm_runtime
+.PHONY: android-runtime
+android-runtime: $(RT_LIB)
+$(RT_LIB): $(RT_DEPS)
+	@test -d "$(LLVM_RUNTIMES)/libcxx" || { echo "LLVM runtimes not found in $(LLVM_RUNTIMES) (make llvm-runtimes)"; exit 1; }
+	bash android/launcher/runtime/build_runtime.sh "$(LLVM_RUNTIMES)" "$(NDK64_BIN)" "$(RT_OUT)"
+$(ALAUNCH_OUT)/tests/runtime_test: android/launcher/tests/runtime_test.cpp $(RT_LIB)
+	@mkdir -p $(dir $@)
+	$(ACXX) $(RT_CXXFLAGS) $< $(RT_LDFLAGS) -o $@
+
+MCFM_RUN := $(ALAUNCH_OUT)/mcfm-run
+$(MCFM_RUN): android/launcher/run.cpp android/launcher/loader_android.cpp android/launcher/loader_android.h $(LOADER_SRCS) $(LOADER_HDRS) $(RT_LIB)
+	@mkdir -p $(dir $@)
+	$(ACXX) $(RT_CXXFLAGS) -Ishared/loader -Ishared/apple -Iandroid/launcher android/launcher/run.cpp \
+	  android/launcher/loader_android.cpp $(LOADER_SRCS) $(RT_LDFLAGS) -ldl -o $@
+
+ANDROID_TESTS := pthread_test runtime_test
 .PHONY: android-test
 # Needs a running emulator or device (make android-emulator).
-android-test: $(addprefix $(ALAUNCH_OUT)/tests/,$(ANDROID_TESTS))
-	@for t in $(ANDROID_TESTS); do bash tools/android/adb_run.sh $(ALAUNCH_OUT)/tests/$$t || exit 1; done
+android-test: $(addprefix $(ALAUNCH_OUT)/tests/,$(ANDROID_TESTS)) $(MCFM_RUN)
+	@for t in $(ANDROID_TESTS); do bash tools/android/adb_run.sh --push $(RT_LIB) $(ALAUNCH_OUT)/tests/$$t || exit 1; done
+	bash tools/tests/android_runtime_symbols_test.sh $(RT_LIB) $(NDK64_BIN)/llvm-nm
+	ANDROID_CC="$(ACC)" bash tools/tests/android_launcher_test.sh $(ALAUNCH_OUT)
 
 # ---------------------------------------------------------------- local game files
 # make game-files IOS=<minecraftpe2.ipa|.app> [APK_IN=<0.15.10 .apk>] [IDA=1]

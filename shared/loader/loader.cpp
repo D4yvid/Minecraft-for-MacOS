@@ -191,7 +191,10 @@ bool load_image(LoaderOS &os, int fd, const uint8_t *file, size_t size, const Lo
     for (uintptr_t f : initializers)
       if (f < img.text_lo || f >= img.text_hi) return fail(error, "initializer outside __TEXT");
     typedef void (*Initializer)(int, const char **, const char **, const char **, void *);
-    for (uintptr_t f : initializers) reinterpret_cast<Initializer>(f)(opt.argc, opt.argv, opt.envp, opt.apple, nullptr);
+    for (uintptr_t f : initializers) {
+      reinterpret_cast<Initializer>(f)(opt.argc, opt.argv, opt.envp, opt.apple, nullptr);
+      if (opt.initializers_run) ++*opt.initializers_run;
+    }
   }
   *out = img;
   return true;

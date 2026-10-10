@@ -74,6 +74,11 @@ int mcfm_darwin_pthread_detach(darwin::pthread_t thread);
 darwin::pthread_t mcfm_darwin_pthread_self(void);
 int mcfm_darwin_pthread_setname_np(const char *name);
 
+// symbols.cpp: the address for a libSystem import (name without the Mach-O '_'), or null.
+void *mcfm_darwin_symbol(const char *name);
+// Every name in the table, sorted (for tests); returns the count.
+size_t mcfm_darwin_symbol_names(const char **names, size_t capacity);
+
 // Logs "mcfm: <message>" once per call site key (the message itself).
 void mcfm_darwin_log_once(const char *message);
 

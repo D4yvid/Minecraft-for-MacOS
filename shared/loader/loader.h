@@ -48,6 +48,7 @@ struct LoadOptions {
   // Optional: called on the mapped header (what will run) before any fixup; false refuses the
   // image. The file read for parsing could differ from the one mapped.
   bool (*accept_header)(const uint8_t *header) = nullptr;
+  size_t *initializers_run = nullptr;  // optional: set to the number of initializers called
   // Passed to initializers as dyld does (argc, argv, envp, apple).
   int argc = 0;
   const char **argv = nullptr;

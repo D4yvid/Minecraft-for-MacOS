@@ -61,4 +61,22 @@ SELS="$(grep -c '^mcfm: stub libobjc:_objc_msgSend sel' <<<"$ERR")"
 CENSUS="$(cat "$T/census.txt" 2>/dev/null)"
 [ "$(grep -vc ' sel[0-9]' <<<"$CENSUS")" = 5 ] || { echo "FAIL: census should have 5 non-sel lines (bounds comes after the log is full)"; fails=$((fails+1)); }
 grep -qxF 'FakeKit:_fakekit_hello' <<<"$CENSUS" || { echo "FAIL: census missing fakekit_hello"; fails=$((fails+1)); }
+# Android (Stage 3a): the same stubs as ELF .so files for arm64, 16 KB-aligned, named by soname.
+ANDROID_CC="${ANDROID_CC:-$HOME/Library/Android/sdk/ndk/27.3.13750724/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android28-clang}"
+if [ -x "$ANDROID_CC" ]; then
+  READELF="$(dirname "$ANDROID_CC")/llvm-readelf"
+  ANDROID_CC="$ANDROID_CC" bash "$ROOT/tools/launcher/build_stubs.sh" --target android "$T/imports.tsv" "$T/astubs" >/dev/null \
+    || { echo "FAIL: build_stubs --target android"; fails=$((fails+1)); }
+  for so in mcfm_stub_FakeKit.so libmcfm_stubrt.so; do
+    H="$("$READELF" -h "$T/astubs/$so" 2>/dev/null)"
+    grep -q "Machine:.*AArch64" <<<"$H" && grep -q "Class:.*ELF64" <<<"$H" || { echo "FAIL: $so is not an arm64 ELF"; fails=$((fails+1)); }
+    "$READELF" -lW "$T/astubs/$so" | awk '$1=="LOAD" && $NF!="0x4000" {bad=1} END {exit bad}' || { echo "FAIL: $so LOAD alignment is not 16 KB"; fails=$((fails+1)); }
+    DYN="$("$READELF" -d "$T/astubs/$so")"  # no grep -q in a pipe: SIGPIPE under pipefail
+    grep -q "SONAME.*\[$so\]" <<<"$DYN" || { echo "FAIL: $so soname"; fails=$((fails+1)); }
+  done
+  SYMS="$("$READELF" -sW --dyn-syms "$T/astubs/mcfm_stub_FakeKit.so")"
+  grep -q " _fakekit_hello$" <<<"$SYMS" || { echo "FAIL: stub keeps the Mach-O name"; fails=$((fails+1)); }
+else
+  echo "launcher_stubs_test: NDK r27d not found, Android stubs not checked"
+fi
 [ $fails = 0 ] && echo "launcher_stubs_test: passed" || { echo "$fails failure(s)"; exit 1; }

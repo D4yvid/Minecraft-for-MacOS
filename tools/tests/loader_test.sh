@@ -27,5 +27,6 @@ build/test/loader_core_test "$T/libminecraftpe.dylib" "$T/symbols.txt" || fails=
 make -s build/test/loader_run >/dev/null || { echo "FAIL: build loader_run"; exit 1; }
 RUN="$(build/test/loader_run "$T/libminecraftpe.dylib" "$T/symbols.txt" 2>&1)" || { echo "FAIL: loader_run: $RUN"; fails=$((fails+1)); }
 grep -qx "thrower=41 answer=1005 init_answer=1003" <<<"$RUN" || { echo "FAIL: fixture code under our loader: $RUN"; fails=$((fails+1)); }
+grep -qx "initializers=1" <<<"$RUN" || { echo "FAIL: initializer count: $RUN"; fails=$((fails+1)); }
 grep -qx "operator_new=libc++" <<<"$RUN" || { echo "FAIL: operator new not libc++'s: $RUN"; fails=$((fails+1)); }
 [ $fails = 0 ] && echo "loader_test: passed" || { echo "$fails failure(s)"; exit 1; }

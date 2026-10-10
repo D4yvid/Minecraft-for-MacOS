@@ -1,0 +1,61 @@
+// libc++ configuration for the Android launcher runtime (docs/LAUNCHER.md, Stage 3a): Apple's
+// arm64 ABI, so objects and calls match the iOS game's libc++.1 (std::__1, alternate string
+// layout, NonUniqueARMRTTIBit type_info), threading through the Darwin pthread layer and
+// Darwin's ctype tables (the game inlines parts of both). Used instead of LLVM's generated file.
+#ifndef _LIBCPP___CONFIG_SITE
+#define _LIBCPP___CONFIG_SITE
+
+#define _LIBCPP_ABI_VERSION 1
+#define _LIBCPP_ABI_NAMESPACE __1
+#define _LIBCPP_ABI_ALTERNATE_STRING_LAYOUT
+#define _LIBCPP_TYPEINFO_COMPARISON_IMPLEMENTATION 3
+#define _LIBCPP_HAS_THREAD_API_EXTERNAL
+#define _LIBCPP_HAS_NO_VENDOR_AVAILABILITY_ANNOTATIONS
+#define _LIBCPP_HAS_NO_STD_MODULES
+#define _LIBCPP_HAS_NO_TIME_ZONE_DATABASE
+#define _LIBCPP_PSTL_CPU_BACKEND_SERIAL
+#define _LIBCPP_HARDENING_MODE_DEFAULT _LIBCPP_HARDENING_MODE_NONE
+
+// Darwin ctype: ctype_base masks are Darwin's _CTYPE_* bits and ctype<char>::classic_table() is
+// the runetype table of the Darwin _RuneLocale the game also imports (__DefaultRuneLocale).
+// Patched into __config, __locale and locale.cpp by android/launcher/runtime/patch_llvm.py.
+#define _LIBCPP_MCFM_DARWIN_CTYPE
+#define _LIBCPP_HAS_DEFAULTRUNELOCALE
+#ifdef __cplusplus
+extern "C" {
+#endif
+struct mcfm_darwin_RuneLocale {
+  char __magic[8];
+  char __encoding[32];
+  void *__sgetrune;
+  void *__sputrune;
+  int __invalid_rune;
+  unsigned int __runetype[256];
+  int __maplower[256];
+  int __mapupper[256];
+  char __rest[76];  // extended range tables, variable and data pointers (unused); 3208 bytes in all
+};
+extern const struct mcfm_darwin_RuneLocale mcfm_darwin_DefaultRuneLocale;
+#ifdef __cplusplus
+}
+#endif
+#define _DefaultRuneLocale mcfm_darwin_DefaultRuneLocale
+
+// Darwin's mbstate_t: a 128-byte union named __mbstate_t. It is inside std::fpos (streampos),
+// which the game passes to and from libc++ (basic_streambuf::seekpos), and in mangled names.
+// Claim bionic's 8-byte mbstate_t header under another name first (it is #pragma once), so every
+// later declaration, bionic's mbrtowc & co included, uses Darwin's type. Bionic reads only the
+// first 8 bytes, and the all-zero initial state is the same for both.
+#ifdef mbstate_t
+#  error "mbstate_t is a macro already"
+#endif
+#define mbstate_t __mcfm_bionic_mbstate_t
+#include <bits/mbstate_t.h>
+#undef mbstate_t
+typedef union {
+  char __mbstate8[128];
+  long long _mbstateL;
+} __mbstate_t;
+typedef __mbstate_t mbstate_t;
+
+#endif  // _LIBCPP___CONFIG_SITE

@@ -1,0 +1,130 @@
+// -*- C++ -*-
+// libc++ threading for the Android launcher runtime: the Darwin pthread layer
+// (android/launcher/darwin/pthread.cpp). The game constructs libc++ objects inline with
+// Darwin's static initializers (std::mutex is a pthread_mutex_t holding 0x32AAABA7), so libc++
+// must use the same Darwin objects, not bionic's.
+#ifndef _LIBCPP___EXTERNAL_THREADING
+#define _LIBCPP___EXTERNAL_THREADING
+
+#include <__config>
+#include <errno.h>
+#include <sched.h>
+#include <time.h>
+
+#include "darwin.h"
+
+#define _LIBCPP_THREAD_ABI_VISIBILITY inline _LIBCPP_HIDE_FROM_ABI
+
+typedef ::timespec __libcpp_timespec_t;
+
+// The layer returns Darwin errno numbers; libc++ compares them with <errno.h>'s (ETIMEDOUT) and
+// reports them through system_category: every result is translated back to bionic's.
+
+_LIBCPP_BEGIN_NAMESPACE_STD
+
+typedef darwin::pthread_mutex __libcpp_mutex_t;
+#define _LIBCPP_MUTEX_INITIALIZER {darwin::k_PTHREAD_MUTEX_SIG_init, {0}}
+typedef darwin::pthread_mutex __libcpp_recursive_mutex_t;
+
+typedef darwin::pthread_cond __libcpp_condvar_t;
+#define _LIBCPP_CONDVAR_INITIALIZER {darwin::k_PTHREAD_COND_SIG_init, {0}}
+
+typedef darwin::pthread_once __libcpp_exec_once_flag;
+#define _LIBCPP_EXEC_ONCE_INITIALIZER {darwin::k_PTHREAD_ONCE_SIG_init, {0}}
+
+typedef darwin::pthread_t __libcpp_thread_id;
+#define _LIBCPP_NULL_THREAD ((__libcpp_thread_t()))
+typedef darwin::pthread_t __libcpp_thread_t;
+
+typedef darwin::pthread_key __libcpp_tls_key;
+#define _LIBCPP_TLS_DESTRUCTOR_CC
+
+_LIBCPP_THREAD_ABI_VISIBILITY int __libcpp_recursive_mutex_init(__libcpp_recursive_mutex_t* __m) {
+  darwin::pthread_mutexattr __attr;
+  mcfm_darwin_pthread_mutexattr_init(&__attr);
+  mcfm_darwin_pthread_mutexattr_settype(&__attr, darwin::kPTHREAD_MUTEX_RECURSIVE);
+  int __ec = mcfm_darwin_pthread_mutex_init(__m, &__attr);
+  mcfm_darwin_pthread_mutexattr_destroy(&__attr);
+  return mcfm_bionic_errno(__ec);
+}
+
+_LIBCPP_THREAD_ABI_VISIBILITY _LIBCPP_NO_THREAD_SAFETY_ANALYSIS int
+__libcpp_recursive_mutex_lock(__libcpp_recursive_mutex_t* __m) { return mcfm_bionic_errno(mcfm_darwin_pthread_mutex_lock(__m)); }
+_LIBCPP_THREAD_ABI_VISIBILITY _LIBCPP_NO_THREAD_SAFETY_ANALYSIS bool
+__libcpp_recursive_mutex_trylock(__libcpp_recursive_mutex_t* __m) { return mcfm_darwin_pthread_mutex_trylock(__m) == 0; }
+_LIBCPP_THREAD_ABI_VISIBILITY _LIBCPP_NO_THREAD_SAFETY_ANALYSIS int
+__libcpp_recursive_mutex_unlock(__libcpp_recursive_mutex_t* __m) { return mcfm_bionic_errno(mcfm_darwin_pthread_mutex_unlock(__m)); }
+_LIBCPP_THREAD_ABI_VISIBILITY int __libcpp_recursive_mutex_destroy(__libcpp_recursive_mutex_t* __m) {
+  return mcfm_bionic_errno(mcfm_darwin_pthread_mutex_destroy(__m));
+}
+
+_LIBCPP_THREAD_ABI_VISIBILITY _LIBCPP_NO_THREAD_SAFETY_ANALYSIS int __libcpp_mutex_lock(__libcpp_mutex_t* __m) {
+  return mcfm_bionic_errno(mcfm_darwin_pthread_mutex_lock(__m));
+}
+_LIBCPP_THREAD_ABI_VISIBILITY _LIBCPP_NO_THREAD_SAFETY_ANALYSIS bool __libcpp_mutex_trylock(__libcpp_mutex_t* __m) {
+  return mcfm_darwin_pthread_mutex_trylock(__m) == 0;
+}
+_LIBCPP_THREAD_ABI_VISIBILITY _LIBCPP_NO_THREAD_SAFETY_ANALYSIS int __libcpp_mutex_unlock(__libcpp_mutex_t* __m) {
+  return mcfm_bionic_errno(mcfm_darwin_pthread_mutex_unlock(__m));
+}
+_LIBCPP_THREAD_ABI_VISIBILITY int __libcpp_mutex_destroy(__libcpp_mutex_t* __m) {
+  return mcfm_bionic_errno(mcfm_darwin_pthread_mutex_destroy(__m));
+}
+
+_LIBCPP_THREAD_ABI_VISIBILITY int __libcpp_condvar_signal(__libcpp_condvar_t* __cv) {
+  return mcfm_bionic_errno(mcfm_darwin_pthread_cond_signal(__cv));
+}
+_LIBCPP_THREAD_ABI_VISIBILITY int __libcpp_condvar_broadcast(__libcpp_condvar_t* __cv) {
+  return mcfm_bionic_errno(mcfm_darwin_pthread_cond_broadcast(__cv));
+}
+_LIBCPP_THREAD_ABI_VISIBILITY _LIBCPP_NO_THREAD_SAFETY_ANALYSIS int
+__libcpp_condvar_wait(__libcpp_condvar_t* __cv, __libcpp_mutex_t* __m) { return mcfm_bionic_errno(mcfm_darwin_pthread_cond_wait(__cv, __m)); }
+_LIBCPP_THREAD_ABI_VISIBILITY _LIBCPP_NO_THREAD_SAFETY_ANALYSIS int
+__libcpp_condvar_timedwait(__libcpp_condvar_t* __cv, __libcpp_mutex_t* __m, __libcpp_timespec_t* __ts) {
+  return mcfm_bionic_errno(mcfm_darwin_pthread_cond_timedwait(__cv, __m, __ts));
+}
+_LIBCPP_THREAD_ABI_VISIBILITY int __libcpp_condvar_destroy(__libcpp_condvar_t* __cv) {
+  return mcfm_bionic_errno(mcfm_darwin_pthread_cond_destroy(__cv));
+}
+
+_LIBCPP_THREAD_ABI_VISIBILITY int __libcpp_execute_once(__libcpp_exec_once_flag* __flag, void (*__init_routine)()) {
+  return mcfm_bionic_errno(mcfm_darwin_pthread_once(__flag, __init_routine));
+}
+
+_LIBCPP_THREAD_ABI_VISIBILITY bool __libcpp_thread_id_equal(__libcpp_thread_id __t1, __libcpp_thread_id __t2) {
+  return __t1 == __t2;
+}
+_LIBCPP_THREAD_ABI_VISIBILITY bool __libcpp_thread_id_less(__libcpp_thread_id __t1, __libcpp_thread_id __t2) {
+  return __t1 < __t2;
+}
+
+_LIBCPP_THREAD_ABI_VISIBILITY bool __libcpp_thread_isnull(const __libcpp_thread_t* __t) { return *__t == 0; }
+_LIBCPP_THREAD_ABI_VISIBILITY int __libcpp_thread_create(__libcpp_thread_t* __t, void* (*__func)(void*), void* __arg) {
+  return mcfm_bionic_errno(mcfm_darwin_pthread_create(__t, nullptr, __func, __arg));
+}
+_LIBCPP_THREAD_ABI_VISIBILITY __libcpp_thread_id __libcpp_thread_get_current_id() { return mcfm_darwin_pthread_self(); }
+_LIBCPP_THREAD_ABI_VISIBILITY __libcpp_thread_id __libcpp_thread_get_id(const __libcpp_thread_t* __t) { return *__t; }
+_LIBCPP_THREAD_ABI_VISIBILITY int __libcpp_thread_join(__libcpp_thread_t* __t) {
+  return mcfm_bionic_errno(mcfm_darwin_pthread_join(*__t, nullptr));
+}
+_LIBCPP_THREAD_ABI_VISIBILITY int __libcpp_thread_detach(__libcpp_thread_t* __t) {
+  return mcfm_bionic_errno(mcfm_darwin_pthread_detach(*__t));
+}
+_LIBCPP_THREAD_ABI_VISIBILITY void __libcpp_thread_yield() { sched_yield(); }
+_LIBCPP_THREAD_ABI_VISIBILITY void __libcpp_thread_sleep_for(const chrono::nanoseconds& __ns) {
+  __libcpp_timespec_t __ts = std::__convert_to_timespec<__libcpp_timespec_t>(__ns);
+  while (nanosleep(&__ts, &__ts) == -1 && errno == EINTR)
+    ;
+}
+
+_LIBCPP_THREAD_ABI_VISIBILITY int __libcpp_tls_create(__libcpp_tls_key* __key, void (*__at_exit)(void*)) {
+  return mcfm_bionic_errno(mcfm_darwin_pthread_key_create(__key, __at_exit));
+}
+_LIBCPP_THREAD_ABI_VISIBILITY void* __libcpp_tls_get(__libcpp_tls_key __key) { return mcfm_darwin_pthread_getspecific(__key); }
+_LIBCPP_THREAD_ABI_VISIBILITY int __libcpp_tls_set(__libcpp_tls_key __key, void* __p) {
+  return mcfm_bionic_errno(mcfm_darwin_pthread_setspecific(__key, __p));
+}
+
+_LIBCPP_END_NAMESPACE_STD
+
+#endif  // _LIBCPP___EXTERNAL_THREADING

@@ -40,6 +40,7 @@
 #include <sys/utsname.h>
 #include <time.h>
 #include <unistd.h>
+#include <wchar.h>
 #include <xlocale.h>
 
 #define C(name) printf("constexpr long k%s = %lldL;\n", #name, (long long)(name))
@@ -182,6 +183,7 @@ static void header(void) {
   SZ("pthread_cond_t", pthread_cond_t); SZ("pthread_condattr_t", pthread_condattr_t);
   SZ("pthread_once_t", pthread_once_t); SZ("pthread_key_t", pthread_key_t);
   SZ("pthread_rwlock_t", pthread_rwlock_t); SZ("sched_param", struct sched_param);
+  SZ("mbstate_t", mbstate_t);
   SZ("RuneLocale", _RuneLocale);
   FIELD("RuneLocale", _RuneLocale, __magic); FIELD("RuneLocale", _RuneLocale, __encoding);
   FIELD("RuneLocale", _RuneLocale, __invalid_rune); FIELD("RuneLocale", _RuneLocale, __runetype);

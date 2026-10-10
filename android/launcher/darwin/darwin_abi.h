@@ -422,6 +422,7 @@ constexpr long kSizeof_pthread_once_t = 16L;
 constexpr long kSizeof_pthread_key_t = 8L;
 constexpr long kSizeof_pthread_rwlock_t = 200L;
 constexpr long kSizeof_sched_param = 8L;
+constexpr long kSizeof_mbstate_t = 128L;
 constexpr long kSizeof_RuneLocale = 3208L;
 constexpr long kOffsetof_RuneLocale___magic = 0L;
 constexpr long kSizeof_RuneLocale___magic = 8L;
