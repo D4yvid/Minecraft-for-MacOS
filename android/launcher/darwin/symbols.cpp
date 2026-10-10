@@ -41,6 +41,38 @@ int mcfm_darwin_strerror_r(int, char *, size_t);
 int mcfm_darwin_vfprintf(FILE *, const char *, char *);
 int mcfm_darwin_vsnprintf(char *, size_t, const char *, char *);
 extern FILE *mcfm_darwin_stdinp, *mcfm_darwin_stdoutp, *mcfm_darwin_stderrp;
+// blocks.cpp, dispatch.cpp, mach.cpp
+void mcfm_darwin__Block_object_assign(void *, const void *, int);
+void mcfm_darwin__Block_object_dispose(const void *, int);
+void *mcfm_darwin_Block_copy(const void *);
+void mcfm_darwin_Block_release(const void *);
+extern void *mcfm_darwin_NSConcreteGlobalBlock[32], *mcfm_darwin_NSConcreteStackBlock[32], *mcfm_darwin_NSConcreteMallocBlock[32];
+extern struct mcfm_darwin_queue mcfm_darwin_dispatch_main_q;
+void mcfm_darwin_dispatch_async(void *, void *);
+void mcfm_darwin_dispatch_async_f(void *, void *, void (*)(void *));
+void *mcfm_darwin_dispatch_get_global_queue(long, unsigned long);
+void mcfm_darwin_dispatch_once(long *, void *);
+void *mcfm_darwin_dispatch_queue_create(const char *, const void *);
+void *mcfm_darwin_dispatch_semaphore_create(long);
+long mcfm_darwin_dispatch_semaphore_signal(void *);
+long mcfm_darwin_dispatch_semaphore_wait(void *, uint64_t);
+void mcfm_darwin_dispatch_sync(void *, void *);
+uint64_t mcfm_darwin_dispatch_time(uint64_t, int64_t);
+uint64_t mcfm_darwin_mach_absolute_time(void);
+uint32_t mcfm_darwin_mach_host_self(void);
+extern uint32_t mcfm_darwin_mach_task_self_;
+int mcfm_darwin_mach_timebase_info(uint32_t *);
+int mcfm_darwin_host_page_size(uint32_t, uintptr_t *);
+int mcfm_darwin_host_statistics(uint32_t, int, int *, uint32_t *);
+int mcfm_darwin_semaphore_create(uint32_t, uint32_t *, int, int);
+int mcfm_darwin_semaphore_destroy(uint32_t, uint32_t);
+int mcfm_darwin_semaphore_signal(uint32_t);
+int mcfm_darwin_semaphore_wait(uint32_t);
+int mcfm_darwin_kqueue(void);
+int mcfm_darwin_kevent(int, const void *, int, void *, int, const void *);
+void *mcfm_darwin_hash_create(int);
+void *mcfm_darwin_hash_search(void *, const void *, int, void *, void *);
+void mcfm_darwin__dyld_register_func_for_add_image(void (*)(const void *, intptr_t));
 extern uintptr_t mcfm_darwin_stack_chk_guard;
 }
 
@@ -59,6 +91,13 @@ struct Export {
 
 const Export kExports[] = {
     S("OSMemoryBarrier", mcfm_darwin_OSMemoryBarrier)
+    S("_Block_copy", mcfm_darwin_Block_copy)
+    S("_Block_object_assign", mcfm_darwin__Block_object_assign)
+    S("_Block_object_dispose", mcfm_darwin__Block_object_dispose)
+    S("_Block_release", mcfm_darwin_Block_release)
+    S("_NSConcreteGlobalBlock", &mcfm_darwin_NSConcreteGlobalBlock)
+    S("_NSConcreteMallocBlock", &mcfm_darwin_NSConcreteMallocBlock)
+    S("_NSConcreteStackBlock", &mcfm_darwin_NSConcreteStackBlock)
     R("_Unwind_Resume")
     S("__assert_rtn", mcfm_darwin___assert_rtn)
     B("__cxa_atexit")
@@ -76,6 +115,8 @@ const Export kExports[] = {
     S("__stdinp", &mcfm_darwin_stdinp)
     S("__stdoutp", &mcfm_darwin_stdoutp)
     B("__strcat_chk")
+    S("_dispatch_main_q", &mcfm_darwin_dispatch_main_q)
+    S("_dyld_register_func_for_add_image", mcfm_darwin__dyld_register_func_for_add_image)
     B("abort")
     B("access")
     B("acos")
@@ -96,6 +137,16 @@ const Export kExports[] = {
     B("cos")
     B("cosf")
     B("difftime")
+    S("dispatch_async", mcfm_darwin_dispatch_async)
+    S("dispatch_async_f", mcfm_darwin_dispatch_async_f)
+    S("dispatch_get_global_queue", mcfm_darwin_dispatch_get_global_queue)
+    S("dispatch_once", mcfm_darwin_dispatch_once)
+    S("dispatch_queue_create", mcfm_darwin_dispatch_queue_create)
+    S("dispatch_semaphore_create", mcfm_darwin_dispatch_semaphore_create)
+    S("dispatch_semaphore_signal", mcfm_darwin_dispatch_semaphore_signal)
+    S("dispatch_semaphore_wait", mcfm_darwin_dispatch_semaphore_wait)
+    S("dispatch_sync", mcfm_darwin_dispatch_sync)
+    S("dispatch_time", mcfm_darwin_dispatch_time)
     B("exp")
     B("exp2")
     B("exp2f")
@@ -131,9 +182,15 @@ const Export kExports[] = {
     B("getuid")
     B("gmtime")
     B("gmtime_r")
+    S("hash_create", mcfm_darwin_hash_create)
+    S("hash_search", mcfm_darwin_hash_search)
+    S("host_page_size", mcfm_darwin_host_page_size)
+    S("host_statistics", mcfm_darwin_host_statistics)
     B("inet_addr")
     B("inet_ntoa")
     S("ioctl", mcfm_darwin_ioctl)
+    S("kevent", mcfm_darwin_kevent)
+    S("kqueue", mcfm_darwin_kqueue)
     B("ldexp")
     B("localtime")
     B("localtime_r")
@@ -142,6 +199,10 @@ const Export kExports[] = {
     B("log10f")
     B("logf")
     S("lstat", mcfm_darwin_lstat)
+    S("mach_absolute_time", mcfm_darwin_mach_absolute_time)
+    S("mach_host_self", mcfm_darwin_mach_host_self)
+    S("mach_task_self_", &mcfm_darwin_mach_task_self_)
+    S("mach_timebase_info", mcfm_darwin_mach_timebase_info)
     B("malloc")
     B("memchr")
     B("memcmp")
@@ -206,6 +267,10 @@ const Export kExports[] = {
     B("rename")
     B("rmdir")
     B("sched_yield")
+    S("semaphore_create", mcfm_darwin_semaphore_create)
+    S("semaphore_destroy", mcfm_darwin_semaphore_destroy)
+    S("semaphore_signal", mcfm_darwin_semaphore_signal)
+    S("semaphore_wait", mcfm_darwin_semaphore_wait)
     S("sigaction", mcfm_darwin_sigaction)
     S("signal", mcfm_darwin_signal)
     B("sin")

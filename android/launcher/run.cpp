@@ -78,6 +78,7 @@ int main(int argc, char **argv) {
   }
   std::printf("mcfm: loaded (slide 0x%lx)\n", static_cast<unsigned long>(image.slide));
   std::printf("mcfm: %zu initializers ran\n", initializers);
+  mcfm_darwin_drain_main_queue();  // work the initializers queued for the main thread
 
   auto exported = [&](const std::string &name) -> uint8_t * {
     uint64_t offset = 0;

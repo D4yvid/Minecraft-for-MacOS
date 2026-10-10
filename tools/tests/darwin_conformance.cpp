@@ -22,6 +22,11 @@
 // The game calls these deprecated APIs too.
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #include <libkern/OSAtomic.h>
+#include <dispatch/dispatch.h>
+#include <mach/mach.h>
+#include <mach/mach_time.h>
+#include <mach-o/dyld.h>
+#include <pthread.h>
 
 #include <stdexcept>
 #include <algorithm>
@@ -249,12 +254,109 @@ void part2_files_system_signals() {
   LINE("gettimeofday %d recent %d", gettimeofday(&tv, nullptr), tv.tv_sec > 1700000000 && tv.tv_usec < 1000000);
 }
 
+int g_images_seen = 0;
+void on_image(const struct mach_header *header, intptr_t) {
+  if (header && header->magic == MH_MAGIC_64) g_images_seen = 1;
+}
+
+void work_function(void *context) { ++*static_cast<int *>(context); }
+
+semaphore_t g_ping, g_pong;
+void *ponger(void *) {
+  for (int k = 0; k < 100; k++) {
+    semaphore_wait(g_ping);
+    semaphore_signal(g_pong);
+  }
+  return nullptr;
+}
+
+void part3_mach_blocks_dispatch() {
+  LINE("== 3 mach, blocks, dispatch");
+  mach_timebase_info_data_t timebase;
+  LINE("mach_timebase_info %d nonzero %d", mach_timebase_info(&timebase), timebase.numer > 0 && timebase.denom > 0);
+  uint64_t t0 = mach_absolute_time();
+  usleep(20000);
+  uint64_t elapsed_ns = (mach_absolute_time() - t0) * timebase.numer / timebase.denom;
+  LINE("mach_absolute_time 20ms %d", elapsed_ns >= 15000000 && elapsed_ns < 2000000000);
+  vm_size_t page = 0;
+  LINE("host_page_size %d matches %d", host_page_size(mach_host_self(), &page), page == static_cast<vm_size_t>(getpagesize()));
+  vm_statistics_data_t vm;
+  mach_msg_type_number_t count = HOST_VM_INFO_COUNT;
+  LINE("host_statistics %d free>0 %d", host_statistics(mach_host_self(), HOST_VM_INFO, reinterpret_cast<host_info_t>(&vm), &count),
+       vm.free_count > 0);
+  LINE("semaphore_create %d %d", semaphore_create(mach_task_self(), &g_ping, SYNC_POLICY_FIFO, 0),
+       semaphore_create(mach_task_self(), &g_pong, SYNC_POLICY_FIFO, 0));
+  pthread_t thread;
+  pthread_create(&thread, nullptr, ponger, nullptr);
+  int rounds = 0;
+  for (int k = 0; k < 100; k++) {
+    semaphore_signal(g_ping);
+    rounds += semaphore_wait(g_pong) == KERN_SUCCESS;
+  }
+  pthread_join(thread, nullptr);
+  LINE("semaphore ping-pong %d", rounds);
+  semaphore_destroy(mach_task_self(), g_ping);
+  semaphore_destroy(mach_task_self(), g_pong);
+
+  static dispatch_once_t once;
+  __block int once_runs = 0;
+  dispatch_queue_t pool = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+  dispatch_semaphore_t done = dispatch_semaphore_create(0);
+  for (int k = 0; k < 8; k++)
+    dispatch_async(pool, ^{
+      dispatch_once(&once, ^{
+        usleep(10000);
+        once_runs++;
+      });
+      dispatch_semaphore_signal(done);
+    });
+  for (int k = 0; k < 8; k++) dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
+  // (The predicate's "done" value is ~0l for the 2016 game's inline check; current libdispatch
+  // stores another value, so it is not printed.)
+  LINE("dispatch_once runs %d", once_runs);
+
+  dispatch_queue_t serial = dispatch_queue_create("mcfm.conformance", nullptr);
+  __block int counter = 0;
+  __block bool ordered = true;
+  for (int k = 0; k < 1000; k++)
+    dispatch_async(serial, ^{
+      if (counter != k) ordered = false;
+      counter++;
+    });
+  __block int seen = -1;
+  dispatch_sync(serial, ^{ seen = counter; });
+  LINE("serial queue %d ordered %d", seen, ordered);
+  int plain = 0;
+  dispatch_async_f(serial, &plain, work_function);
+  dispatch_sync(serial, ^{});
+  LINE("dispatch_async_f %d", plain);
+  std::string captured = "captured string";
+  __block std::string copied;
+  dispatch_sync(serial, ^{ copied = captured + " copied"; });
+  LINE("block copy %s", copied.c_str());
+  __block bool caught = false;
+  dispatch_sync(serial, ^{
+    try {
+      throw std::runtime_error("in block");
+    } catch (const std::runtime_error &) {
+      caught = true;
+    }
+  });
+  LINE("exception inside a block caught %d", caught);
+  LINE("semaphore timeout %ld", dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_MSEC)));
+  dispatch_semaphore_signal(done);
+  LINE("semaphore available %ld", dispatch_semaphore_wait(done, DISPATCH_TIME_NOW));
+  _dyld_register_func_for_add_image(on_image);
+  LINE("dyld add-image callback saw an image %d", g_images_seen);
+}
+
 }  // namespace
 
 // part 0: all parts. Returns 0.
 extern "C" int conformance_main(int part) {
   if (part == 0 || part == 1) part1_stdio_errno();
   if (part == 0 || part == 2) part2_files_system_signals();
+  if (part == 0 || part == 3) part3_mach_blocks_dispatch();
   fflush(stdout);
   return 0;
 }

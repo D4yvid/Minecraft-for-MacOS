@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include <cstdio>
+#include <cstring>
 #include <mutex>
 
 #include "darwin.h"
@@ -37,6 +38,25 @@ int find_sections(uintptr_t addr, UnwindSections *info) {
       *info = g_ranges[i].sections;
       return 1;
     }
+  return 0;
+}
+
+// The slide: where __TEXT is minus where it wanted to be (read from the mapped load commands).
+intptr_t slide_of(uintptr_t header) {
+  uint32_t ncmds;
+  std::memcpy(&ncmds, reinterpret_cast<const void *>(header + 16), 4);
+  uintptr_t cmd = header + 32;
+  for (uint32_t i = 0; i < ncmds; i++) {
+    uint32_t type, size;
+    std::memcpy(&type, reinterpret_cast<const void *>(cmd), 4);
+    std::memcpy(&size, reinterpret_cast<const void *>(cmd + 4), 4);
+    if (type == 0x19 && std::strncmp(reinterpret_cast<const char *>(cmd + 8), "__TEXT", 16) == 0) {  // LC_SEGMENT_64
+      uint64_t vmaddr;
+      std::memcpy(&vmaddr, reinterpret_cast<const void *>(cmd + 24), 8);
+      return static_cast<intptr_t>(header - vmaddr);
+    }
+    cmd += size;
+  }
   return 0;
 }
 
@@ -121,6 +141,9 @@ bool AndroidLoaderOS::register_unwind(uintptr_t header, uintptr_t text_lo, uintp
   if (g_count == 0 && __unw_add_find_dynamic_unwind_sections(find_sections) != 0) return false;
   UnwindSections s = {header, eh_frame, eh_size, compact_unwind, compact_size};
   g_ranges[g_count++] = Range{text_lo, text_hi, s};
+  // Called once the image is mapped and bound, before its initializers: those may register
+  // _dyld_register_func_for_add_image callbacks, which see this image.
+  mcfm_darwin_add_image(reinterpret_cast<const void *>(header), slide_of(header));
   return true;
 }
 

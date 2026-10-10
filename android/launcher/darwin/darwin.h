@@ -153,6 +153,11 @@ int mcfm_darwin_tcsetattr(int fd, int action, const void *termios);
 int mcfm_bionic_signal(int darwin_signo);
 int mcfm_darwin_signal_number(int bionic_signo);
 
+// mach.cpp: an image our loader mapped (for _dyld_register_func_for_add_image callbacks).
+void mcfm_darwin_add_image(const void *header, intptr_t slide);
+// dispatch.cpp: runs the work queued on the main queue (the host loop calls it).
+void mcfm_darwin_drain_main_queue(void);
+
 // symbols.cpp: the address for a libSystem import (name without the Mach-O '_'), or null.
 void *mcfm_darwin_symbol(const char *name);
 // Every name in the table, sorted (for tests); returns the count.
