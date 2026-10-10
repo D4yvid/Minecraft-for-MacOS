@@ -37,6 +37,12 @@ int main() {
   app_vtable[19] = reinterpret_cast<void *>(&app_update);
   app_vtable[20] = reinterpret_cast<void *>(&app_set_size_and_scale);
   app_vtable[21] = reinterpret_cast<void *>(&app_set_size);
+  {  // AppKit may resize the window before the engine has started: no crash, nothing called.
+    Engine early;
+    early.resize(10, 10);
+    early.frame();
+    EXPECT(calls.empty());
+  }
   EngineAddresses a;
   a.platform_ctor = reinterpret_cast<uintptr_t>(&platform_ctor);
   a.base_vtable = reinterpret_cast<uintptr_t>(base_vtable);

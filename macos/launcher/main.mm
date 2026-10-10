@@ -45,6 +45,7 @@ bool read_header(const std::string &path, std::vector<char> *out) {
 
 uintptr_t g_slide = 0;
 bool g_found = false;
+bool g_hooks_ok = false;  // every hooked entry jumps through its own table slot
 
 // dyld calls this after mapping an image and before running its initializers.
 void on_add_image(const mach_header *header, intptr_t slide) {
@@ -58,8 +59,18 @@ void on_add_image(const mach_header *header, intptr_t slide) {
     std::fprintf(stderr, "mcfm: no hook table in the game image (rebuild with make launcher)\n");
     return;
   }
+  // The image must have been converted with exactly these hooks (make launcher): otherwise a
+  // patched entry would jump through an empty slot, or an unpatched seam would run.
+  for (size_t i = 0; i < n; i++) {
+    uintptr_t entry = h[i].address + g_slide;
+    if (mcfm::hook_slot(reinterpret_cast<const void *>(entry), entry) != table + g_slide + 8 * i) {
+      std::fprintf(stderr, "mcfm: hook %s is not installed in the game image\n", h[i].name);
+      return;
+    }
+  }
   void **slots = reinterpret_cast<void **>(table + g_slide);
   for (size_t i = 0; i < n; i++) slots[i] = h[i].replacement;
+  g_hooks_ok = true;
 }
 
 bool load_egl(const std::string &dir, Egl *e) {
@@ -228,6 +239,10 @@ int main(int argc, char **argv) {
   _dyld_register_func_for_add_image(on_add_image);
   if (!dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL)) { std::fprintf(stderr, "mcfm: cannot load %s: %s\n", path.c_str(), dlerror()); return 2; }
   if (!g_found) { std::fprintf(stderr, "mcfm: %s loaded but not found among dyld images\n", path.c_str()); return 2; }
+  if (!g_hooks_ok) {
+    std::fprintf(stderr, "mcfm: %s was built without the launcher's hooks (rebuild with make launcher)\n", path.c_str());
+    return 2;
+  }
   std::printf("mcfm: game image loaded (slide 0x%lx)\n", static_cast<unsigned long>(g_slide));
   std::fflush(stdout);
   // The game's data/ lives next to the image's source app: make_launcher.sh writes its path.

@@ -10,4 +10,9 @@ namespace mcfm {
 uintptr_t hook_table_address(const void *header);   // unslid; 0 if there is no __DATA
 size_t hook_table_capacity(const void *header);     // entries; 0 if there is no __DATA
 
+// The table slot a patched entry jumps through: `code` holds the 12 bytes at address `pc`
+// (adrp x16 / ldr x16, [x16, #off] / br x16, as written by mcfm_image.py dylib --hooks).
+// 0 if the bytes are not that sequence (the image was converted without this hook).
+uintptr_t hook_slot(const void *code, uintptr_t pc);
+
 }  // namespace mcfm

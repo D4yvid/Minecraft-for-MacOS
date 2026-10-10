@@ -46,10 +46,12 @@ bool Engine::start(const EngineAddresses &a, const HostInfo &info, int width, in
 }
 
 void Engine::frame() {
+  if (!app_) return;  // not started yet
   reinterpret_cast<void (*)(void *)>(vtable_of(app_)[addr::kAppSlotUpdate])(app_);
 }
 
 void Engine::resize(int width, int height) {
+  if (!app_) return;  // the window can resize before the engine starts
   reinterpret_cast<void (*)(void *, int, int)>(vtable_of(app_)[addr::kAppSlotSetSize])(app_, width, height);
   reinterpret_cast<void (*)(void *, int, int, float)>(vtable_of(app_)[addr::kAppSlotSetSizeAndScale])(app_, width, height, 0.f);
 }
