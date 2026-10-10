@@ -1,6 +1,6 @@
 #pragma once
 // Writes a frame read back with glReadPixels (RGBA, rows bottom-up) as a binary PPM (P6,
-// RGB, rows top-down). Used by mcfm-launch --screenshot.
+// RGB, rows top-down). Used by mcfm-launch --screenshot and mcfm-run --boot --screenshot.
 #include <cstdio>
 
 namespace mcfm {

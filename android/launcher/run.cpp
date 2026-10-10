@@ -10,20 +10,30 @@
 //                             symbol holds the runtime's definition, else "=other"
 //   --initializers-only       load, run the initializers, print their count, exit
 //   --gl                      (before loading) make a GLES 3 context current: EGL pbuffer 1280x720
+//   --boot --data <dir> --home <dir> [--frames N] [--screenshot <ppm>]
+//                             the game: the launcher's hooks and LC_UUID check at load, then the
+//                             engine boots and renders N frames (boot.cpp); implies --gl
 #include <EGL/egl.h>
 #include <dlfcn.h>
+#include <unwind.h>
 #include <fcntl.h>
 #include <unistd.h>
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <fstream>
+#include <typeinfo>
 #include <iterator>
 #include <string>
 #include <vector>
 
+#include "boot.h"
 #include "darwin.h"
+#include "hook_table.h"
+#include "macho_uuid.h"
+#include "seams.h"
 #include "fixups.h"
 #include "loader.h"
 #include "loader_android.h"
@@ -33,6 +43,44 @@ using namespace mcfm::loader;
 namespace {
 
 int fixture_hook(int x) { return 1000 + x; }
+
+// For std::terminate's backtrace: the game image's range (pcs there print unslid, for IDA).
+uintptr_t g_image_lo = 0, g_image_hi = 0;
+intptr_t g_image_slide = 0;
+
+_Unwind_Reason_Code print_frame(_Unwind_Context *context, void *depth) {
+  uintptr_t pc = _Unwind_GetIP(context);
+  int n = (*static_cast<int *>(depth))++;
+  if (pc >= g_image_lo && pc < g_image_hi) {
+    std::fprintf(stderr, "mcfm:   #%02d game 0x%lx\n", n, static_cast<unsigned long>(pc - g_image_slide));
+  } else {
+    Dl_info info;
+    if (dladdr(reinterpret_cast<void *>(pc), &info) && info.dli_fname)
+      std::fprintf(stderr, "mcfm:   #%02d %s+0x%lx (%s)\n", n, info.dli_fname,
+                   static_cast<unsigned long>(pc - reinterpret_cast<uintptr_t>(info.dli_fbase)), info.dli_sname ? info.dli_sname : "?");
+    else
+      std::fprintf(stderr, "mcfm:   #%02d 0x%lx\n", n, static_cast<unsigned long>(pc));
+  }
+  return n < 40 ? _URC_NO_REASON : _URC_END_OF_STACK;
+}
+
+// An uncaught exception: what it was and where it was thrown (still on the stack: __cxa_throw
+// calls terminate before unwinding), with our unwinder, which knows the game's frames.
+[[noreturn]] void on_terminate() {
+  const char *what = "unknown";
+  if (std::exception_ptr e = std::current_exception()) {
+    try {
+      std::rethrow_exception(e);
+    } catch (const std::exception &x) {
+      what = x.what();
+    } catch (...) {
+    }
+  }
+  std::fprintf(stderr, "mcfm: terminate: uncaught exception (%s); backtrace:\n", what);
+  int depth = 0;
+  _Unwind_Backtrace(print_frame, &depth);
+  std::abort();
+}
 
 // A GLES 3 context on a pbuffer (no window before Stage 3c), current on this thread.
 bool make_gl_context(int width, int height) {
@@ -61,15 +109,29 @@ int usage(const char *message) {
 
 extern "C" __attribute__((visibility("default"))) int mcfm_run_main(int argc, char **argv) {
   setvbuf(stdout, nullptr, _IOLBF, 0);
+  std::set_terminate(on_terminate);
   if (argc < 2) return usage("no image");
   std::string path = argv[1];
   std::vector<uintptr_t> hooks;
   std::vector<const void *> replacements;
-  for (int i = 2; i < argc; i++)
-    if (std::strcmp(argv[i], "--gl") == 0 && !make_gl_context(1280, 720)) {
-      std::fprintf(stderr, "mcfm-run: cannot create a GLES 3 context\n");
-      return 1;
-    }
+  bool boot = false;
+  mcfm::android::BootOptions boot_options;
+  for (int i = 2; i < argc; i++) {
+    std::string a = argv[i];
+    if (a == "--boot") boot = true;
+    if (i + 1 < argc && a == "--data") boot_options.data_dir = argv[i + 1];
+    if (i + 1 < argc && a == "--home") boot_options.home_dir = argv[i + 1];
+    if (i + 1 < argc && a == "--frames") boot_options.frames = std::atol(argv[i + 1]);
+    if (i + 1 < argc && a == "--screenshot") boot_options.screenshot = argv[i + 1];
+  }
+  if (boot && (boot_options.data_dir.empty() || boot_options.home_dir.empty() || boot_options.frames < 1))
+    return usage("--boot needs --data <dir>, --home <dir> and --frames N > 0");
+  bool gl = boot;
+  for (int i = 2; i < argc; i++) gl |= std::strcmp(argv[i], "--gl") == 0;
+  if (gl && !make_gl_context(boot_options.width, boot_options.height)) {
+    std::fprintf(stderr, "mcfm-run: cannot create a GLES 3 context\n");
+    return 1;
+  }
   for (int i = 2; i + 1 < argc; i++)
     if (std::strcmp(argv[i], "--hook") == 0) {
       hooks.push_back(static_cast<uintptr_t>(std::strtoull(argv[++i], nullptr, 16)));
@@ -85,10 +147,23 @@ extern "C" __attribute__((visibility("default"))) int mcfm_run_main(int argc, ch
   }
   std::string dir = path.find('/') == std::string::npos ? "." : path.substr(0, path.rfind('/'));
   static AndroidLoaderOS os(dir);
+  std::vector<const char *> hook_names;
+  if (boot) {  // the launcher's seams (shared/launcher/seams.cpp), as mcfm-launch installs them
+    size_t n = 0;
+    const mcfm::launcher::Hook *h = mcfm::launcher::hooks(&n);
+    for (size_t i = 0; i < n; i++) {
+      hooks.push_back(h[i].address);
+      replacements.push_back(h[i].replacement);
+      hook_names.push_back(h[i].name);
+    }
+  }
   LoadOptions opts;
   opts.hook_addresses = hooks.data();
   opts.hook_replacements = replacements.data();
+  opts.hook_names = boot ? hook_names.data() : nullptr;
   opts.hook_count = hooks.size();
+  // The game's addresses are only valid for its 0.15.10 build: check what was mapped.
+  if (boot) opts.accept_header = [](const uint8_t *header) { return mcfm::is_expected_game_image(header); };
   size_t initializers = 0;
   opts.initializers_run = &initializers;
   opts.argc = argc;
@@ -105,6 +180,12 @@ extern "C" __attribute__((visibility("default"))) int mcfm_run_main(int argc, ch
     return 1;
   }
   std::printf("mcfm: loaded (slide 0x%lx)\n", static_cast<unsigned long>(image.slide));
+  g_image_slide = image.slide;
+  for (const Segment &seg : image.macho.segments)
+    if (seg.name == "__TEXT") {
+      g_image_lo = seg.vmaddr + image.slide;
+      g_image_hi = g_image_lo + seg.vmsize;
+    }
   std::printf("mcfm: %zu initializers ran\n", initializers);
   mcfm_darwin_drain_main_queue();  // work the initializers queued for the main thread
 
@@ -113,6 +194,7 @@ extern "C" __attribute__((visibility("default"))) int mcfm_run_main(int argc, ch
     if (!find_export(file.data(), file.size(), image.macho, "_" + name, &offset, nullptr)) return nullptr;
     return image.header + offset;
   };
+  if (boot) return mcfm::android::boot(static_cast<uintptr_t>(image.slide), boot_options);
   for (int i = 2; i < argc; i++) {
     std::string a = argv[i];
     if (a == "--initializers-only") return 0;

@@ -222,11 +222,13 @@ $(ALAUNCH_OUT)/tests/%_test: android/launcher/tests/%_test.cpp $(RT_LIB)
 # libmcfm_launcher.so: the loader, the launcher and the whole runtime, exporting only its entry
 # points (android/launcher/launcher.map). mcfm-run is a C program that dlopens it.
 LAUNCHER_SO := $(ALAUNCH_OUT)/libmcfm_launcher.so
-LAUNCHER_SO_SRCS := android/launcher/run.cpp android/launcher/loader_android.cpp android/launcher/audio_toolbox.cpp $(LOADER_SRCS)
-$(LAUNCHER_SO): $(LAUNCHER_SO_SRCS) android/launcher/loader_android.h android/launcher/audio_toolbox.h android/launcher/launcher.map $(LOADER_HDRS) $(RT_LIB)
+LAUNCHER_SO_SRCS := android/launcher/run.cpp android/launcher/boot.cpp android/launcher/loader_android.cpp \
+  android/launcher/audio_toolbox.cpp $(LOADER_SRCS) shared/apple/macho_uuid.cpp shared/launcher/app_platform.cpp \
+  shared/launcher/engine.cpp shared/launcher/seams.cpp shared/launcher/text_input.cpp
+$(LAUNCHER_SO): $(LAUNCHER_SO_SRCS) $(wildcard android/launcher/*.h shared/launcher/*.h shared/include/mcfm/*.h) android/launcher/launcher.map $(LOADER_HDRS) $(RT_LIB)
 	@mkdir -p $(dir $@)
-	$(ACXX) $(RT_CXXFLAGS) -fPIC -shared -Ishared/loader -Ishared/apple -Iandroid/launcher $(LAUNCHER_SO_SRCS) \
-	  $(RT_LDFLAGS) -Wl,--version-script,android/launcher/launcher.map -Wl,-soname,libmcfm_launcher.so -lEGL -laaudio -o $@
+	$(ACXX) $(RT_CXXFLAGS) -fPIC -shared -Ishared/loader -Ishared/apple -Ishared/launcher -Ishared/include -Iandroid/launcher $(LAUNCHER_SO_SRCS) \
+	  $(RT_LDFLAGS) -Wl,--version-script,android/launcher/launcher.map -Wl,-soname,libmcfm_launcher.so -lEGL -lGLESv3 -laaudio -o $@
 MCFM_RUN := $(ALAUNCH_OUT)/mcfm-run
 $(MCFM_RUN): android/launcher/mcfm_run.c $(LAUNCHER_SO)
 	$(ACC) -Wall -O1 $(ANDROID_LDFLAGS) $< -ldl -o $@
@@ -239,6 +241,11 @@ android-boot-check: $(MCFM_RUN)
 $(ALAUNCH_OUT)/tests/audio_test: android/launcher/tests/audio_test.cpp android/launcher/audio_toolbox.cpp android/launcher/audio_toolbox.h $(RT_LIB)
 	@mkdir -p $(dir $@)
 	$(ACXX) $(RT_CXXFLAGS) -Iandroid/launcher $< android/launcher/audio_toolbox.cpp $(RT_LDFLAGS) -laaudio -o $@
+
+.PHONY: android-frames-check
+# Stage 3b acceptance: the converted game (make app) boots and renders 120 frames on the device.
+android-frames-check: $(MCFM_RUN)
+	ANDROID_CC="$(ACC)" bash tools/android/frames_check.sh "$(LAUNCHER_OUT)" "$(ALAUNCH_OUT)"
 
 ANDROID_TESTS := pthread_test runtime_test files_test net_test audio_test
 .PHONY: android-test
@@ -292,9 +299,9 @@ $(BUILD)/test/resize_math_test: macos/tests/resize_math_test.cpp macos/launcher/
 	@mkdir -p $(dir $@)
 	clang++ -std=c++17 -Wall -O1 -Imacos/launcher macos/tests/resize_math_test.cpp -o $@
 
-$(BUILD)/test/screenshot_test: macos/tests/screenshot_test.cpp macos/launcher/screenshot.h
+$(BUILD)/test/screenshot_test: macos/tests/screenshot_test.cpp shared/launcher/screenshot.h
 	@mkdir -p $(dir $@)
-	clang++ -std=c++17 -Wall -O1 -Imacos/launcher macos/tests/screenshot_test.cpp -o $@
+	clang++ -std=c++17 -Wall -O1 -Ishared/launcher macos/tests/screenshot_test.cpp -o $@
 
 $(BUILD)/test/hook_table_test: shared/tests/hook_table_test.cpp shared/apple/hook_table.cpp shared/apple/hook_table.h
 	@mkdir -p $(dir $@)

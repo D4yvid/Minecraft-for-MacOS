@@ -44,6 +44,7 @@
 
 #include <stdexcept>
 #include <algorithm>
+#include <locale>
 #include <string>
 #include <vector>
 
@@ -654,6 +655,50 @@ void part5_locale_ctype_crypto() {
   LINE("hmac-sha256 rfc4231-6 %s", hex(digest, sizeof digest).c_str());
 }
 
+// The exported constructors and destructors, called by their linker names: Apple's arm64 ABI
+// returns `this` from them, and code compiled for it (the game) relies on that.
+extern "C" void *string_copy_ctor(void *, const void *) __asm__("__ZNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEEC1ERKS5_");
+extern "C" void *string_dtor(void *) __asm__("__ZNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEED1Ev");
+extern "C" void *runtime_error_ctor(void *, const char *) __asm__("__ZNSt13runtime_errorC1EPKc");
+extern "C" void *runtime_error_dtor(void *) __asm__("__ZNSt13runtime_errorD1Ev");
+extern "C" void *locale_copy_ctor(void *, const void *) __asm__("__ZNSt3__16localeC1ERKS0_");
+extern "C" void *locale_dtor(void *) __asm__("__ZNSt3__16localeD1Ev");
+
+struct Binding {  // like the game's input bindings: a string, an int, a float (32 bytes)
+  std::string name;
+  int key;
+  float scale;
+};
+
+__attribute__((noinline)) std::runtime_error copy_error(const std::runtime_error &e) { return e; }
+
+void part6_cxx_abi() {
+  LINE("== 6 C++ ABI (Apple arm64)");
+  // Apple's arm64 C++ ABI: constructors return this, and callers use it (vector growth copying
+  // strings through basic_string's copy constructor, as the game's input binding code does).
+  std::vector<Binding> bindings;
+  for (int k = 0; k < 200; k++) bindings.push_back(Binding{"button.binding.with.a.long.name." + std::to_string(k), k, 0.5f});
+  unsigned sum = 0;
+  for (const Binding &b : bindings) sum = sum * 31 + static_cast<unsigned>(b.name.size()) + static_cast<unsigned>(b.key);
+  LINE("vector<Binding> %zu %s %u", bindings.size(), bindings.back().name.c_str(), sum);
+  std::runtime_error e("copied error");
+  std::runtime_error copy = copy_error(e);
+  LINE("runtime_error copy %s", copy.what());
+  std::vector<std::string> strings(50, std::string(40, 'q'));
+  strings.insert(strings.begin(), std::string(30, 'r'));
+  LINE("vector<string> insert %zu %zu %c", strings.size(), strings[1].size(), strings[0][0]);
+  alignas(16) unsigned char storage[64];
+  std::string source(50, 's');
+  void *r = string_copy_ctor(storage, &source);
+  LINE("string copy constructor returns this %d (%zu)", r == storage, reinterpret_cast<std::string *>(storage)->size());
+  LINE("string destructor returns this %d", string_dtor(storage) == storage);
+  LINE("runtime_error constructor returns this %d", runtime_error_ctor(storage, "x") == storage);
+  LINE("runtime_error destructor returns this %d", runtime_error_dtor(storage) == storage);
+  std::locale classic;
+  LINE("locale copy constructor returns this %d", locale_copy_ctor(storage, &classic) == storage);
+  LINE("locale destructor returns this %d", locale_dtor(storage) == storage);
+}
+
 }  // namespace
 
 // part 0: all parts. Returns 0.
@@ -663,6 +708,7 @@ extern "C" int conformance_main(int part) {
   if (part == 0 || part == 3) part3_mach_blocks_dispatch();
   if (part == 0 || part == 4) part4_network();
   if (part == 0 || part == 5) part5_locale_ctype_crypto();
+  if (part == 0 || part == 6) part6_cxx_abi();
   fflush(stdout);
   return 0;
 }

@@ -241,6 +241,8 @@ int32_t AudioOutputUnitStart(void *unit) {
     u->stream = nullptr;
     return kUnimplemented;
   }
+  fprintf(stderr, "mcfm: audio: output started (%d Hz, %u channels, %s%s)\n", AAudioStream_getSampleRate(u->stream),
+          u->format.mChannelsPerFrame, is_float ? "float32" : "int16", interleaved(u->format) ? "" : ", non-interleaved");
   return kNoErr;
 }
 

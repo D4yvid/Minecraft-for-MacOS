@@ -85,8 +85,11 @@ for j in "${jobs[@]}"; do wait "$j" || fail=1; done
 # system libraries in the process must never bind to ours), so the loader finds the game's
 # libc++ imports here instead of with dlsym.
 "$BIN/llvm-nm" --defined-only --extern-only --format=just-symbols "$OBJ"/libcxx/*.o "$OBJ"/libcxxabi/*.o "$OBJ"/libunwind/*.o \
-  | grep -v ':$' | LC_ALL=C sort -u > "$OUT/runtime_symbols.txt"
-python3 -I "$ROOT/android/launcher/runtime/gen_runtime_symbols.py" "$OUT/runtime_symbols.txt" > "$OUT/runtime_symbols.cpp"
+  | grep -v -e ':$' -e '^$' | LC_ALL=C sort -u > "$OUT/runtime_symbols.txt"
+# -n: ELF names (on a Mac host llvm-cxxfilt would strip a Mach-O underscore first).
+"$BIN/llvm-cxxfilt" -n < "$OUT/runtime_symbols.txt" > "$OUT/runtime_symbols.demangled.txt"
+python3 -I "$ROOT/android/launcher/runtime/gen_runtime_symbols.py" "$OUT/runtime_symbols.txt" "$OUT/runtime_symbols.demangled.txt" \
+  > "$OUT/runtime_symbols.cpp"
 "$CXX" "${COMMON[@]}" -std=c++17 -c "$OUT/runtime_symbols.cpp" -o "$OBJ/darwin/runtime_symbols.o"
 
 # libmcfm_runtime.a: everything. It is only ever linked whole with its symbols hidden (the
