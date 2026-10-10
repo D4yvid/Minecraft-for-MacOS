@@ -34,4 +34,20 @@ constexpr uintptr_t kMouseDeviceFeed = 0x1000201BC;    // (dev, btn, state, x, y
 constexpr int kAppSlotSetSize = 21;          // (app, int w, int h)
 constexpr int kAppSlotSetSizeAndScale = 20;  // (app, int w, int h, float 0)
 
+// Mach-O launcher boot (docs/research/macho-launcher.md, "Boot sequence")
+constexpr uintptr_t kFnAppPlatformCtor = 0x10045F678;      // AppPlatform::AppPlatform(), sets the singleton
+constexpr uintptr_t kBaseAppPlatformVtable = 0x100E649C0;  // vptr value of the base AppPlatform
+constexpr uintptr_t kAppPlatformSingleton = 0x100F5E850;
+constexpr uintptr_t kAppPlatformSize = 0x210;              // AppPlatform_iOS; the base object is 360 bytes
+constexpr uintptr_t kFnMinecraftClientCtor = 0x10006E2DC;  // (this, int argc, char **argv)
+constexpr uintptr_t kMinecraftClientSize = 0x428;
+constexpr uintptr_t kFnAppInit = 0x1000555BC;              // App::init(AppContext &)
+constexpr uintptr_t kFnGraphicsVendor = 0x10003A850;       // std::string from glGetString(GL_VENDOR)
+constexpr uintptr_t kFnGraphicsRenderer = 0x10003A8AC;
+constexpr uintptr_t kFnGraphicsVersion = 0x10003A680;
+constexpr uintptr_t kFnGraphicsExtensions = 0x10003A908;
+constexpr int kAppSlotUpdate = 19;                         // App::update()
+// Seams (hooked by the launcher)
+constexpr uintptr_t kFnXblAppConfig = 0x100798B34;         // Xbox services config singleton (seam #3)
+
 }  // namespace addr
