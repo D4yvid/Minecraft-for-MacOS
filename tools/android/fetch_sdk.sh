@@ -7,7 +7,7 @@
 # publishes. Packages already present are kept. Nothing goes into the repository.
 set -euo pipefail
 SDK="${1:-$HOME/Library/Android/sdk}"
-BASE=https://dl.google.com/android/repository
+BASE="${FETCH_SDK_BASE:-https://dl.google.com/android/repository}"
 # path in the SDK | archive | sha1 | top-level directory in the archive
 PACKAGES=(
   "ndk/27.3.13750724|android-ndk-r27d-darwin.zip|2970926d705988f79baa9b04c51b4f7914dd8c56|android-ndk-r27d"
@@ -16,16 +16,18 @@ PACKAGES=(
   "system-images/android-28/default/arm64-v8a|sys-img/android/arm64-v8a-28_r02.zip|e209114dd0dfc2f4e0d328f5fd7367fec39ee1bd|arm64-v8a"
   "system-images/android-37.0/google_apis_ps16k/arm64-v8a|sys-img/google_apis/arm64-v8a-ps16k-37.0_r07.zip|a661370122e12de2a9d81da44c838511b3c89277|arm64-v8a"
 )
+# Tests replace the list (space-separated entries) and the base URL.
+if [ -n "${FETCH_SDK_PACKAGES:-}" ]; then read -r -a PACKAGES <<<"$FETCH_SDK_PACKAGES"; fi
 mkdir -p "$SDK"
 for p in "${PACKAGES[@]}"; do
   IFS='|' read -r dest archive sha top <<<"$p"
   if [ -e "$SDK/$dest" ]; then echo "fetch_sdk: $dest present"; continue; fi
   TMP="$(mktemp -d "$SDK/.fetch.XXXXXX")"
   echo "fetch_sdk: downloading $archive"
-  curl -fsSL -o "$TMP/a.zip" "$BASE/$archive"
+  curl -fsSL -o "$TMP/a.zip" "$BASE/$archive" || { rm -rf "$TMP"; echo "fetch_sdk: cannot download $archive" >&2; exit 1; }
   GOT="$(shasum -a 1 "$TMP/a.zip" | awk '{print $1}')"
   [ "$GOT" = "$sha" ] || { rm -rf "$TMP"; echo "fetch_sdk: $archive checksum mismatch ($GOT, expected $sha)" >&2; exit 1; }
-  unzip -q "$TMP/a.zip" -d "$TMP/x"
+  unzip -q "$TMP/a.zip" -d "$TMP/x" || { rm -rf "$TMP"; echo "fetch_sdk: $archive does not unpack" >&2; exit 1; }
   [ -d "$TMP/x/$top" ] || { rm -rf "$TMP"; echo "fetch_sdk: $archive has no $top/" >&2; exit 1; }
   mkdir -p "$(dirname "$SDK/$dest")"
   mv "$TMP/x/$top" "$SDK/$dest"

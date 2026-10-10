@@ -163,6 +163,28 @@ android-apk: android
 	@test -n "$(APK)" || { echo "Set APK=<your Minecraft PE 0.15.10 .apk> (or put it in config.mk)"; exit 1; }
 	NDK="$(NDK)" bash android/tools/build_apk.sh "$(APK)" "$(dir $(ANDROID_LIB))" "$(ANDROID_APK)"
 
+# ---------------------------------------------------------------- Android launcher (Stage 3)
+# The iOS image on Android arm64 (docs/LAUNCHER.md): NDK r27d, target SDK 37, minimum API 28,
+# 16 KB pages. `make android-sdk` downloads the toolchain once (~4 GB, pinned, checksummed).
+ANDROID_SDK ?= $(HOME)/Library/Android/sdk
+NDK64 ?= $(ANDROID_SDK)/ndk/27.3.13750724
+NDK64_BIN := $(NDK64)/toolchains/llvm/prebuilt/darwin-x86_64/bin
+ACC := $(NDK64_BIN)/aarch64-linux-android28-clang
+ACXX := $(NDK64_BIN)/aarch64-linux-android28-clang++
+ANDROID_LDFLAGS := -Wl,-z,max-page-size=16384
+LLVM_RUNTIMES ?= $(CURDIR)/$(BUILD)/llvm-runtimes
+API ?= 37
+
+.PHONY: android-sdk llvm-runtimes android-emulator android-emulator-stop
+android-sdk:
+	bash tools/android/fetch_sdk.sh "$(ANDROID_SDK)"
+llvm-runtimes:
+	bash tools/android/fetch_llvm_runtimes.sh "$(LLVM_RUNTIMES)"
+android-emulator:
+	ANDROID_SDK="$(ANDROID_SDK)" bash tools/android/emulator.sh start $(API)
+android-emulator-stop:
+	ANDROID_SDK="$(ANDROID_SDK)" bash tools/android/emulator.sh stop
+
 # ---------------------------------------------------------------- local game files
 # make game-files IOS=<minecraftpe2.ipa|.app> [APK_IN=<0.15.10 .apk>] [IDA=1]
 game-files:
@@ -299,6 +321,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	$(MAKE) --no-print-directory $(AUDIO_PROVIDER) $(BUILD)/test/audio_toolbox_test && $(BUILD)/test/audio_toolbox_test $(AUDIO_PROVIDER) && MCFM_AUDIO_DISABLE=1 $(BUILD)/test/audio_toolbox_test $(AUDIO_PROVIDER)
 	bash tools/tests/launcher_provider_test.sh
 	bash tools/tests/fetch_angle_test.sh
+	bash tools/tests/fetch_sdk_test.sh
 	$(MAKE) --no-print-directory $(BUILD)/test/screenshot_test && $(BUILD)/test/screenshot_test "$$(mktemp -d)/shot.ppm"
 	bash tools/tests/no_game_files_test.sh
 	bash tools/tests/setup_game_files_test.sh
