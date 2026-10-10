@@ -87,11 +87,18 @@ $(LAUNCHER_BIN): macos/launcher/main.cpp shared/apple/macho_uuid.cpp shared/appl
 	  -Wl,-rpath,@executable_path -o $@
 
 LAUNCHER_OUT ?= $(CURDIR)/dist/launcher
+ANGLE_DIR ?= $(CURDIR)/$(BUILD)/angle
+
+.PHONY: angle
+# Downloads ANGLE once (pinned Electron release, ~130 MB); see tools/launcher/fetch_angle.sh.
+angle:
+	bash tools/launcher/fetch_angle.sh "$(ANGLE_DIR)"
 
 .PHONY: launcher launcher-check
 launcher: $(LAUNCHER_BIN)
 	@test -n "$(GAME)" || { echo "Set GAME=<your decrypted minecraftpe2.app> (or put it in config.mk)"; exit 1; }
-	bash macos/tools/make_launcher.sh "$(GAME)" "$(LAUNCHER_OUT)" "$(LAUNCHER_BIN)"
+	@test -f "$(ANGLE_DIR)/libGLESv2.dylib" || { echo "Run make angle first (downloads ANGLE)"; exit 1; }
+	bash macos/tools/make_launcher.sh "$(GAME)" "$(LAUNCHER_OUT)" "$(LAUNCHER_BIN)" "$(ANGLE_DIR)"
 
 # Loads the image built by make launcher; the census lists every stub the game called.
 launcher-check:
@@ -189,6 +196,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/mcfm_launch_test.sh
 	bash tools/tests/launcher_hooks_test.sh
 	bash tools/tests/launcher_provider_test.sh
+	bash tools/tests/fetch_angle_test.sh
 	bash tools/tests/no_game_files_test.sh
 	bash tools/tests/setup_game_files_test.sh
 
