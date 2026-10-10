@@ -25,6 +25,20 @@ Status legend: ☐ to do · ◐ in progress · ☑ done.
   hosts would need CPU emulation (out of scope).
 - **Users supply a decrypted IPA.** We never redistribute Mojang files (`no_game_files_test`).
 - Xbox Live / Realms do not work in these copies anyway: stubbed to "signed out / offline".
+- CLI only for now: no launcher UI; the IPA is imported by `make` targets.
+
+## Patch policy
+We control every import binding and may patch any call site (addresses are only valid for
+0.15.10 behind the LC_UUID guard), so anything outside the engine is replaced or dropped:
+
+| Component | Policy |
+|---|---|
+| iOS glue (view controller, `AppPlatform_iOS`, EAGL, keyboard view, game controllers) | never run; our launcher and AppPlatform replace it |
+| FMOD | kept; its AudioToolbox imports bind to **our wrappers** with the same API, which do the platform call (CoreAudio, AAudio, …) — no code patch. Includes AudioQueue/AudioFile if the census shows them used |
+| Microsoft account, Xbox Live, TCUI, telemetry HTTP | **dropped**: seams #3/#4 patched to "signed out"/no-op, imports stubbed; their code stays in the image unused |
+| HTTP (seam #1) | patched: "no network" first, our own client later if something needs it |
+| Store (seam #2) | patched: "no products" |
+| Every other framework import | stub (log first call, return failure/empty) |
 
 ## Architecture
 
@@ -62,13 +76,12 @@ Let dyld do the loading so we can focus on the platform layer, the boot and rend
    commit): functions log `mcfm: unimplemented <lib>:<symbol>` once and return 0/NULL; data
    symbols are zeroed; ObjC classes the image subclasses (`UIViewController`, `UIView`, …) are
    empty `NSObject` subclasses. Test: every import of the reference list resolves.
-   **Decision needed**: for frameworks macOS also has (Foundation, CoreFoundation, Security,
-   CFNetwork, AudioToolbox, …), either bind to the real ones (faster; Xbox/HTTP glue may just
-   work) or stub them too (Stage 1 then already proves the "no Apple frameworks" claim).
-   Recommendation: stub everything except libSystem, libc++, libobjc and libz, and fix the
-   seams instead — it is what every other host needs anyway.
-3. ☐ **GL**: bind the 84 engine `gl*` imports to ANGLE (GLES 3 on Metal). ANGLE builds or
-   prebuilt binaries are the open question; shaders ship as GLSL ES in the game data.
+   **Decided 2026-10-10**: stub every framework, including those macOS also has; only
+   libSystem, libc++, libobjc and libz bind to the host. Stage 1 thereby proves the binary runs
+   without Apple frameworks.
+3. ☐ **GL**: bind the 84 engine `gl*` imports to ANGLE (GLES 3 on Metal). **Decided**: prebuilt
+   ANGLE binaries, fetched by a script into a git-ignored folder (pinned version + checksum).
+   Shaders ship as GLSL ES in the game data.
 4. ☐ **Our AppPlatform**: call the base ctor `0x10045F678` on a 360+ byte object, then set the
    vptr to our own vtable: a copy of the base vtable `0x100E649C0` with our overrides (Win10
    edition, UI scaling rules, input mode, pointer show/hide, keyboard, paths, …). This is
@@ -83,12 +96,13 @@ Let dyld do the loading so we can focus on the platform layer, the boot and rend
    image by patching the call sites or the target entry points.
 7. ☐ **Input**: reuse `shared/` keyboard/mouse (it writes the engine's `Keyboard`/`Mouse`
    queues directly) and pointer capture.
-8. ☐ **Audio**: FMOD's output uses a RemoteIO AudioUnit (iOS only) and `AudioSession*`: shim
-   `AudioComponentFindNext` to the macOS default output and stub the session calls.
+8. ☐ **Audio**: FMOD's output uses a RemoteIO AudioUnit and `AudioSession*`: our AudioToolbox
+   wrappers implement the subset it calls (RemoteIO → CoreAudio default output; session calls
+   succeed) — the same wrapper API is reimplemented on AAudio for Android.
 9. ☐ **Runtime census**: play a session (menus, world creation, gameplay, chat, settings) and
    collect every `unimplemented` log line → the real shim list for Stages 2–3.
 
-Acceptance: `make launcher` builds `dist/MinecraftPE.app` (no Catalyst, no UIKit) that
+Acceptance: `make launcher IPA=…` (CLI, no UI) builds `dist/MinecraftPE.app` (no Catalyst, no UIKit) that
 reaches the title screen and plays a world with keyboard, mouse, sound and resizing; `make
 test` covers the image prep, the stub tables and every AppPlatform slot.
 
@@ -143,9 +157,12 @@ Acceptance: an APK that installs on Android 6+ arm64, imports a user-supplied IP
 - Our own renderer behind the `gl*` imports ([research/renderer.md](research/renderer.md)).
 - Module system on top of the launcher's platform layer (HANDOFF §6.3).
 
+## Decisions
+- 2026-10-10: Android targets SDK 28 (sideload only).
+- 2026-10-10: Stage 1 stubs every framework (host: libSystem, libc++, libobjc, libz only).
+- 2026-10-10: ANGLE from prebuilt binaries, fetched into a git-ignored folder.
+- 2026-10-10: CLI only; the IPA goes through `make` targets, no launcher UI for now.
+- 2026-10-10: Microsoft account, Xbox Live, TCUI and telemetry are dropped (see Patch policy).
+
 ## Open decisions (owner)
-- Stage 1 binding policy for frameworks macOS also has (see Stage 1.2).
-- ANGLE: build from source or use prebuilt binaries? Where do they live (git-ignored, fetched
-  by a script)?
-- How users supply the IPA: the launcher imports it (needs an IPA picker) or `make` targets only.
 - Keep the Catalyst build after Stage 1 (iOS mod path) or retire it for macOS.
