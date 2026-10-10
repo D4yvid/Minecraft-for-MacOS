@@ -27,6 +27,10 @@ struct EngineFns {
 
 void set_host_info(const HostInfo &info);
 
+// The storage layout AppPlatform_iOS builds from its Documents directory: worlds and options in
+// <documents>/games/com.mojang/ (minecraftWorlds/, minecraftpe/), as in the Catalyst build.
+HostInfo make_host_info(const std::string &documents_dir, const std::string &data_dir, const std::string &temp_dir);
+
 // The engine opens / closes a text box (AppPlatform slots 9 showKeyboard, 10 hideKeyboard).
 struct KeyboardCallbacks {
   void (*show)(const std::string &initial_text);

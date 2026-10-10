@@ -100,17 +100,20 @@ bool load_egl(const std::string &dir, Egl *e) {
 }
 
 HostInfo host_info(const std::string &game_data_dir) {
+  NSFileManager *fm = NSFileManager.defaultManager;
   NSString *base = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/MinecraftPE-mcfm"];
-  HostInfo info;
-  info.data_dir = game_data_dir;
-  info.external_dir = std::string(base.UTF8String) + "/external";
-  info.internal_dir = std::string(base.UTF8String) + "/internal";
-  info.userdata_dir = std::string(base.UTF8String) + "/userdata";
-  info.temp_dir = std::string(base.UTF8String) + "/tmp";
-  for (const std::string &d : {info.external_dir, info.internal_dir, info.userdata_dir, info.temp_dir})
-    [[NSFileManager defaultManager] createDirectoryAtPath:@(d.c_str()) withIntermediateDirectories:YES attributes:nil error:nil];
-  info.region = "en_US";
-  info.device_id = "mcfm-launcher";
+  std::string root = base.UTF8String;
+  HostInfo info = make_host_info(root, game_data_dir, root + "/tmp");
+  for (const std::string &d : {info.internal_dir, info.userdata_dir, info.temp_dir})
+    [fm createDirectoryAtPath:@(d.c_str()) withIntermediateDirectories:YES attributes:nil error:nil];
+  // Launchers before 2026-10-10 (Stage 1c) wrote "<root>/userdata<name>" (missing '/'): move
+  // those worlds and options to where the game looks now.
+  for (NSString *name in @[ @"minecraftWorlds", @"minecraftpe" ]) {
+    NSString *old_path = [base stringByAppendingPathComponent:[@"userdata" stringByAppendingString:name]];
+    NSString *new_path = [@(info.userdata_dir.c_str()) stringByAppendingPathComponent:name];
+    if ([fm fileExistsAtPath:old_path] && ![fm fileExistsAtPath:new_path] && [fm moveItemAtPath:old_path toPath:new_path error:nil])
+      std::printf("mcfm: moved %s to %s\n", old_path.UTF8String, new_path.UTF8String);
+  }
   return info;
 }
 

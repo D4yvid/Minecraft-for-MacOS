@@ -57,6 +57,12 @@ int main() {
   EXPECT(call<int>(vt, 99) == 0);
   call<void>(vt, 18);
   call<void, void *>(vt, 25, nullptr);
+  // Storage layout as AppPlatform_iOS builds it from Documents: the engine appends names
+  // ("minecraftWorlds", "minecraftpe") straight to the user-data path, so it ends with '/'.
+  HostInfo h = make_host_info("/S", "/game/data/", "/S/tmp");
+  EXPECT(h.external_dir == "/S" && h.internal_dir == "/S/internal");
+  EXPECT(h.userdata_dir == "/S/games/com.mojang/" && h.temp_dir == "/S/tmp");
+  EXPECT(h.data_dir == "/game/data/" && h.region == "en_US" && !h.device_id.empty());
   if (fails) { std::printf("%d failure(s)\n", fails); return 1; }
   std::printf("launcher_app_platform_test: all passed\n");
   return 0;

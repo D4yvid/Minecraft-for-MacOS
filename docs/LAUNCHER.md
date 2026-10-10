@@ -197,7 +197,8 @@ Acceptance: an APK that installs on Android 6+ arm64, imports a user-supplied IP
   process that executes modified signed pages); runtime writes go only to the hook table.
 - 2026-10-10 (Stage 1b): launcher storage is `~/Library/Application Support/MinecraftPE-mcfm/`,
   separate from the Catalyst build's worlds in `~/Documents/games/com.mojang` (sharing them is a
-  later decision).
+  later decision). Layout as AppPlatform_iOS builds it from Documents (Stage 1c fix): worlds and
+  options in `<root>/games/com.mojang/` (`make_host_info`); older misnamed folders are moved.
 - 2026-10-10: CLI only; the IPA goes through `make` targets, no launcher UI for now.
 - 2026-10-10: Microsoft account, Xbox Live, TCUI and telemetry are dropped (see Patch policy).
 - 2026-10-10: the Mac Catalyst build stays as a deprecated build mode (`make catalyst`,

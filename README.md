@@ -36,7 +36,7 @@ make run
 `make app` builds the **Mach-O launcher** ([docs/LAUNCHER.md](docs/LAUNCHER.md)): the iOS
 game runs in a plain macOS window with no Catalyst and no Apple framework inside the game.
 Turn speed: `MCFM_LOOK_SCALE=1.5 make run` (raw mouse, no acceleration). Launcher worlds live in
-`~/Library/Application Support/MinecraftPE-mcfm/`.
+`~/Library/Application Support/MinecraftPE-mcfm/games/com.mojang/` (same layout as iOS).
 
 The previous **Mac Catalyst** build is deprecated but kept: `make catalyst`,
 `make catalyst-check`, `make catalyst-run`.

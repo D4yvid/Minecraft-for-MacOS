@@ -65,6 +65,18 @@ void hide_keyboard(void *self) {
 
 void set_host_info(const HostInfo &info) { host() = info; }
 
+HostInfo make_host_info(const std::string &documents_dir, const std::string &data_dir, const std::string &temp_dir) {
+  HostInfo info;
+  info.data_dir = data_dir;
+  info.external_dir = documents_dir;                         // iOS +408: Documents
+  info.internal_dir = documents_dir + "/internal";           // iOS +456
+  info.userdata_dir = documents_dir + "/games/com.mojang/";  // iOS +480 (engine appends names)
+  info.temp_dir = temp_dir;
+  info.region = "en_US";
+  info.device_id = "mcfm-launcher";
+  return info;
+}
+
 void set_keyboard_callbacks(const KeyboardCallbacks &cb) { keyboard_callbacks() = cb; }
 
 void build_vtable(void **out, void *const *base, const EngineFns &fns) {
