@@ -70,6 +70,20 @@ int main() {
   std::vector<uint8_t> junk(4096, 0);
   EXPECT(!parse_macho(junk.data(), junk.size(), &m, &err));
   EXPECT(!parse_macho(s.b.data(), 16, &m, &err));
+  // Hostile segment tables (never mapped): file part larger than the segment, wrapping
+  // addresses, sections outside their segment.
+  Builder big = sample();
+  big.put<uint64_t>(32 + 72 + 80 * 2 + 48, 0x5000);  // __DATA filesize 0x5000 > vmsize 0x4000
+  err.clear();
+  EXPECT(!parse_macho(big.b.data(), big.b.size(), &m, &err) && err.find("filesize") != std::string::npos);
+  Builder wrap = sample();
+  wrap.put<uint64_t>(32 + 24, 0xFFFFFFFFFFFFF000ull);  // __TEXT vmaddr + vmsize wraps
+  err.clear();
+  EXPECT(!parse_macho(wrap.b.data(), wrap.b.size(), &m, &err) && !err.empty());
+  Builder outside = sample();
+  outside.put<uint64_t>(32 + 72 + 32, 0x200000000ull);  // __text section addr outside __TEXT
+  err.clear();
+  EXPECT(!parse_macho(outside.b.data(), outside.b.size(), &m, &err) && err.find("section") != std::string::npos);
   // Chained fixups are recognised (and refused later by the loader).
   Builder c = sample();
   size_t at = c.begin(0x80000034, 16);

@@ -1,7 +1,9 @@
 #!/bin/bash
 # usage: loader_fixture.sh <outdir>
 # A converted image exercising the loader: lazy and GOT binds, a data import with an addend, a
-# weak definition libc++ also exports (operator new), an initializer, a C++ exception thrown and caught inside the image, and a hookable function.
+# weak definition libc++ also exports (operator new), an initializer (which throws and catches and
+# calls the hooked function with its argc), a C++ exception thrown and caught inside the image,
+# and a hookable function.
 # Builds <outdir>/fixture (iOS-tagged executable), <outdir>/libminecraftpe.dylib (converted,
 # signed, hooked: fixture_answer), stubs, and <outdir>/symbols.txt (unslid addresses).
 set -euo pipefail
@@ -23,8 +25,16 @@ extern "C" char kFakeKitValue[16];
 // A weak operator new: libc++ exports one too, so (as under dyld) libc++'s wins.
 __attribute__((weak)) void *operator new(std::size_t n) { void *p = std::malloc(n ? n : 1); if (!p) throw std::bad_alloc(); return p; }
 static int initialized = 0;
-__attribute__((constructor)) static void fixture_init() { initialized = 7 + fakekit_hello() - 1; }
+extern "C" __attribute__((used)) int fixture_init_answer = 0;
+extern "C" __attribute__((noinline, used)) int fixture_answer(int x);
 __attribute__((noinline)) static void deep(int n) { if (n == 0) throw std::runtime_error("boom"); std::string s(40, 'x'); deep(n - 1); }
+// Runs before load_image returns: unwinding and hooks must already work, and argc arrives.
+__attribute__((constructor)) static void fixture_init(int argc) {
+  int caught = 0;
+  try { deep(2); } catch (const std::runtime_error &) { caught = 1; }
+  initialized = 7 + fakekit_hello() - 1 + (caught ? 0 : 100);
+  fixture_init_answer = fixture_answer(argc);
+}
 extern "C" __attribute__((noinline, used)) int fixture_thrower(void) {
   try { deep(5); } catch (const std::runtime_error &e) { return 35 + initialized + (std::string(e.what()) == "boom" ? 0 : 100); }
   return -1;

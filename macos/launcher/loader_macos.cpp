@@ -19,7 +19,8 @@ struct UnwindSections {
   uintptr_t compact_unwind_section;
   size_t compact_unwind_section_length;
 };
-extern "C" int __unw_add_find_dynamic_unwind_sections(int (*)(uintptr_t, UnwindSections *));
+// Weak: libunwind has it from macOS 14 on; earlier systems get a clear error, not a crash.
+extern "C" int __unw_add_find_dynamic_unwind_sections(int (*)(uintptr_t, UnwindSections *)) __attribute__((weak_import));
 
 struct Range { uintptr_t lo, hi; UnwindSections sections; };
 constexpr int kMaxImages = 8;
@@ -46,13 +47,18 @@ uint8_t *MacLoaderOS::reserve(size_t size) {
   return p == MAP_FAILED ? nullptr : static_cast<uint8_t *>(p);
 }
 
-bool MacLoaderOS::register_code_signature(int fd, uint64_t offset, uint64_t size) {
+bool MacLoaderOS::register_code_signature(int fd, uint64_t offset, uint64_t size, uint64_t mapped_end) {
   fsignatures_t sig = {};
   sig.fs_file_start = 0;
   sig.fs_blob_start = reinterpret_cast<void *>(offset);
   sig.fs_blob_size = static_cast<size_t>(size);
   if (fcntl(fd, F_ADDFILESIGS_RETURN, &sig) == -1) {
     perror("mcfm: F_ADDFILESIGS_RETURN");
+    return false;
+  }
+  // On return fs_file_start is the end of the file range the signature covers.
+  if (static_cast<uint64_t>(sig.fs_file_start) < mapped_end) {
+    log("the code signature does not cover every mapped segment");
     return false;
   }
   return true;
@@ -88,13 +94,14 @@ void *MacLoaderOS::symbol(void *library, const std::string &name) { return dlsym
 
 void *MacLoaderOS::flat_symbol(const std::string &name) { return dlsym(RTLD_DEFAULT, name.c_str()); }
 
-void MacLoaderOS::register_unwind(uintptr_t header, uintptr_t text_lo, uintptr_t text_hi, uintptr_t compact_unwind,
+bool MacLoaderOS::register_unwind(uintptr_t header, uintptr_t text_lo, uintptr_t text_hi, uintptr_t compact_unwind,
                                   size_t compact_size, uintptr_t eh_frame, size_t eh_size) {
   std::lock_guard<std::mutex> hold(g_lock);
-  if (g_count == kMaxImages) return;
-  if (g_count == 0) __unw_add_find_dynamic_unwind_sections(find_sections);
+  if (g_count == kMaxImages || !__unw_add_find_dynamic_unwind_sections) return false;
+  if (g_count == 0 && __unw_add_find_dynamic_unwind_sections(find_sections) != 0) return false;
   UnwindSections s = {header, eh_frame, eh_size, compact_unwind, compact_size};
   g_ranges[g_count++] = Range{text_lo, text_hi, s};
+  return true;
 }
 
 void MacLoaderOS::log(const std::string &line) { std::fprintf(stderr, "mcfm: %s\n", line.c_str()); }

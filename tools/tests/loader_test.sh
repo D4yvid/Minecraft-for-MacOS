@@ -22,9 +22,10 @@ make -s build/test/loader_core_test >/dev/null || { echo "FAIL: build loader_cor
 build/test/loader_core_test "$T/libminecraftpe.dylib" "$T/symbols.txt" || fails=$((fails+1))
 # 3. On macOS for real: signed mapping, symbols, unwind; the fixture's code runs. The
 #    initializer sets 7 + fakekit_hello() - 1 = 6 (the FakeKit stub returns 0), so the
-#    exception path returns 35 + 6; the hook answers 1000 + x.
+#    exception path returns 35 + 6; the hook answers 1000 + x. The initializer itself catches an
+#    exception and calls the hooked function with argc (3): 1003.
 make -s build/test/loader_run >/dev/null || { echo "FAIL: build loader_run"; exit 1; }
 RUN="$(build/test/loader_run "$T/libminecraftpe.dylib" "$T/symbols.txt" 2>&1)" || { echo "FAIL: loader_run: $RUN"; fails=$((fails+1)); }
-grep -qx "thrower=41 answer=1005" <<<"$RUN" || { echo "FAIL: fixture code under our loader: $RUN"; fails=$((fails+1)); }
+grep -qx "thrower=41 answer=1005 init_answer=1003" <<<"$RUN" || { echo "FAIL: fixture code under our loader: $RUN"; fails=$((fails+1)); }
 grep -qx "operator_new=libc++" <<<"$RUN" || { echo "FAIL: operator new not libc++'s: $RUN"; fails=$((fails+1)); }
 [ $fails = 0 ] && echo "loader_test: passed" || { echo "$fails failure(s)"; exit 1; }

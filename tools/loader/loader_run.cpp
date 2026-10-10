@@ -40,6 +40,8 @@ int main(int argc, char **argv) {
   opts.hook_addresses = hooks;
   opts.hook_replacements = replacements;
   opts.hook_count = 1;
+  opts.argc = argc;
+  opts.argv = const_cast<const char **>(argv);
   Image img;
   std::string err;
   if (!load_image(os, fd, file.data(), file.size(), opts, &img, &err)) {
@@ -48,7 +50,8 @@ int main(int argc, char **argv) {
   }
   auto thrower = reinterpret_cast<int (*)()>(symbol_address(argv[2], "_fixture_thrower") + img.slide);
   auto answer = reinterpret_cast<int (*)(int)>(symbol_address(argv[2], "_fixture_answer") + img.slide);
-  std::printf("thrower=%d answer=%d\n", thrower(), answer(5));
+  auto init_answer = reinterpret_cast<int *>(symbol_address(argv[2], "_fixture_init_answer") + img.slide);
+  std::printf("thrower=%d answer=%d init_answer=%d\n", thrower(), answer(5), *init_answer);
   // operator new: the weak-bound slots must hold libc++'s.
   std::vector<Fixup> fx;
   decode_fixups(file.data(), file.size(), img.macho, &fx, &err);

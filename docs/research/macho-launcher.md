@@ -213,7 +213,8 @@ main-thread jobs → `update()` → present".
   `fcntl(F_ADDFILESIGS_RETURN)` runs its code, as dyld does. ✅ (spike, then `make check`)
 - **Exceptions**: libunwind's `__unw_add_find_dynamic_unwind_sections` (exported by
   `/usr/lib/system/libunwind.dylib`) serves the image's compact unwind for addresses in its
-  `__TEXT`; C++ exceptions thrown and caught inside the image work. ✅ (fixture test)
+  `__TEXT`; C++ exceptions thrown and caught inside the image work. ✅ (fixture test) It exists
+  from macOS 14 on, so the launcher weak-imports it and refuses to load without it.
 - **`dyld_info -fixups` is wrong for weak binds**: it prints them with stale symbol names carried
   over from the previous stream (fixture slot `0x100004058`: `kFakeKitValue + 0x8` instead of
   `__ZTISt12length_error`). On the game that rebound lazy-pointer slots to unrelated symbols in

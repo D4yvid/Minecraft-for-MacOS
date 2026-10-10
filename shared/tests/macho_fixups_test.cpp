@@ -1,6 +1,7 @@
 // decode_fixups / find_export on crafted opcode streams (dyld's LC_DYLD_INFO format).
 #include "fixups.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -112,6 +113,10 @@ int main() {
       {"rebase into read-only __TEXT", Bytes{}, Bytes{0x11, 0x20, 0x00, 0x51, 0x00}},
       {"truncated uleb", Bytes{0x71, 0x80}, Bytes{}},
       {"unterminated symbol", Bytes{0x40, 'a', 'b'}, Bytes{}},
+      {"uleb128 wider than 64 bits", Bytes{0x71, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F, 0x90, 0x00}, Bytes{}},
+      {"dylib ordinal beyond the dylib list", Bytes{0x20, 0x81, 0x80, 0x80, 0x80, 0x10, 0x40} + str("_x") + Bytes{0x71, 0x10, 0x90, 0x00}, Bytes{}},
+      {"bind type other than pointer", Bytes{0x11, 0x40} + str("_x") + Bytes{0x52, 0x71, 0x10, 0x90, 0x00}, Bytes{}},
+      {"rebase type other than pointer", Bytes{}, Bytes{0x12, 0x21, 0x10, 0x51, 0x00}},
   };
   for (const Bad &b : bad) {
     Image im;
@@ -120,6 +125,21 @@ int main() {
     err.clear();
     bool ok = im.decode(&f, &err);
     if (ok || err.empty()) std::printf("FAIL: %s accepted\n", b.what), fails++;
+  }
+  {  // SLEB128 at the sign bit (10 bytes, the smallest int64) decodes without overflow
+    Image im;
+    im.bind(Bytes{0x11, 0x40} + str("_m") + Bytes{0x51, 0x60, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x7F, 0x71, 0x10, 0x90, 0x00});
+    EXPECT(im.decode(&f, &err) && f.size() == 1 && f[0].addend == INT64_MIN);
+  }
+  {  // export flags are reported (re-export 0x8); a terminal size past the trie is not followed
+    Image im;
+    im.exports(Bytes{0x00, 0x01} + str("_r") + Bytes{6} + Bytes{0x03, 0x08, 0x01, 0x00});
+    uint64_t off = 0;
+    uint32_t flags = 0;
+    EXPECT(find_export(im.file.data(), im.file.size(), im.m, "_r", &off, &flags) && flags == 0x8);
+    Image bad;
+    bad.exports(Bytes{0x7F, 0x01} + str("_r") + Bytes{6});
+    EXPECT(!find_export(bad.file.data(), bad.file.size(), bad.m, "_r", &off, &flags));
   }
   {  // export trie: root -> "_a" (0x100), "_bc" (0x200)
     Image im;

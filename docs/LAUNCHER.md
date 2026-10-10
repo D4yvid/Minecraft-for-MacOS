@@ -143,13 +143,20 @@ Plan: [superpowers/plans/2026-10-10-loader-stage2.md](superpowers/plans/2026-10-
    after registering its code signature (`F_ADDFILESIGS_RETURN`, as dyld does); Android will copy
    into anonymous memory and `mprotect` (Stage 3).
 2. ☑ Imports through `LoaderOS` (macOS: `dlopen`/`dlsym` of the host libraries, stubs and
-   providers); weak binds coalesce host-first like dyld (`operator new/delete` → libc++).
+   providers); weak binds coalesce host-first like dyld (`operator new/delete` → libc++), then
+   fall back to the image's own export. Ordinal -1 (flat) searches every loaded library; a
+   missing weak-linked library binds its symbols to 0. Refused with a message: thread-local
+   variables, self-binds to re-exports/absolute/resolver symbols, initializers outside
+   `__TEXT`, an unsigned image where signing is required, or a signature that does not cover
+   the mapped segments.
 3. ☑ The 3,972 static initializers run in order (`__mod_init_func`; `__init_offsets` also
    supported); ObjC metadata gets no runtime.
 4. ☑ **Exceptions**: `__unw_add_find_dynamic_unwind_sections` points libunwind at the image's
-   `__unwind_info`/`__eh_frame` (fixture test: thrown 5 frames deep, caught inside the image).
-5. ☑ The LC_UUID guard runs on the file before mapping; the loader returns the slide, verifies
-   and fills the hook table itself.
+   `__unwind_info`/`__eh_frame` (fixture test: thrown 5 frames deep, caught inside the image,
+   also from an initializer). Needs macOS 14+; on older systems the load fails with a message.
+5. ☑ The LC_UUID guard runs on the file before mapping and again on the mapped header before any
+   fixup; the loader returns the slide, verifies and fills the hook table itself (errors name
+   the hook), and passes argc/argv/envp to initializers.
 
 Acceptance (met 2026-10-10): `make loader-check` loads the game with dyld and with our loader in
 one process and finds every one of its 95,676 fixup locations equal (3 `strcmp`/`strncmp`

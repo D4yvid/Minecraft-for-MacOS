@@ -31,4 +31,16 @@ for h in $LHEADERS; do
   if make -q "$LBIN" 2>/dev/null; then echo "FAIL: mcfm-launch not rebuilt after editing $h"; fails=$((fails+1)); fi
   setmtime $((T - 10)) "$h"
 done
+# loader-check: every loader source and header must make it stale.
+make -s build/launcher/loader-check >/dev/null || { echo "FAIL: cannot build loader-check"; exit 1; }
+CBIN=build/launcher/loader-check
+CSRCS="$(git ls-files 'shared/loader/*.cpp' 'shared/loader/*.h' 'shared/apple/hook_table.*' 'macos/launcher/loader_macos.*')"
+setmtime $((T - 10)) $CSRCS
+setmtime "$T" "$CBIN"
+make -q "$CBIN" 2>/dev/null || { echo "FAIL: loader-check out of date with no edits"; fails=$((fails+1)); }
+for f in $CSRCS; do
+  setmtime $((T + 2)) "$f"
+  if make -q "$CBIN" 2>/dev/null; then echo "FAIL: loader-check not rebuilt after editing $f"; fails=$((fails+1)); fi
+  setmtime $((T - 10)) "$f"
+done
 [ $fails = 0 ] && echo "makefile_deps_test: passed" || { echo "$fails failure(s)"; exit 1; }

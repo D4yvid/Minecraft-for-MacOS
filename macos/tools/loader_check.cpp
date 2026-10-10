@@ -53,14 +53,6 @@ int main(int argc, char **argv) {
     }
   if (!found) { std::fprintf(stderr, "loader-check: dyld image not found\n"); return 1; }
 
-  uint64_t lo = UINT64_MAX, hi = 0;
-  for (const Segment &s : ours.macho.segments)
-    if (s.vmsize) { lo = std::min(lo, s.vmaddr); hi = std::max(hi, s.vmaddr + s.vmsize); }
-  auto unslide = [&](uint64_t v, intptr_t slide, uint64_t *out) {
-    uint64_t u = v - static_cast<uint64_t>(slide);
-    if (u >= lo && u < hi) { *out = u; return true; }
-    return false;
-  };
   std::vector<Fixup> fx;
   decode_fixups(file.data(), file.size(), ours.macho, &fx, &err);
   std::set<uint64_t> locations;
@@ -73,14 +65,12 @@ int main(int argc, char **argv) {
   }
   size_t differences = 0, same_library = 0, stub_binder = 0;
   for (uint64_t addr : locations) {
-    uint64_t a, b, ua, ub;
+    uint64_t a, b;
     std::memcpy(&a, reinterpret_cast<void *>(addr + ours.slide), 8);
     std::memcpy(&b, reinterpret_cast<void *>(addr + dyld_slide), 8);
     if (a == b) continue;
     // Rebased the same way: each loader added its own slide (incl. tagged values, high bits set).
     if (a - static_cast<uint64_t>(ours.slide) == b - static_cast<uint64_t>(dyld_slide)) continue;
-    (void)ua;
-    (void)ub;
     auto sym = bound_symbol.find(addr);
     // dyld's lazy-binding helper: we bind every pointer eagerly, it is never called.
     if (sym != bound_symbol.end() && sym->second == "dyld_stub_binder") { stub_binder++; continue; }
@@ -89,9 +79,13 @@ int main(int argc, char **argv) {
     dladdr(reinterpret_cast<void *>(b), &ib);
     // The same import from the same library through another entry point: libsystem_platform
     // exports strcmp/strncmp both as the plain implementation (what dlsym returns) and as a
-    // dispatching entry (what linked code gets). Same function, same library.
-    if (sym != bound_symbol.end() && ia.dli_fname && ib.dli_fname && std::strcmp(ia.dli_fname, ib.dli_fname) == 0) {
+    // dispatching entry (what linked code gets). Same function, same library. Only these two
+    // symbols; each accepted location is printed.
+    if (sym != bound_symbol.end() && (sym->second == "_strcmp" || sym->second == "_strncmp") && ia.dli_fname &&
+        ib.dli_fname && std::strcmp(ia.dli_fname, ib.dli_fname) == 0) {
       same_library++;
+      std::printf("accepted at 0x%llx: %s, ours %s dyld %s in %s\n", (unsigned long long)addr, sym->second.c_str(),
+                  ia.dli_sname ? ia.dli_sname : "?", ib.dli_sname ? ib.dli_sname : "?", ia.dli_fname);
       continue;
     }
     if (differences++ < 20) {

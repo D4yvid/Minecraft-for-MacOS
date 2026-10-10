@@ -74,6 +74,8 @@ bool parse_macho(const uint8_t *data, size_t size, MachOFile *out, std::string *
       uint32_t nsects = rd<uint32_t>(c + 64);
       if (72 + uint64_t(nsects) * 80 > cmdsize) return fail(error, "segment " + s.name + ": sections past cmdsize");
       if (!within(s.fileoff, s.filesize, size)) return fail(error, "segment " + s.name + " past the end of the file");
+      if (s.filesize > s.vmsize) return fail(error, "segment " + s.name + ": filesize larger than vmsize");
+      if (s.vmaddr + s.vmsize < s.vmaddr) return fail(error, "segment " + s.name + ": address range wraps");
       for (uint32_t k = 0; k < nsects; k++) {
         const uint8_t *x = c + 72 + 80 * k;
         Section sec;
@@ -83,6 +85,8 @@ bool parse_macho(const uint8_t *data, size_t size, MachOFile *out, std::string *
         sec.size = rd<uint64_t>(x + 40);
         sec.offset = rd<uint32_t>(x + 48);
         sec.flags = rd<uint32_t>(x + 64);
+        if (sec.addr < s.vmaddr || sec.addr + sec.size < sec.addr || sec.addr + sec.size > s.vmaddr + s.vmsize)
+          return fail(error, "section " + sec.segment + "," + sec.name + " outside its segment");
         s.sections.push_back(sec);
       }
       out->segments.push_back(s);

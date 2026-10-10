@@ -6,6 +6,7 @@
 #import <AppKit/AppKit.h>
 #import <QuartzCore/CAMetalLayer.h>
 
+#include <crt_externs.h>
 #include <dlfcn.h>
 #include <unistd.h>
 #include <mach-o/dyld.h>
@@ -293,27 +294,41 @@ HostInfo host_info(const std::string &game_data_dir) {
 
 namespace {
 
-bool load_with_our_loader(const std::string &path) {
+bool load_with_our_loader(const std::string &path, int argc, char **argv) {
   std::ifstream f(path, std::ios::binary);
   std::vector<uint8_t> file((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
   int fd = open(path.c_str(), O_RDONLY);
-  if (fd < 0 || file.empty()) { std::fprintf(stderr, "mcfm: cannot load %s: unreadable\n", path.c_str()); return false; }
+  if (fd < 0 || file.empty()) {
+    if (fd >= 0) close(fd);
+    std::fprintf(stderr, "mcfm: cannot load %s: unreadable\n", path.c_str());
+    return false;
+  }
   size_t n = 0;
   const Hook *h = hooks(&n);
   std::vector<uintptr_t> addresses;
   std::vector<const void *> replacements;
+  std::vector<const char *> names;
   for (size_t i = 0; i < n; i++) {
     addresses.push_back(h[i].address);
     replacements.push_back(h[i].replacement);
+    names.push_back(h[i].name);
   }
   static mcfm::loader::MacLoaderOS os(executable_dir());
   mcfm::loader::LoadOptions opts;
   opts.hook_addresses = addresses.data();
   opts.hook_replacements = replacements.data();
+  opts.hook_names = names.data();
   opts.hook_count = n;
+  opts.argc = argc;
+  opts.argv = const_cast<const char **>(argv);
+  opts.envp = const_cast<const char **>(*_NSGetEnviron());
+  // The file was checked before; check again what was actually mapped, before anything runs.
+  opts.accept_header = [](const uint8_t *header) { return mcfm::is_expected_game_image(header); };
   mcfm::loader::Image image;
   std::string error;
-  if (!mcfm::loader::load_image(os, fd, file.data(), file.size(), opts, &image, &error)) {
+  bool loaded = mcfm::loader::load_image(os, fd, file.data(), file.size(), opts, &image, &error);
+  close(fd);  // the mappings keep the file
+  if (!loaded) {
     std::fprintf(stderr, "mcfm: cannot load %s with our loader: %s\n", path.c_str(), error.c_str());
     return false;
   }
@@ -403,7 +418,7 @@ int main(int argc, char **argv) {
   }
   if (loader == "own") {
     // Our Mach-O loader (shared/loader): maps, binds, fills the hook table, runs initializers.
-    if (!load_with_our_loader(path)) return 2;
+    if (!load_with_our_loader(path, argc, argv)) return 2;
   } else {
     _dyld_register_func_for_add_image(on_add_image);
     if (!dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL)) { std::fprintf(stderr, "mcfm: cannot load %s: %s\n", path.c_str(), dlerror()); return 2; }

@@ -1,5 +1,7 @@
 #include "fixups.h"
 
+#include <cstring>
+
 namespace mcfm {
 namespace loader {
 namespace {
@@ -16,6 +18,7 @@ enum : uint8_t {
   kBindDoUlebTimesSkipping = 0xC0, kBindThreaded = 0xD0,
 };
 constexpr uint32_t kFlagWeakImport = 0x1, kFlagNonWeakDefinition = 0x8;
+constexpr uint8_t kTypePointer = 1;  // REBASE_TYPE_POINTER / BIND_TYPE_POINTER
 constexpr uint32_t kProtWrite = 0x2;
 
 struct Reader {
@@ -33,23 +36,26 @@ struct Reader {
     for (int shift = 0; shift < 64; shift += 7) {
       if (p >= end) return bad("truncated uleb128"), 0;
       uint8_t b = *p++;
+      if (shift == 63 && (b & 0x7E)) return bad("uleb128 too big"), 0;  // only bit 63 fits
       v |= uint64_t(b & 0x7F) << shift;
       if (!(b & 0x80)) return v;
     }
     return bad("uleb128 too long"), 0;
   }
-  int64_t sleb() {
-    int64_t v = 0;
+  int64_t sleb() {  // unsigned arithmetic: no signed-shift overflow at the sign bit
+    uint64_t v = 0;
     int shift = 0;
     uint8_t b;
     do {
       if (p >= end || shift >= 64) return bad("truncated sleb128"), 0;
       b = *p++;
-      v |= int64_t(b & 0x7F) << shift;
+      v |= uint64_t(b & 0x7F) << shift;
       shift += 7;
     } while (b & 0x80);
-    if (shift < 64 && (b & 0x40)) v |= -(int64_t(1) << shift);
-    return v;
+    if (shift < 64 && (b & 0x40)) v |= ~uint64_t(0) << shift;
+    int64_t r;
+    std::memcpy(&r, &v, sizeof r);
+    return r;
   }
   std::string cstring() {
     const uint8_t *s = p;
@@ -93,7 +99,9 @@ struct Decoder {
       uint8_t b = r.byte(), op = b & kOpcodeMask, imm = b & kImmMask;
       switch (op) {
         case kRebaseDone: return r.ok;
-        case kRebaseSetType: break;
+        case kRebaseSetType:
+          if (imm != kTypePointer) return r.bad("rebase type other than pointer");
+          break;
         case kRebaseSetSegOff: seg = imm; o = r.uleb(); break;
         case kRebaseAddAddrUleb: o += r.uleb(); break;
         case kRebaseAddAddrImmScaled: o += uint64_t(imm) * 8; break;
@@ -135,13 +143,20 @@ struct Decoder {
           if (kind != FixupKind::LazyBind) return r.ok;
           break;
         case kBindOrdinalImm: ordinal = imm; break;
-        case kBindOrdinalUleb: ordinal = static_cast<int>(r.uleb()); break;
+        case kBindOrdinalUleb: {
+          uint64_t o2 = r.uleb();
+          if (o2 > m.dylibs.size()) return r.bad("bind dylib ordinal beyond the dylib list");
+          ordinal = static_cast<int>(o2);
+          break;
+        }
         case kBindOrdinalSpecial: ordinal = imm ? static_cast<int>(int8_t(kOpcodeMask | imm)) : 0; break;
         case kBindSymbol:
           symbol = r.cstring();
           flags = imm;
           break;
-        case kBindSetType: break;
+        case kBindSetType:
+          if (imm != kTypePointer) return r.bad("bind type other than pointer");
+          break;
         case kBindAddendSleb: addend = r.sleb(); break;
         case kBindSetSegOff: seg = imm; o = r.uleb(); break;
         case kBindAddAddrUleb: o += r.uleb(); break;
@@ -172,6 +187,7 @@ struct Decoder {
   void bind(Reader &r, FixupKind kind, int seg, uint64_t o, int ordinal, const std::string &symbol, int64_t addend,
             uint32_t flags) {
     if (symbol.empty()) { r.bad("bind without a symbol"); return; }
+    if (ordinal > static_cast<int>(m.dylibs.size())) { r.bad("bind dylib ordinal beyond the dylib list"); return; }
     if (kind == FixupKind::WeakBind && (flags & kFlagNonWeakDefinition)) return;  // a strong definition, no slot
     emit(r, kind, seg, o, ordinal, symbol, addend, (flags & kFlagWeakImport) != 0);
   }
@@ -214,7 +230,7 @@ bool find_export(const uint8_t *file, size_t size, const MachOFile &m, const std
     Reader r(trie + node, trie_end, nullptr);
     if (node >= d.export_size) return false;
     uint64_t terminal = r.uleb();
-    if (!r.ok) return false;
+    if (!r.ok || terminal > static_cast<uint64_t>(trie_end - r.p)) return false;
     const uint8_t *children = r.p + terminal;
     if (matched == symbol.size()) {
       if (terminal == 0) return false;
