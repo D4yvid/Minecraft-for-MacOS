@@ -3,7 +3,16 @@
 // (real Darwin) the transcript is the reference; on Android, loaded by mcfm-run with the Darwin
 // layer and the Apple-ABI runtime, it must be identical (tools/tests/android_launcher_test.sh).
 // No addresses, pids, times or paths in the output. Works in the current directory.
+#include <arpa/inet.h>
 #include <dirent.h>
+#include <ifaddrs.h>
+#include <net/if.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <poll.h>
+#include <sys/select.h>
+#include <sys/socket.h>
 #include <errno.h>
 #include <signal.h>
 #include <sys/mman.h>
@@ -350,6 +359,162 @@ void part3_mach_blocks_dispatch() {
   LINE("dyld add-image callback saw an image %d", g_images_seen);
 }
 
+// A loopback TCP round trip for one family: listen on port 0, read the port back, connect, echo.
+void tcp_echo(int family) {
+  const char *name = family == AF_INET ? "v4" : "v6";
+  int server = socket(family, SOCK_STREAM, IPPROTO_TCP);
+  int one = 1;
+  setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+  sockaddr_storage ss;
+  memset(&ss, 0, sizeof ss);
+  socklen_t len;
+  if (family == AF_INET) {
+    sockaddr_in *a = reinterpret_cast<sockaddr_in *>(&ss);
+    a->sin_len = sizeof *a;
+    a->sin_family = AF_INET;
+    a->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    len = sizeof *a;
+  } else {
+    sockaddr_in6 *a = reinterpret_cast<sockaddr_in6 *>(&ss);
+    a->sin6_len = sizeof *a;
+    a->sin6_family = AF_INET6;
+    a->sin6_addr = in6addr_loopback;
+    len = sizeof *a;
+  }
+  int b = bind(server, reinterpret_cast<sockaddr *>(&ss), len);
+  int l = listen(server, 4);
+  sockaddr_storage bound;
+  socklen_t blen = sizeof bound;
+  getsockname(server, reinterpret_cast<sockaddr *>(&bound), &blen);
+  LINE("tcp %s bind %d listen %d getsockname family ok %d len %d sa_len %d", name, b, l, bound.ss_family == family, blen,
+       bound.ss_len);
+  int client = socket(family, SOCK_STREAM, 0);
+  int c = connect(client, reinterpret_cast<sockaddr *>(&bound), blen);
+  sockaddr_storage peer;
+  socklen_t plen = sizeof peer;
+  int accepted = accept(server, reinterpret_cast<sockaddr *>(&peer), &plen);
+  LINE("tcp %s connect %d accept ok %d peer family ok %d", name, c, accepted >= 0, peer.ss_family == family);
+  setsockopt(client, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
+  int nodelay = 0;
+  socklen_t olen = sizeof nodelay;
+  getsockopt(client, IPPROTO_TCP, TCP_NODELAY, &nodelay, &olen);
+  int type = 0;
+  olen = sizeof type;
+  getsockopt(client, SOL_SOCKET, SO_TYPE, &type, &olen);
+  LINE("tcp %s nodelay %d type %d", name, nodelay != 0, type);
+  send(client, "ping", 4, 0);
+  char buf[16] = {0};
+  fd_set readable;
+  FD_ZERO(&readable);
+  FD_SET(accepted, &readable);
+  timeval tv = {2, 0};
+  int ready = select(accepted + 1, &readable, nullptr, nullptr, &tv);
+  ssize_t n = recv(accepted, buf, sizeof buf, 0);
+  LINE("tcp %s select %d recv %zd %s", name, ready, n, buf);
+  send(accepted, "pong", 4, 0);
+  pollfd pfd = {client, POLLIN, 0};
+  int polled = poll(&pfd, 1, 2000);
+  n = recv(client, buf, sizeof buf, 0);
+  LINE("tcp %s poll %d revents in %d recv %zd %.4s", name, polled, (pfd.revents & POLLIN) != 0, n, buf);
+  close(accepted);
+  close(client);
+  close(server);
+}
+
+void part4_network() {
+  LINE("== 4 network");
+  tcp_echo(AF_INET);
+  tcp_echo(AF_INET6);
+
+  int a = socket(AF_INET, SOCK_DGRAM, 0), b = socket(AF_INET, SOCK_DGRAM, 0);
+  sockaddr_in addr;
+  memset(&addr, 0, sizeof addr);
+  addr.sin_len = sizeof addr;
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  bind(b, reinterpret_cast<sockaddr *>(&addr), sizeof addr);
+  socklen_t len = sizeof addr;
+  getsockname(b, reinterpret_cast<sockaddr *>(&addr), &len);
+  ssize_t sent = sendto(a, "datagram", 8, 0, reinterpret_cast<sockaddr *>(&addr), sizeof addr);
+  char buf[32] = {0};
+  sockaddr_in from;
+  memset(&from, 0xEE, sizeof from);
+  socklen_t flen = sizeof from;
+  ssize_t got = recvfrom(b, buf, sizeof buf, 0, reinterpret_cast<sockaddr *>(&from), &flen);
+  char text[64];
+  inet_ntop(AF_INET, &from.sin_addr, text, sizeof text);
+  LINE("udp sendto %zd recvfrom %zd %s from %s len %d sa_len %d family %d", sent, got, buf, text, flen, from.sin_len,
+       from.sin_family);
+  close(a);
+  close(b);
+
+  addrinfo hints, *res = nullptr;
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_flags = AI_NUMERICSERV;
+  int r = getaddrinfo("localhost", "80", &hints, &res);
+  int v4 = 0, v6 = 0, consistent = 1;
+  for (addrinfo *ai = res; ai; ai = ai->ai_next) {
+    if (ai->ai_family == AF_INET) v4++;
+    if (ai->ai_family == AF_INET6) v6++;
+    consistent &= ai->ai_addr->sa_family == ai->ai_family && ai->ai_addr->sa_len == ai->ai_addrlen &&
+                  ai->ai_socktype == SOCK_STREAM &&
+                  ntohs(reinterpret_cast<sockaddr_in *>(ai->ai_addr)->sin_port) == 80;
+  }
+  LINE("getaddrinfo localhost %d v4 %d consistent %d", r, v4 > 0, consistent);
+  if (res) freeaddrinfo(res);
+  hints.ai_flags = AI_NUMERICHOST;
+  r = getaddrinfo("::1", nullptr, &hints, &res);
+  LINE("getaddrinfo ::1 %d family v6 %d len %d", r, res && res->ai_family == AF_INET6, res ? res->ai_addrlen : 0);
+  char host[64] = {0}, serv[16] = {0};
+  if (res) {
+    reinterpret_cast<sockaddr_in6 *>(res->ai_addr)->sin6_port = htons(8080);
+    LINE("getnameinfo %d %s %s", getnameinfo(res->ai_addr, res->ai_addrlen, host, sizeof host, serv, sizeof serv,
+                                             NI_NUMERICHOST | NI_NUMERICSERV), host, serv);
+    freeaddrinfo(res);
+  }
+  r = getaddrinfo("not a host name!", nullptr, &hints, &res);
+  LINE("getaddrinfo bad %d %s", r, gai_strerror(r));
+  in6_addr six;
+  LINE("inet_pton v6 %d", inet_pton(AF_INET6, "fe80::1:2", &six));
+  LINE("inet_ntop v6 %s", inet_ntop(AF_INET6, &six, text, sizeof text));
+  hostent *h = gethostbyname("localhost");
+  LINE("gethostbyname %d type %d length %d", h != nullptr, h ? h->h_addrtype : -1, h ? h->h_length : -1);
+
+  int pair = socket(AF_INET, SOCK_STREAM, 0);
+  int one = 1;
+  LINE("SO_NOSIGPIPE %d", setsockopt(pair, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one));
+  int server = socket(AF_INET, SOCK_STREAM, 0);
+  addr.sin_port = 0;
+  bind(server, reinterpret_cast<sockaddr *>(&addr), sizeof addr);
+  listen(server, 1);
+  len = sizeof addr;
+  getsockname(server, reinterpret_cast<sockaddr *>(&addr), &len);
+  connect(pair, reinterpret_cast<sockaddr *>(&addr), sizeof addr);
+  close(accept(server, nullptr, nullptr));
+  usleep(50000);
+  ssize_t w = 0;
+  for (int k = 0; k < 200 && w >= 0; k++) {  // the peer is gone: EPIPE once its reset arrives, no signal
+    w = write(pair, "x", 1);
+    if (w >= 0) usleep(5000);
+  }
+  LINE("write to closed peer %zd errno %d (EPIPE %d)", w, errno, EPIPE);
+  close(pair);
+  close(server);
+
+  ifaddrs *ifs = nullptr;
+  int loopback = 0;
+  LINE("getifaddrs %d", getifaddrs(&ifs));
+  for (ifaddrs *i = ifs; i; i = i->ifa_next)
+    if (i->ifa_addr && i->ifa_addr->sa_family == AF_INET && (i->ifa_flags & IFF_LOOPBACK) &&
+        reinterpret_cast<sockaddr_in *>(i->ifa_addr)->sin_addr.s_addr == htonl(INADDR_LOOPBACK) &&
+        i->ifa_addr->sa_len == sizeof(sockaddr_in) && (i->ifa_flags & IFF_UP) && if_nametoindex(i->ifa_name) > 0)
+      loopback = 1;
+  freeifaddrs(ifs);
+  LINE("getifaddrs loopback 127.0.0.1 %d", loopback);
+}
+
 }  // namespace
 
 // part 0: all parts. Returns 0.
@@ -357,6 +522,7 @@ extern "C" int conformance_main(int part) {
   if (part == 0 || part == 1) part1_stdio_errno();
   if (part == 0 || part == 2) part2_files_system_signals();
   if (part == 0 || part == 3) part3_mach_blocks_dispatch();
+  if (part == 0 || part == 4) part4_network();
   fflush(stdout);
   return 0;
 }

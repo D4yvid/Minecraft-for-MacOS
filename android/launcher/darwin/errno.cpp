@@ -87,3 +87,10 @@ extern "C" void mcfm_darwin_perror(const char *s) {
   if (s && *s) fprintf(stderr, "%s: %s\n", s, message);
   else fprintf(stderr, "%s\n", message);
 }
+
+// getaddrinfo's error texts, by Darwin EAI_* code (the game gets Darwin's codes).
+extern "C" const char *mcfm_darwin_gai_strerror(int code) {
+  if (code >= 0 && code < static_cast<int>(sizeof kDarwin_gai_strerror / sizeof kDarwin_gai_strerror[0]))
+    return kDarwin_gai_strerror[code];
+  return "Unknown error";
+}

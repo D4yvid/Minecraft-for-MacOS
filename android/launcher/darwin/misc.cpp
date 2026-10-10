@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
@@ -58,5 +59,10 @@ void mcfm_darwin_OSMemoryBarrier(void) { __sync_synchronize(); }
 
 // 64-bit bionic has no bzero (POSIX removed it).
 void mcfm_darwin_bzero(void *p, size_t n) { memset(p, 0, n); }
+
+// Newer Darwin SDKs' FD_SET/FD_ISSET check the descriptor through this (not the 2016 game's).
+int mcfm_darwin___darwin_check_fd_set_overflow(int fd, const void *, int unlimited) {
+  return unlimited || (fd >= 0 && fd < FD_SETSIZE);
+}
 
 }  // extern "C"

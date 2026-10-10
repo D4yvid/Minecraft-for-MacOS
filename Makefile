@@ -223,7 +223,7 @@ $(MCFM_RUN): android/launcher/run.cpp android/launcher/loader_android.cpp androi
 	$(ACXX) $(RT_CXXFLAGS) -Ishared/loader -Ishared/apple -Iandroid/launcher android/launcher/run.cpp \
 	  android/launcher/loader_android.cpp $(LOADER_SRCS) $(RT_LDFLAGS) -ldl -o $@
 
-ANDROID_TESTS := pthread_test runtime_test files_test
+ANDROID_TESTS := pthread_test runtime_test files_test net_test
 .PHONY: android-test
 # Needs a running emulator or device (make android-emulator).
 android-test: $(addprefix $(ALAUNCH_OUT)/tests/,$(ANDROID_TESTS)) $(MCFM_RUN)

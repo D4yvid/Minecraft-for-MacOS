@@ -24,6 +24,7 @@ int mcfm_darwin___signbitf(float);
 void mcfm_darwin___assert_rtn(const char *, const char *, int, const char *);
 void mcfm_darwin_OSMemoryBarrier(void);
 void mcfm_darwin_bzero(void *, size_t);
+int mcfm_darwin___darwin_check_fd_set_overflow(int, const void *, int);
 int mcfm_darwin_asprintf(char **, const char *, ...);
 int mcfm_darwin_fcntl(int, int, ...);
 int mcfm_darwin_fprintf(FILE *, const char *, ...);
@@ -73,6 +74,16 @@ int mcfm_darwin_kevent(int, const void *, int, void *, int, const void *);
 void *mcfm_darwin_hash_create(int);
 void *mcfm_darwin_hash_search(void *, const void *, int, void *, void *);
 void mcfm_darwin__dyld_register_func_for_add_image(void (*)(const void *, intptr_t));
+// net.cpp (pointer-typed here: only the addresses are used)
+void mcfm_darwin_accept(void); void mcfm_darwin_bind(void); void mcfm_darwin_close(void); void mcfm_darwin_connect(void);
+void mcfm_darwin_freeaddrinfo(void); void mcfm_darwin_freehostent(void); void mcfm_darwin_freeifaddrs(void);
+void mcfm_darwin_gai_strerror(void); void mcfm_darwin_getaddrinfo(void); void mcfm_darwin_gethostbyaddr(void);
+void mcfm_darwin_gethostbyname(void); void mcfm_darwin_getifaddrs(void); void mcfm_darwin_getipnodebyname(void);
+void mcfm_darwin_getnameinfo(void); void mcfm_darwin_getpeername(void); void mcfm_darwin_getsockname(void);
+void mcfm_darwin_getsockopt(void); void mcfm_darwin_inet_ntop(void); void mcfm_darwin_inet_pton(void);
+void mcfm_darwin_poll(void); void mcfm_darwin_recv(void); void mcfm_darwin_recvfrom(void); void mcfm_darwin_recvmsg(void);
+void mcfm_darwin_send(void); void mcfm_darwin_sendmsg(void); void mcfm_darwin_sendto(void);
+void mcfm_darwin_setsockopt(void); void mcfm_darwin_socket(void); void mcfm_darwin_write(void);
 extern uintptr_t mcfm_darwin_stack_chk_guard;
 }
 
@@ -101,6 +112,7 @@ const Export kExports[] = {
     R("_Unwind_Resume")
     S("__assert_rtn", mcfm_darwin___assert_rtn)
     B("__cxa_atexit")
+    S("__darwin_check_fd_set_overflow", mcfm_darwin___darwin_check_fd_set_overflow)
     S("__error", mcfm_darwin___error)
     B("__memcpy_chk")
     B("__memmove_chk")
@@ -118,6 +130,7 @@ const Export kExports[] = {
     S("_dispatch_main_q", &mcfm_darwin_dispatch_main_q)
     S("_dyld_register_func_for_add_image", mcfm_darwin__dyld_register_func_for_add_image)
     B("abort")
+    S("accept", mcfm_darwin_accept)
     B("access")
     B("acos")
     B("acosf")
@@ -129,11 +142,13 @@ const Export kExports[] = {
     B("atanf")
     B("atof")
     B("atoi")
+    S("bind", mcfm_darwin_bind)
     S("bzero", mcfm_darwin_bzero)
     B("calloc")
     B("clock")
-    B("close")
+    S("close", mcfm_darwin_close)
     S("closedir", mcfm_darwin_closedir)
+    S("connect", mcfm_darwin_connect)
     B("cos")
     B("cosf")
     B("difftime")
@@ -165,6 +180,9 @@ const Export kExports[] = {
     B("fputs")
     B("fread")
     B("free")
+    S("freeaddrinfo", mcfm_darwin_freeaddrinfo)
+    S("freehostent", mcfm_darwin_freehostent)
+    S("freeifaddrs", mcfm_darwin_freeifaddrs)
     B("frexp")
     S("fscanf", mcfm_darwin_fscanf)
     B("fseek")
@@ -174,10 +192,22 @@ const Export kExports[] = {
     B("ftell")
     B("ftello")
     B("fwrite")
+    S("gai_strerror", mcfm_darwin_gai_strerror)
+    S("getaddrinfo", mcfm_darwin_getaddrinfo)
     B("getenv")
     B("geteuid")
+    S("gethostbyaddr", mcfm_darwin_gethostbyaddr)
+    S("gethostbyname", mcfm_darwin_gethostbyname)
+    B("gethostname")
+    S("getifaddrs", mcfm_darwin_getifaddrs)
+    S("getipnodebyname", mcfm_darwin_getipnodebyname)
+    S("getnameinfo", mcfm_darwin_getnameinfo)
     S("getpagesize", mcfm_darwin_getpagesize)
+    S("getpeername", mcfm_darwin_getpeername)
     B("getpid")
+    B("getservbyname")
+    S("getsockname", mcfm_darwin_getsockname)
+    S("getsockopt", mcfm_darwin_getsockopt)
     B("gettimeofday")
     B("getuid")
     B("gmtime")
@@ -186,12 +216,19 @@ const Export kExports[] = {
     S("hash_search", mcfm_darwin_hash_search)
     S("host_page_size", mcfm_darwin_host_page_size)
     S("host_statistics", mcfm_darwin_host_statistics)
+    B("if_indextoname")
+    B("if_nametoindex")
+    B("in6addr_any")
+    B("in6addr_loopback")
     B("inet_addr")
     B("inet_ntoa")
+    S("inet_ntop", mcfm_darwin_inet_ntop)
+    S("inet_pton", mcfm_darwin_inet_pton)
     S("ioctl", mcfm_darwin_ioctl)
     S("kevent", mcfm_darwin_kevent)
     S("kqueue", mcfm_darwin_kqueue)
     B("ldexp")
+    B("listen")
     B("localtime")
     B("localtime_r")
     B("log")
@@ -218,6 +255,7 @@ const Export kExports[] = {
     S("opendir", mcfm_darwin_opendir)
     S("perror", mcfm_darwin_perror)
     B("pipe")
+    S("poll", mcfm_darwin_poll)
     B("pow")
     B("powf")
     B("pread")
@@ -263,20 +301,30 @@ const Export kExports[] = {
     S("readdir", mcfm_darwin_readdir)
     S("readdir_r", mcfm_darwin_readdir_r)
     B("realloc")
+    S("recv", mcfm_darwin_recv)
+    S("recvfrom", mcfm_darwin_recvfrom)
+    S("recvmsg", mcfm_darwin_recvmsg)
     B("remove")
     B("rename")
     B("rmdir")
     B("sched_yield")
+    B("select")
     S("semaphore_create", mcfm_darwin_semaphore_create)
     S("semaphore_destroy", mcfm_darwin_semaphore_destroy)
     S("semaphore_signal", mcfm_darwin_semaphore_signal)
     S("semaphore_wait", mcfm_darwin_semaphore_wait)
+    S("send", mcfm_darwin_send)
+    S("sendmsg", mcfm_darwin_sendmsg)
+    S("sendto", mcfm_darwin_sendto)
+    S("setsockopt", mcfm_darwin_setsockopt)
+    B("shutdown")
     S("sigaction", mcfm_darwin_sigaction)
     S("signal", mcfm_darwin_signal)
     B("sin")
     B("sinf")
     B("sleep")
     S("snprintf", mcfm_darwin_snprintf)
+    S("socket", mcfm_darwin_socket)
     S("sprintf", mcfm_darwin_sprintf)
     B("srand")
     S("sscanf", mcfm_darwin_sscanf)
@@ -320,7 +368,7 @@ const Export kExports[] = {
     B("usleep")
     S("vfprintf", mcfm_darwin_vfprintf)
     S("vsnprintf", mcfm_darwin_vsnprintf)
-    B("write")
+    S("write", mcfm_darwin_write)
 };
 
 #undef S

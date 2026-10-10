@@ -271,6 +271,10 @@ static void messages(void) {
     printf("\",\n");
   }
   printf("};\n");
+  // gai_strerror() texts by Darwin EAI_* code (1..14).
+  printf("static const char *const kDarwin_gai_strerror[15] = {\n");
+  for (int e = 0; e <= 14; e++) printf("  \"%s\",\n", gai_strerror(e));
+  printf("};\n");
 }
 
 int main(int argc, char **argv) {

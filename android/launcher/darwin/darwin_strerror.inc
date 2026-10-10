@@ -110,3 +110,20 @@ static const char *const kDarwin_strerror[108] = {
   "Interface output queue is full",
   "Capabilities insufficient",
 };
+static const char *const kDarwin_gai_strerror[15] = {
+  "Unknown error",
+  "Address family for nodename not supported",
+  "Temporary failure in name resolution",
+  "Invalid value for ai_flags",
+  "Non-recoverable failure in name resolution",
+  "ai_family not supported",
+  "Memory allocation failure",
+  "No address associated with nodename",
+  "nodename nor servname provided, or not known",
+  "servname not supported for ai_socktype",
+  "ai_socktype not supported",
+  "System error",
+  "Bad hints",
+  "ai_protocol not supported",
+  "argument buffer overflow",
+};
