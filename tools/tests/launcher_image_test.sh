@@ -51,4 +51,15 @@ elif [ $rc = 0 ]; then
 else
   echo "FAIL: tight header: exit $rc"; fails=$((fails+1))
 fi
+# Load commands that must grow past the padding (8 one-letter install names -> long stub
+# paths) -> refused with "header padding", nothing written.
+mkdir -p "$T/grow"
+for i in 1 2 3 4 5 6 7 8; do
+  echo "int f$i(void){return $i;}" > "$T/grow/l$i.c"
+  clang -arch arm64 -mmacosx-version-min=11.0 -dynamiclib "$T/grow/l$i.c" -install_name "/l$i" -o "$T/grow/l$i.dylib"
+done
+printf 'int f1(void),f2(void),f3(void),f4(void),f5(void),f6(void),f7(void),f8(void);\nint main(void){return f1()+f2()+f3()+f4()+f5()+f6()+f7()+f8();}\n' > "$T/grow/m.c"
+clang -arch arm64 -mmacosx-version-min=11.0 -Wl,-headerpad,0 -Wl,-no_fixup_chains "$T/grow/m.c" "$T"/grow/l*.dylib -o "$T/grow/m" 2>/dev/null
+"${TOOL[@]}" dylib "$T/grow/m" "$T/grow/out.dylib" 2>"$T/err"; rc=$?
+{ [ $rc = 2 ] && grep -q "header padding" "$T/err" && [ ! -e "$T/grow/out.dylib" ]; } || { echo "FAIL: overflowing header not refused (rc $rc)"; fails=$((fails+1)); }
 [ $fails = 0 ] && echo "launcher_image_test: passed" || { echo "$fails failure(s)"; exit 1; }
