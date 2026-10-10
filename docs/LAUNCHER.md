@@ -163,8 +163,8 @@ one process and finds every one of its 95,676 fixup locations equal (3 `strcmp`/
 entry-point variants and `dyld_stub_binder` accepted explicitly); the owner played a world with
 our loader; fixture tests cover fixups, imports, initializers, exceptions and hooks.
 
-## Stage 3 — Android ☐
-1. ☐ **Target the latest Android: SDK 37 (Android 17), 16 KB pages**; minimum API 28 (the
+## Stage 3 — Android (3a ☑, 3b ☐, 3c ☐)
+1. ☑ **Target the latest Android: SDK 37 (Android 17), 16 KB pages**; minimum API 28 (the
    oldest image we test). Prebuilt APKs, not on Google Play (its policy forbids running code
    that did not come from Play, i.e. the user's IPA). From target SDK 29 an app may not map its
    own files executable, so the loader copies each segment into anonymous memory and
@@ -172,7 +172,11 @@ our loader; fixture tests cover fixups, imports, initializers, exceptions and ho
    Split: **3a** load the game and run its initializers on Android (loader, libc translation,
    Apple-ABI libc++, stubs; command-line test over adb); **3b** engine boot, EGL/GLES, audio;
    **3c** APK, `NativeActivity`, input, text, IPA import.
-2. ☐ **libc translation layer** (Darwin ABI → bionic), the large item:
+2. ☑ **libc translation layer** (Darwin ABI → bionic), `android/launcher/darwin/`: every
+   libSystem symbol the game imports is in one sorted table (`symbols.cpp`: shimmed, bionic's,
+   or the runtime's); numbers and layouts come from `darwin_abi.h`, generated from the macOS
+   SDK. A conformance fixture (`tools/tests/darwin_conformance.cpp`, Darwin code built on the
+   Mac) prints the same transcript on the Mac and on Android. Covered:
    - struct layouts: `stat`/`fstat`/`lstat`, `dirent`/`readdir`, `pthread_*_t` sizes and
      static initializers (`PTHREAD_MUTEX_INITIALIZER` signatures), `locale_t`;
    - stdio globals `__stderrp`/`__stdinp`, `FILE*` used only opaquely ❓;
@@ -184,14 +188,21 @@ our loader; fixture tests cover fixups, imports, initializers, exceptions and ho
      `__sincosf_stret`/`__sincos_stret`, `memset_pattern16`; by libraries: `mach_*`
      time/semaphores, `dispatch_*`, `kqueue`, `OSMemoryBarrier`, blocks, CommonCrypto (only
      needed if the Xbox/telemetry code runs — it shouldn't).
-3. ☐ **libc++** built for Android with ABI v1 + `_LIBCPP_ABI_ALTERNATE_STRING_LAYOUT`,
-   exporting the symbol names the binary imports (285); plus libc++abi and libunwind with
-   compact unwind support.
+3. ☑ **libc++** (`libmcfm_runtime.so`, `android/launcher/runtime/`): LLVM 18.1.8 libc++,
+   libc++abi and libunwind with Apple's arm64 ABI (`std::__1`, alternate string layout,
+   NonUniqueARMRTTIBit type_info, Darwin `mbstate_t` and ctype tables, threading over the Darwin
+   pthread layer) and libunwind patched for compact unwind on Android; exports all 285 libc++
+   symbols the game imports.
 4. ☐ GL: native GLES 3 via EGL (or ANGLE on Vulkan); audio: the FMOD AudioToolbox subset on
    AAudio/OpenSL ES.
 5. ☐ Android platform layer: **our own APK** (built from scratch, nothing from Mojang's APK)
    whose activity loads the launcher `.so`; input, text input, file paths, IPA import screen.
    It replaces the old Win10-UI mod that patches Mojang's APK (`android/`, `make android-apk`).
+
+Stage 3a acceptance (met 2026-10-10): `make android-boot-check` loads the converted game with
+`mcfm-run` and all 3,972 initializers run, on Android 17 (16 KB pages) and Android 9 (4 KB);
+`make android-test` (pthread, runtime, files, network unit tests; loader fixture; Darwin
+conformance transcript) is green on both.
 
 Acceptance: an APK (target SDK 37) that installs on Android 9+ arm64, including 16 KB-page
 devices, imports a user-supplied IPA and plays.

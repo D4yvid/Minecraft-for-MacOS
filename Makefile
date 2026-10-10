@@ -223,6 +223,11 @@ $(MCFM_RUN): android/launcher/run.cpp android/launcher/loader_android.cpp androi
 	$(ACXX) $(RT_CXXFLAGS) -Ishared/loader -Ishared/apple -Iandroid/launcher android/launcher/run.cpp \
 	  android/launcher/loader_android.cpp $(LOADER_SRCS) $(RT_LDFLAGS) -ldl -o $@
 
+.PHONY: android-boot-check
+# Stage 3a acceptance on the running emulator/device: the converted game (make app) initializes.
+android-boot-check: $(MCFM_RUN) $(RT_LIB)
+	ANDROID_CC="$(ACC)" bash tools/android/boot_check.sh "$(LAUNCHER_OUT)" "$(ALAUNCH_OUT)"
+
 ANDROID_TESTS := pthread_test runtime_test files_test net_test
 .PHONY: android-test
 # Needs a running emulator or device (make android-emulator).

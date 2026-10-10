@@ -11,7 +11,8 @@ first-class desktop game on Apple Silicon Macs, and share the work with iOS and 
 by modding the shipped engine — never redistributing it. Next goals set by the owner:
 
 0. **Mach-O launcher** — load the iOS binary ourselves, never run its iOS glue, and drive the
-   engine from our own launcher on macOS, then Android (SDK 28) and other arm64 hosts. Plan and
+   engine from our own launcher on macOS, then Android (target SDK 37, our own APK) and other
+   arm64 hosts. Plan and
    status: [LAUNCHER.md](LAUNCHER.md); Stage 0 survey done
    ([research/macho-launcher.md](research/macho-launcher.md)). Goals 1–2 below become parts of it.
 1. **Generic AppPlatform** — our own platform layer instead of patching the iOS/Android ones
@@ -84,6 +85,11 @@ make catalyst-check  # bundle/IPA/UUID tests + 15 s launch — CLOSES a running 
 make catalyst-run
 # The Catalyst build is a deprecated build mode until the launcher replaces it (LAUNCHER.md).
 make android     # libmcfm.so + tests       make android-apk APK=…   make ios-ipa
+# Android launcher (Stage 3): toolchain once, then an emulator (or a device over adb)
+make android-sdk llvm-runtimes   # NDK r27d, adb, emulator, API 37/28 images; LLVM sources
+make android-emulator [API=28]   # boots the API 37 (16 KB pages) or API 28 emulator headless
+make android-test                # runtime, Darwin layer and loader tests on the device
+make android-boot-check          # the converted game (make app) initializes on the device
 ```
 
 ## 4. How it works (beyond ARCHITECTURE.md)
@@ -164,8 +170,11 @@ window render the Win10 Edition title screen. **Stage 1 landed (2026-10-10):** w
 launcher is playable (keyboard, raw mouse, text, sound, no Xbox prompt; the owner played a
 world) and `make app`/`run`/`check` use it. **Stage 2 landed (2026-10-10):** our own Mach-O
 loader (`shared/loader/`, macOS layer `macos/launcher/loader_macos.cpp`) runs the game by default
-and matches dyld on every fixup (`make loader-check`). Next: Stage 3 (Android) per LAUNCHER.md;
-findings in research/macho-launcher.md (Stage 1b/1c sections).
+and matches dyld on every fixup (`make loader-check`). **Stage 3a landed (2026-10-10):** on
+Android 17 and 9 emulators the same loader maps the game and all its initializers run, over a
+Darwin libSystem layer (`android/launcher/darwin/`) and an Apple-ABI libc++ runtime
+(`android/launcher/runtime/`). Next: Stage 3b (engine boot, EGL/GLES, audio) per LAUNCHER.md;
+findings in research/macho-launcher.md and research/android-launcher.md.
 
 ### 6.1 Generic AppPlatform
 Goal: one shared, platform-neutral `AppPlatform` behaviour definition instead of ad-hoc slot

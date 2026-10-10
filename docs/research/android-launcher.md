@@ -86,3 +86,25 @@ By the work a shim does:
   `__DefaultRuneLocale`, `__assert_rtn`, `kqueue`/`kevent`, `hash_create`/`hash_search`,
   `_dyld_register_func_for_add_image`, CommonCrypto (`CC*`, used by the dropped Xbox code),
   `dyld_stub_binder` (0, as on macOS).
+
+## Stage 3a findings (2026-10-10)
+- **The game initializes on Android** (`make android-boot-check`): all 3,972 initializers run
+  on Android 17 (16 KB pages) and Android 9; only `objc_autoreleasePoolPush`/`Pop` stubs are
+  called, as on macOS. ✅
+- **libunwind on a non-Apple target with compact unwind enabled**: the ELF lookup path never
+  sets the compact-section fields of the caller's uninitialized `UnwindInfoSections`; garbage
+  read as a section crashed the first unwind that started in an ELF frame (an exception from
+  the image through bionic's `qsort` or our runtime). Cleared in `patch_llvm.py`. bionic's own
+  frames unwind fine. ✅
+- **`mbstate_t`**: Darwin's is a 128-byte union named `__mbstate_t` (in `std::fpos`, i.e.
+  streampos, and in two of the game's mangled libc++ imports); bionic's is 8 bytes. The runtime
+  claims bionic's header under another name and uses Darwin's type (`__config_site`). ✅
+- libc++ 18's `_LIBCPP_HAS_NO_FILESYSTEM` also removes `<fstream>`: the runtime builds the
+  filesystem sources. ✅
+- **Executables must be 16 KB-aligned** on 16 KB-page Android (a 4 KB-aligned test binary
+  crashed at start). ✅
+- bionic's arm64 libc has no `bzero` and only an inline `getpagesize`; its C locale is named
+  "C.UTF-8", its `EAGAIN` text is "Try again" (Darwin texts are generated); clang folds
+  constructors it can evaluate, so fixture initializers make an external call. ✅
+- The game's `sysctlbyname` names: `hw.machine`, `hw.cputype`, `hw.cpusubtype`,
+  `machdep.cpu.vendor` (answered as an arm64 Darwin device, the last one ENOENT). ✅

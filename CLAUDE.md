@@ -17,7 +17,12 @@ Reverse-engineering notes: docs/research/. Local game files and the IDA database
   user's game).
 - Engine code in the launcher image is patched only at conversion (`mcfm_image.py dylib --hooks`,
   hooks in `shared/launcher/seams.cpp`); never write to its `__TEXT` at runtime.
-- `make android` — NDK r10c under Rosetta; `make android-apk APK=…`
+- `make android` — NDK r10c under Rosetta; `make android-apk APK=…` (the old Win10-UI mod)
+- Android launcher (Stage 3): `make android-sdk llvm-runtimes` once, `make android-emulator`,
+  then `make android-test` / `make android-boot-check` (needs `make app`'s converted game).
+  `android/launcher/darwin/` is the Darwin libSystem layer: Darwin numbers and layouts only
+  from the generated `darwin_abi.h` (`make darwin-abi`), every import in `symbols.cpp` (sorted).
+  Darwin variadic calls pass all variadic arguments on the stack (see `darwin/stdio.c`).
 - `make ios` needs Xcode; without it `make ios-syntax` (part of `make test`) compiles iOS code.
 
 ## Rules
