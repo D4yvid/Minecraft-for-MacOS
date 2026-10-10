@@ -77,6 +77,15 @@ ios-ipa: $(IOS_DYLIB)
 ios-syntax:
 	clang++ $(IOS_CXXFLAGS) -isysroot $(SDK) -Wno-incompatible-sysroot -fsyntax-only $(IOS_SRCS)
 
+# ---------------------------------------------------------------- Mach-O launcher (docs/LAUNCHER.md)
+LAUNCHER_BIN := $(BUILD)/launcher/mcfm-launch
+LAUNCHER_CXXFLAGS := -arch arm64 -mmacosx-version-min=11.0 -std=c++17 -O2 -Wall -Wextra -Ishared/apple
+
+$(LAUNCHER_BIN): macos/launcher/main.cpp shared/apple/macho_uuid.cpp shared/apple/macho_uuid.h
+	@mkdir -p $(dir $@)
+	clang++ $(LAUNCHER_CXXFLAGS) macos/launcher/main.cpp shared/apple/macho_uuid.cpp \
+	  -Wl,-rpath,@executable_path -o $@
+
 # ---------------------------------------------------------------- Android
 # NDK r10c (x86_64 host build; runs under Rosetta on Apple Silicon).
 NDK ?= $(HOME)/Library/Android/ndk/android-ndk-r10c
@@ -152,6 +161,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/launcher_imports_test.sh
 	bash tools/tests/launcher_stubs_test.sh
 	bash tools/tests/launcher_image_test.sh
+	bash tools/tests/mcfm_launch_test.sh
 	bash tools/tests/no_game_files_test.sh
 	bash tools/tests/setup_game_files_test.sh
 
