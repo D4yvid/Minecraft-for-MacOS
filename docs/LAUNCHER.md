@@ -132,24 +132,29 @@ Acceptance (met 2026-10-10): `make app GAME=…` (CLI, no UI) builds `dist/launc
 reaches the title screen and plays a world with keyboard, mouse, sound and resizing; `make
 test` covers the image prep, the stub tables and every AppPlatform slot.
 
-## Stage 2 — our own loader, still on macOS ☐
+## Stage 2 — our own loader, still on macOS ☑ (2026-10-10)
 Replace dyld so the same loader can later run on Android/Linux, debugged where tools are best.
+Plan: [superpowers/plans/2026-10-10-loader-stage2.md](superpowers/plans/2026-10-10-loader-stage2.md).
+`make run`/`check` use it by default; `LOADER=dyld` (`mcfm-launch --loader dyld`) falls back to Apple's.
 
-1. ☐ Parse load commands; `mmap` an anonymous region (`__PAGEZERO` excluded), copy segments in,
-   apply `LC_DYLD_INFO_ONLY` rebase/bind/lazy-bind/weak-bind opcodes, `mprotect` to the segment
-   protections.
-2. ☐ Import resolution through our own symbol table (one table per host), with the stub
-   fallback from Stage 1.
-3. ☐ Run the 3,972 static initializers (`__mod_init_func`) in order; give ObjC metadata no
-   runtime (the glue never runs; `objc_autoreleasePoolPush/Pop` in about 19 initializers are
-   no-op stubs).
-4. ☐ **Exceptions**: make the unwinder find our image's `__unwind_info`/`__eh_frame`
-   (macOS: `__unw_add_find_dynamic_unwind_sections` ❓ availability; otherwise our own
-   LLVM libunwind build). Test: throw and catch across a fixture image.
-5. ☐ Keep the LC_UUID guard: the loader exposes the slide so `addresses_0_15_10.h` keeps working.
+1. ☑ Parse load commands (`shared/loader/macho_file`); reserve the image's range, map each
+   segment, apply the `LC_DYLD_INFO_ONLY` rebase/bind/lazy-bind/weak-bind opcodes decoded by our
+   own decoder (`shared/loader/fixups`). On macOS the segments are mapped from the signed file
+   after registering its code signature (`F_ADDFILESIGS_RETURN`, as dyld does); Android will copy
+   into anonymous memory and `mprotect` (Stage 3).
+2. ☑ Imports through `LoaderOS` (macOS: `dlopen`/`dlsym` of the host libraries, stubs and
+   providers); weak binds coalesce host-first like dyld (`operator new/delete` → libc++).
+3. ☑ The 3,972 static initializers run in order (`__mod_init_func`; `__init_offsets` also
+   supported); ObjC metadata gets no runtime.
+4. ☑ **Exceptions**: `__unw_add_find_dynamic_unwind_sections` points libunwind at the image's
+   `__unwind_info`/`__eh_frame` (fixture test: thrown 5 frames deep, caught inside the image).
+5. ☑ The LC_UUID guard runs on the file before mapping; the loader returns the slide, verifies
+   and fills the hook table itself.
 
-Acceptance: Stage 1's launcher runs the game through our loader; fixture tests (our own
-compiled arm64 Mach-O files) cover fixups, imports, initializers and exceptions.
+Acceptance (met 2026-10-10): `make loader-check` loads the game with dyld and with our loader in
+one process and finds every one of its 95,676 fixup locations equal (3 `strcmp`/`strncmp`
+entry-point variants and `dyld_stub_binder` accepted explicitly); the owner played a world with
+our loader; fixture tests cover fixups, imports, initializers, exceptions and hooks.
 
 ## Stage 3 — Android ☐
 1. ☐ **Target SDK 28** (decided 2026-10-10: 29+ is too restrictive for us and for runet-style
@@ -206,3 +211,6 @@ Acceptance: an APK that installs on Android 6+ arm64, imports a user-supplied IP
   `make app`/`run`/`check` build and run the launcher.
 - 2026-10-10 (Stage 1c): camera look uses raw GameController (`GCMouse`) deltas, without the
   system's pointer acceleration (owner request).
+- 2026-10-10 (Stage 2): our own loader is the default (`LOADER=dyld` keeps Apple's available);
+  its fixups come from our opcode decoder, never from `dyld_info` text (which prints weak binds
+  with stale symbol names).

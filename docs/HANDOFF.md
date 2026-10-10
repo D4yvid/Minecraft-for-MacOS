@@ -77,6 +77,8 @@ make angle           # once: ANGLE from the pinned Electron release (~130 MB dow
 make app             # = launcher: dist/launcher (converted image + stubs + ANGLE + mcfm-launch)
 make run             # = launcher-run: plays the game in a window (MCFM_LOOK_SCALE tunes turning)
 make check           # = launcher-check: renders 120 frames; census in build/launcher/census.txt
+                     #   run/check use our own loader; LOADER=dyld uses Apple's
+make loader-check    # our loader vs dyld on the game: every fixup location compared
 make catalyst        # deprecated Catalyst build; refuses while that game runs
 make catalyst-check  # bundle/IPA/UUID tests + 15 s launch — CLOSES a running Catalyst game
 make catalyst-run
@@ -160,7 +162,9 @@ loads in a plain macOS process with every framework and libobjc stubbed (`make l
 `make launcher-check`). Stage 1b is done: our AppPlatform, the engine boot and an ANGLE/Metal
 window render the Win10 Edition title screen. **Stage 1 landed (2026-10-10):** with 1c the
 launcher is playable (keyboard, raw mouse, text, sound, no Xbox prompt; the owner played a
-world) and `make app`/`run`/`check` use it. Next: Stage 2 (our own loader) per LAUNCHER.md;
+world) and `make app`/`run`/`check` use it. **Stage 2 landed (2026-10-10):** our own Mach-O
+loader (`shared/loader/`, macOS layer `macos/launcher/loader_macos.cpp`) runs the game by default
+and matches dyld on every fixup (`make loader-check`). Next: Stage 3 (Android) per LAUNCHER.md;
 findings in research/macho-launcher.md (Stage 1b/1c sections).
 
 ### 6.1 Generic AppPlatform

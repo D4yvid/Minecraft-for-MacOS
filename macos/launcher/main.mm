@@ -360,7 +360,7 @@ long parse_frames(const char *text) {
 int main(int argc, char **argv) {
   setvbuf(stdout, nullptr, _IOLBF, 0);  // keep progress lines if the engine crashes
   long frames = -1;
-  std::string path, screenshot, loader = "dyld";
+  std::string path, screenshot, loader = "own";  // our Mach-O loader; --loader dyld for Apple's
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
     if (a == "--print-hooks") {

@@ -9,7 +9,9 @@ Reverse-engineering notes: docs/research/. Local game files and the IDA database
 - `make test` — all host tests (no game files). Run before every commit.
 - `make app` / `check` / `run` (= `launcher` / `launcher-check` / `launcher-run`) — the macOS
   build: the Mach-O launcher (docs/LAUNCHER.md); needs `make angle` once (downloads ANGLE).
-  `check` renders 120 frames; stub census in build/launcher/census.txt.
+  `check` renders 120 frames; stub census in build/launcher/census.txt. The game runs on our own
+  Mach-O loader (`shared/loader/`, C++11, platform-free behind `LoaderOS`); `LOADER=dyld` uses
+  Apple's. `make loader-check` compares both on the game's fixups (keep it at 0 differences).
 - `make catalyst` / `catalyst-check` / `catalyst-run` — the **deprecated** Mac Catalyst build;
   `catalyst-check` launches it for 15 s (`make catalyst` refuses while it runs — don't kill the
   user's game).

@@ -28,4 +28,8 @@ runs check "--frames 120";                   deprecated check no
 runs app "pgrep -x mcfm-launch"
 runs check "pgrep -x mcfm-launch"
 runs run "pgrep -x mcfm-launch"
+# Our own loader runs the game by default; LOADER=dyld falls back to Apple's.
+runs run "--loader own"
+runs check "--loader own"
+case "$(make -n run LOADER=dyld 2>&1)" in *"--loader dyld"*) ;; *) echo "FAIL: LOADER=dyld not passed through"; fails=$((fails+1)) ;; esac
 [ $fails = 0 ] && echo "make_targets_test: passed" || { echo "$fails failure(s)"; exit 1; }

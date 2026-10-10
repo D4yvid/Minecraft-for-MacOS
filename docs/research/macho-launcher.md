@@ -205,3 +205,23 @@ main-thread jobs → `update()` → present".
   pushed only by `0x100158624`, which `MinecraftClient::init` calls after pushing the start screen
   (`0x100154730`) while two Options flags (`0x1002B42D4`, `0x1002B42E4`) are unset. Hooked to a
   no-op. ✅ (screenshot: start screen without the prompt)
+
+## Stage 2 findings ✅ (our own loader)
+
+- **Executable mapping on Apple Silicon**: mapping the converted image's segments from the file
+  (`mmap MAP_FIXED|MAP_PRIVATE`) after registering its ad hoc code signature with
+  `fcntl(F_ADDFILESIGS_RETURN)` runs its code, as dyld does. ✅ (spike, then `make check`)
+- **Exceptions**: libunwind's `__unw_add_find_dynamic_unwind_sections` (exported by
+  `/usr/lib/system/libunwind.dylib`) serves the image's compact unwind for addresses in its
+  `__TEXT`; C++ exceptions thrown and caught inside the image work. ✅ (fixture test)
+- **`dyld_info -fixups` is wrong for weak binds**: it prints them with stale symbol names carried
+  over from the previous stream (fixture slot `0x100004058`: `kFakeKitValue + 0x8` instead of
+  `__ZTISt12length_error`). On the game that rebound lazy-pointer slots to unrelated symbols in
+  the spike. Our decoder reads the weak stream itself. ✅
+- **Weak coalescing**: the game's weak definitions (`operator new/delete`, typeinfo) bind to
+  libc++'s first, as under dyld. ✅ (`make loader-check`: 0 differences)
+- **`strcmp`/`strncmp`**: `libsystem_platform` exports a plain implementation (what `dlsym`
+  returns) and a dispatching entry (what dyld binds); both are the same function. ✅
+- **`dyld_stub_binder`** is no longer exported by macOS's libSystem; with every lazy pointer bound
+  at load, nothing calls it (bound to 0). ✅
+- `make loader-check`: 95,676 fixup locations (91,698 rebases, 5,003 binds), 0 differences. ✅

@@ -75,8 +75,8 @@ ios-syntax:
 
 # ---------------------------------------------------------------- Mach-O launcher (docs/LAUNCHER.md)
 LAUNCHER_BIN := $(BUILD)/launcher/mcfm-launch
-# Which Mach-O loader runs the game: dyld (Apple's) or own (shared/loader, Stage 2).
-LOADER ?= dyld
+# Which Mach-O loader runs the game: own (shared/loader, Stage 2; default) or dyld (Apple's).
+LOADER ?= own
 # Never rebuild dist/launcher under a running game or start a second one on the same worlds.
 LAUNCHER_NOT_RUNNING = @! pgrep -x mcfm-launch >/dev/null || { echo "The launcher game is running (mcfm-launch): quit it first"; exit 1; }
 AUDIO_PROVIDER := $(BUILD)/launcher/libmcfm_audiotoolbox.dylib
