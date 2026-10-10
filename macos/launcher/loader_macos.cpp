@@ -47,7 +47,10 @@ uint8_t *MacLoaderOS::reserve(size_t size) {
 }
 
 bool MacLoaderOS::register_code_signature(int fd, uint64_t offset, uint64_t size) {
-  fsignatures_t sig = {0, reinterpret_cast<void *>(offset), static_cast<size_t>(size)};
+  fsignatures_t sig = {};
+  sig.fs_file_start = 0;
+  sig.fs_blob_start = reinterpret_cast<void *>(offset);
+  sig.fs_blob_size = static_cast<size_t>(size);
   if (fcntl(fd, F_ADDFILESIGS_RETURN, &sig) == -1) {
     perror("mcfm: F_ADDFILESIGS_RETURN");
     return false;

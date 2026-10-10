@@ -75,17 +75,20 @@ ios-syntax:
 
 # ---------------------------------------------------------------- Mach-O launcher (docs/LAUNCHER.md)
 LAUNCHER_BIN := $(BUILD)/launcher/mcfm-launch
+# Which Mach-O loader runs the game: dyld (Apple's) or own (shared/loader, Stage 2).
+LOADER ?= dyld
 # Never rebuild dist/launcher under a running game or start a second one on the same worlds.
 LAUNCHER_NOT_RUNNING = @! pgrep -x mcfm-launch >/dev/null || { echo "The launcher game is running (mcfm-launch): quit it first"; exit 1; }
 AUDIO_PROVIDER := $(BUILD)/launcher/libmcfm_audiotoolbox.dylib
 LAUNCHER_SRCS := macos/launcher/main.mm shared/apple/macho_uuid.cpp shared/apple/hook_table.cpp \
                  shared/launcher/app_platform.cpp shared/launcher/engine.cpp shared/launcher/seams.cpp shared/launcher/text_input.cpp \
                  shared/launcher/launcher_platform.cpp macos/launcher/input.mm macos/launcher/mac_keymap.cpp \
-                 shared/src/keyboard_mouse.cpp shared/src/platform.cpp shared/src/keymap.cpp
+                 shared/src/keyboard_mouse.cpp shared/src/platform.cpp shared/src/keymap.cpp \
+                 shared/loader/macho_file.cpp shared/loader/fixups.cpp shared/loader/loader.cpp macos/launcher/loader_macos.cpp
 LAUNCHER_CXXFLAGS := -arch arm64 -mmacosx-version-min=11.0 -std=c++17 -fobjc-arc -O2 -Wall -Wextra \
-                     -Wno-unused-parameter -Ishared/apple -Ishared/launcher -Imacos/launcher $(SHARED_INC)
+                     -Wno-unused-parameter -Ishared/apple -Ishared/launcher -Ishared/loader -Imacos/launcher $(SHARED_INC)
 
-$(LAUNCHER_BIN): $(LAUNCHER_SRCS) $(SHARED_HEADERS) $(wildcard shared/launcher/*.h macos/launcher/*.h)
+$(LAUNCHER_BIN): $(LAUNCHER_SRCS) $(SHARED_HEADERS) $(wildcard shared/launcher/*.h shared/loader/*.h macos/launcher/*.h)
 	@mkdir -p $(dir $@)
 	clang++ $(LAUNCHER_CXXFLAGS) $(LAUNCHER_SRCS) -framework AppKit -framework QuartzCore -framework GameController \
 	  -Wl,-rpath,@executable_path -o $@
@@ -109,7 +112,7 @@ launcher: $(LAUNCHER_BIN) $(AUDIO_PROVIDER)
 launcher-check:
 	$(LAUNCHER_NOT_RUNNING)
 	@rm -f $(BUILD)/launcher/census.txt; mkdir -p $(BUILD)/launcher
-	@OUT="$$(MCFM_CENSUS="$(CURDIR)/$(BUILD)/launcher/census.txt" "$(LAUNCHER_OUT)/mcfm-launch" --frames 120 2>&1)"; RC=$$?; \
+	@OUT="$$(MCFM_CENSUS="$(CURDIR)/$(BUILD)/launcher/census.txt" "$(LAUNCHER_OUT)/mcfm-launch" --loader $(LOADER) --frames 120 2>&1)"; RC=$$?; \
 	  echo "$$OUT" | grep -E "^mcfm: (game image|EGL|engine|[0-9]+ frames)" ; \
 	  { [ $$RC = 0 ] && echo "$$OUT" | grep -q "game image loaded" && echo "$$OUT" | grep -q "120 frames rendered"; } \
 	    || { echo "$$OUT" | tail -25; echo "launcher-check: FAILED (exit $$RC)"; exit 1; }
@@ -129,7 +132,7 @@ loader-check: $(LOADER_CHECK)
 .PHONY: launcher-run
 launcher-run:
 	$(LAUNCHER_NOT_RUNNING)
-	"$(LAUNCHER_OUT)/mcfm-launch"
+	"$(LAUNCHER_OUT)/mcfm-launch" --loader $(LOADER)
 
 # The default macOS build is the launcher (Stage 1, docs/LAUNCHER.md).
 app: launcher

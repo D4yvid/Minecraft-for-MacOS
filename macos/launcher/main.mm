@@ -1,5 +1,5 @@
 // mcfm-launch: runs the converted game image (make launcher) in a macOS window.
-// usage: mcfm-launch [--print-hooks] [--frames N [--screenshot out.ppm]] [image]
+// usage: mcfm-launch [--print-hooks] [--loader own|dyld] [--frames N [--screenshot out.ppm]] [image]
 // The LC_UUID is checked on the file before dlopen, the hook table is filled from a dyld
 // add-image callback (before the game's initializers), then the engine boots in an ANGLE
 // (OpenGL ES 3 on Metal) context. docs/LAUNCHER.md, Stage 1b.
@@ -12,7 +12,9 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <fcntl.h>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -21,6 +23,8 @@
 #include "hook_table.h"
 #include "input.h"
 #include "launcher_platform.h"
+#include "loader.h"
+#include "loader_macos.h"
 #include "macho_uuid.h"
 #include "resize_math.h"
 #include "screenshot.h"
@@ -289,6 +293,37 @@ HostInfo host_info(const std::string &game_data_dir) {
 
 namespace {
 
+bool load_with_our_loader(const std::string &path) {
+  std::ifstream f(path, std::ios::binary);
+  std::vector<uint8_t> file((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+  int fd = open(path.c_str(), O_RDONLY);
+  if (fd < 0 || file.empty()) { std::fprintf(stderr, "mcfm: cannot load %s: unreadable\n", path.c_str()); return false; }
+  size_t n = 0;
+  const Hook *h = hooks(&n);
+  std::vector<uintptr_t> addresses;
+  std::vector<const void *> replacements;
+  for (size_t i = 0; i < n; i++) {
+    addresses.push_back(h[i].address);
+    replacements.push_back(h[i].replacement);
+  }
+  static mcfm::loader::MacLoaderOS os(executable_dir());
+  mcfm::loader::LoadOptions opts;
+  opts.hook_addresses = addresses.data();
+  opts.hook_replacements = replacements.data();
+  opts.hook_count = n;
+  mcfm::loader::Image image;
+  std::string error;
+  if (!mcfm::loader::load_image(os, fd, file.data(), file.size(), opts, &image, &error)) {
+    std::fprintf(stderr, "mcfm: cannot load %s with our loader: %s\n", path.c_str(), error.c_str());
+    return false;
+  }
+  g_slide = static_cast<uintptr_t>(image.slide);
+  g_found = true;
+  g_hooks_ok = true;  // load_image verified every hook
+  std::printf("mcfm: loaded by our loader\n");
+  return true;
+}
+
 NSMenu *main_menu() {
   NSMenu *bar = [[NSMenu alloc] init];
   NSMenuItem *app_item = [[NSMenuItem alloc] init];
@@ -309,7 +344,7 @@ NSMenu *main_menu() {
 }
 
 int usage(const char *why) {
-  std::fprintf(stderr, "mcfm: %s\nusage: mcfm-launch [--print-hooks] [--frames N [--screenshot out.ppm]] [image]\n", why);
+  std::fprintf(stderr, "mcfm: %s\nusage: mcfm-launch [--print-hooks] [--loader own|dyld] [--frames N [--screenshot out.ppm]] [image]\n", why);
   return 2;
 }
 
@@ -325,7 +360,7 @@ long parse_frames(const char *text) {
 int main(int argc, char **argv) {
   setvbuf(stdout, nullptr, _IOLBF, 0);  // keep progress lines if the engine crashes
   long frames = -1;
-  std::string path, screenshot;
+  std::string path, screenshot, loader = "dyld";
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
     if (a == "--print-hooks") {
@@ -335,6 +370,10 @@ int main(int argc, char **argv) {
       return 0;
     } else if (a == "--frames") {
       if (i + 1 >= argc || (frames = parse_frames(argv[++i])) < 0) return usage("--frames needs a positive number");
+    } else if (a == "--loader") {
+      if (i + 1 >= argc || (std::string(argv[i + 1]) != "own" && std::string(argv[i + 1]) != "dyld"))
+        return usage("--loader needs own or dyld");
+      loader = argv[++i];
     } else if (a == "--screenshot") {
       if (i + 1 >= argc) return usage("--screenshot needs a file");
       screenshot = argv[++i];
@@ -362,8 +401,13 @@ int main(int argc, char **argv) {
                  data_dir.empty() ? "no data_dir.txt next to mcfm-launch" : data_dir.c_str());
     return 2;
   }
-  _dyld_register_func_for_add_image(on_add_image);
-  if (!dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL)) { std::fprintf(stderr, "mcfm: cannot load %s: %s\n", path.c_str(), dlerror()); return 2; }
+  if (loader == "own") {
+    // Our Mach-O loader (shared/loader): maps, binds, fills the hook table, runs initializers.
+    if (!load_with_our_loader(path)) return 2;
+  } else {
+    _dyld_register_func_for_add_image(on_add_image);
+    if (!dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL)) { std::fprintf(stderr, "mcfm: cannot load %s: %s\n", path.c_str(), dlerror()); return 2; }
+  }
   if (!g_found) { std::fprintf(stderr, "mcfm: %s loaded but not found among dyld images\n", path.c_str()); return 2; }
   if (!g_hooks_ok) {
     std::fprintf(stderr, "mcfm: %s was built without the launcher's hooks (rebuild with make launcher)\n", path.c_str());

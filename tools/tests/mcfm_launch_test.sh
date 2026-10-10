@@ -34,4 +34,10 @@ usage "--frames abc" --frames abc "$T/libminecraftpe.dylib"
 usage "--frames without a value" "$T/libminecraftpe.dylib" --frames
 usage "--screenshot without --frames" --screenshot "$T/x.ppm" "$T/libminecraftpe.dylib"
 usage "unknown option" --bogus "$T/libminecraftpe.dylib"
+usage "--loader bogus" --loader bogus "$T/libminecraftpe.dylib"
+usage "--loader without a value" "$T/libminecraftpe.dylib" --loader
+# Our loader also checks the LC_UUID first: a foreign image is refused before mapping.
+OUT="$(MCFM_CENSUS="$T/census-own.txt" "$BIN" --loader own "$T/libminecraftpe.dylib" 2>&1)"; rc=$?
+[ $rc = 3 ] || { echo "FAIL: --loader own on the fixture: exit $rc, want 3: $OUT"; fails=$((fails+1)); }
+[ -e "$T/census-own.txt" ] && { echo "FAIL: --loader own ran fixture code before the UUID check"; fails=$((fails+1)); }
 [ $fails = 0 ] && echo "mcfm_launch_test: passed" || { echo "$fails failure(s)"; exit 1; }
