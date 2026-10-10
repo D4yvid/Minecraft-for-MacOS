@@ -201,13 +201,15 @@ $(ALAUNCH_OUT)/tests/pthread_test: android/launcher/tests/pthread_test.cpp $(DAR
 	@mkdir -p $(dir $@)
 	$(ACXX) $(DARWIN_CXXFLAGS) $(ANDROID_LDFLAGS) -static-libstdc++ $< $(DARWIN_PTHREAD_SRCS) -o $@
 
-# libmcfm_runtime.so: Apple-ABI libc++/libc++abi/libunwind + the Darwin layer (Stage 3a).
+# libmcfm_runtime.a: Apple-ABI libc++/libc++abi/libunwind + the Darwin layer (Stage 3a), always
+# linked whole with its symbols hidden (see android/launcher/runtime/build_runtime.sh).
 RT_OUT := $(ALAUNCH_OUT)/runtime
-RT_LIB := $(RT_OUT)/libmcfm_runtime.so
+RT_LIB := $(RT_OUT)/libmcfm_runtime.a
 RT_DEPS := $(wildcard android/launcher/runtime/* android/launcher/runtime/include/* android/launcher/darwin/*)
 RT_CXXFLAGS := -std=c++17 -Wall -Wextra -O1 -g -fsigned-char -nostdinc++ -isystem $(RT_OUT)/include \
   -isystem $(RT_OUT)/src/libcxx/include -isystem $(RT_OUT)/src/libcxxabi/include -Iandroid/launcher/darwin
-RT_LDFLAGS := $(ANDROID_LDFLAGS) -nostdlib++ --unwindlib=none -L$(RT_OUT) -lmcfm_runtime
+RT_LDFLAGS := $(ANDROID_LDFLAGS) -nostdlib++ --unwindlib=none -Wl,--whole-archive $(RT_LIB) -Wl,--no-whole-archive \
+  -Wl,--exclude-libs,ALL -ldl
 .PHONY: android-runtime
 android-runtime: $(RT_LIB)
 $(RT_LIB): $(RT_DEPS)
@@ -220,12 +222,11 @@ $(ALAUNCH_OUT)/tests/%_test: android/launcher/tests/%_test.cpp $(RT_LIB)
 # libmcfm_launcher.so: the loader, the launcher and the whole runtime, exporting only its entry
 # points (android/launcher/launcher.map). mcfm-run is a C program that dlopens it.
 LAUNCHER_SO := $(ALAUNCH_OUT)/libmcfm_launcher.so
-LAUNCHER_SO_SRCS := android/launcher/run.cpp android/launcher/loader_android.cpp $(LOADER_SRCS)
-$(LAUNCHER_SO): $(LAUNCHER_SO_SRCS) android/launcher/loader_android.h android/launcher/launcher.map $(LOADER_HDRS) $(RT_LIB)
+LAUNCHER_SO_SRCS := android/launcher/run.cpp android/launcher/loader_android.cpp android/launcher/audio_toolbox.cpp $(LOADER_SRCS)
+$(LAUNCHER_SO): $(LAUNCHER_SO_SRCS) android/launcher/loader_android.h android/launcher/audio_toolbox.h android/launcher/launcher.map $(LOADER_HDRS) $(RT_LIB)
 	@mkdir -p $(dir $@)
 	$(ACXX) $(RT_CXXFLAGS) -fPIC -shared -Ishared/loader -Ishared/apple -Iandroid/launcher $(LAUNCHER_SO_SRCS) \
-	  $(ANDROID_LDFLAGS) -nostdlib++ --unwindlib=none -Wl,--whole-archive $(RT_OUT)/libmcfm_runtime.a -Wl,--no-whole-archive \
-	  -Wl,--version-script,android/launcher/launcher.map -Wl,-soname,libmcfm_launcher.so -ldl -lEGL -o $@
+	  $(RT_LDFLAGS) -Wl,--version-script,android/launcher/launcher.map -Wl,-soname,libmcfm_launcher.so -lEGL -laaudio -o $@
 MCFM_RUN := $(ALAUNCH_OUT)/mcfm-run
 $(MCFM_RUN): android/launcher/mcfm_run.c $(LAUNCHER_SO)
 	$(ACC) -Wall -O1 $(ANDROID_LDFLAGS) $< -ldl -o $@
@@ -235,12 +236,16 @@ $(MCFM_RUN): android/launcher/mcfm_run.c $(LAUNCHER_SO)
 android-boot-check: $(MCFM_RUN)
 	ANDROID_CC="$(ACC)" bash tools/android/boot_check.sh "$(LAUNCHER_OUT)" "$(ALAUNCH_OUT)"
 
-ANDROID_TESTS := pthread_test runtime_test files_test net_test
+$(ALAUNCH_OUT)/tests/audio_test: android/launcher/tests/audio_test.cpp android/launcher/audio_toolbox.cpp android/launcher/audio_toolbox.h $(RT_LIB)
+	@mkdir -p $(dir $@)
+	$(ACXX) $(RT_CXXFLAGS) -Iandroid/launcher $< android/launcher/audio_toolbox.cpp $(RT_LDFLAGS) -laaudio -o $@
+
+ANDROID_TESTS := pthread_test runtime_test files_test net_test audio_test
 .PHONY: android-test
 # Needs a running emulator or device (make android-emulator).
 android-test: $(addprefix $(ALAUNCH_OUT)/tests/,$(ANDROID_TESTS)) $(MCFM_RUN)
-	@for t in $(ANDROID_TESTS); do bash tools/android/adb_run.sh --push $(RT_LIB) $(ALAUNCH_OUT)/tests/$$t || exit 1; done
-	bash tools/tests/android_runtime_symbols_test.sh $(RT_LIB) $(LAUNCHER_SO) $(NDK64_BIN)/llvm-nm
+	@for t in $(ANDROID_TESTS); do bash tools/android/adb_run.sh $(ALAUNCH_OUT)/tests/$$t || exit 1; done
+	bash tools/tests/android_runtime_symbols_test.sh $(RT_OUT) $(LAUNCHER_SO) $(NDK64_BIN)/llvm-nm $(addprefix $(ALAUNCH_OUT)/tests/,$(filter-out pthread_test,$(ANDROID_TESTS)))
 	ANDROID_CC="$(ACC)" bash tools/tests/android_launcher_test.sh $(ALAUNCH_OUT)
 
 # ---------------------------------------------------------------- local game files

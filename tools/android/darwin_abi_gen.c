@@ -7,6 +7,8 @@
 //   ctype:  the C locale's _RuneLocale tables (__runetype, __maplower, __mapupper).
 //   strerror: strerror() texts by Darwin errno number.
 #include <_ctype.h>
+#include <AudioToolbox/AudioComponent.h>
+#include <CoreAudioTypes/CoreAudioBaseTypes.h>
 #include <CommonCrypto/CommonDigest.h>
 #include <CommonCrypto/CommonHMAC.h>
 #include <arpa/inet.h>
@@ -203,6 +205,13 @@ static void header(void) {
   FIELD("vm_statistics", vm_statistics_data_t, wire_count);
   SZ("mach_timebase_info", mach_timebase_info_data_t);
   SZ("CC_SHA256_CTX", CC_SHA256_CTX); SZ("CCHmacContext", CCHmacContext);
+  SZ("AudioStreamBasicDescription", AudioStreamBasicDescription);
+  SZ("AudioTimeStamp", AudioTimeStamp);
+  FIELD("AudioTimeStamp", AudioTimeStamp, mFlags);
+  SZ("AudioBuffer", AudioBuffer);
+  SZ("AudioBufferList", AudioBufferList);
+  FIELD("AudioBufferList", AudioBufferList, mBuffers);
+  SZ("AudioComponentDescription", AudioComponentDescription);
   printf("\n}  // namespace darwin\n\n");
 
   // Names bionic defines too: translation tables are X(name, darwin value) lists.

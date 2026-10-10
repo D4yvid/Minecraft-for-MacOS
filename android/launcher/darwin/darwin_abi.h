@@ -472,6 +472,15 @@ constexpr long kSizeof_vm_statistics_wire_count = 4L;
 constexpr long kSizeof_mach_timebase_info = 8L;
 constexpr long kSizeof_CC_SHA256_CTX = 104L;
 constexpr long kSizeof_CCHmacContext = 384L;
+constexpr long kSizeof_AudioStreamBasicDescription = 40L;
+constexpr long kSizeof_AudioTimeStamp = 64L;
+constexpr long kOffsetof_AudioTimeStamp_mFlags = 56L;
+constexpr long kSizeof_AudioTimeStamp_mFlags = 4L;
+constexpr long kSizeof_AudioBuffer = 16L;
+constexpr long kSizeof_AudioBufferList = 24L;
+constexpr long kOffsetof_AudioBufferList_mBuffers = 8L;
+constexpr long kSizeof_AudioBufferList_mBuffers = 16L;
+constexpr long kSizeof_AudioComponentDescription = 20L;
 
 }  // namespace darwin
 

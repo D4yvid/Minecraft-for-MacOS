@@ -8,7 +8,8 @@
 //                         another ABI and system libraries (EGL, ...) must never bind to ours
 //   libz               -> the system's libz.so
 //   mcfm_stub_<lib>    -> <dir>/mcfm_stub_<lib>.so (symbols keep their Mach-O names), except
-//                         OpenGLES's gl* functions: the system's GLES (libGLESv3.so, EGL)
+//                         OpenGLES's gl* functions: the system's GLES (libGLESv3.so, EGL);
+//                         AudioToolbox: ours on AAudio (audio_toolbox.cpp)
 // Unwind info is served to the runtime's libunwind through its dynamic section finder.
 #include <set>
 #include <string>
@@ -37,7 +38,7 @@ class AndroidLoaderOS : public LoaderOS {
  private:
   std::string dir_;          // where mcfm_stub_*.so and libmcfm_stubrt.so live
   std::set<void *> stubs_;   // dlopen handles of stub libraries
-  void *gles_stub_ = nullptr;
+  void *gles_stub_ = nullptr, *audio_stub_ = nullptr;
 };
 
 }  // namespace loader

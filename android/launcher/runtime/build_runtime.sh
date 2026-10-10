@@ -1,10 +1,9 @@
 #!/bin/bash
 # usage: build_runtime.sh <llvm runtimes dir> <NDK clang bin dir> <outdir>
-# Builds libmcfm_runtime.so for the Android launcher (docs/LAUNCHER.md, Stage 3a): LLVM 18.1.8
+# Builds libmcfm_runtime.a for the Android launcher (docs/LAUNCHER.md, Stage 3a): LLVM 18.1.8
 # libc++, libc++abi and libunwind with Apple's arm64 ABI settings (runtime/include) plus the
 # Darwin libSystem layer (android/launcher/darwin). Writes:
-#   <outdir>/libmcfm_runtime.so    everything exported (unit tests)
-#   <outdir>/libmcfm_runtime.a     the same objects (the launcher library links them, hidden)
+#   <outdir>/libmcfm_runtime.a     the runtime and the Darwin layer (always linked whole, hidden)
 #   <outdir>/runtime_symbols.cpp   name -> address table of the C++ runtime's symbols
 #   <outdir>/include/        __config_site, __external_threading, __assertion_handler
 #   <outdir>/src/            the patched LLVM sources (their include/ dirs are the headers)
@@ -90,10 +89,10 @@ for j in "${jobs[@]}"; do wait "$j" || fail=1; done
 python3 -I "$ROOT/android/launcher/runtime/gen_runtime_symbols.py" "$OUT/runtime_symbols.txt" > "$OUT/runtime_symbols.cpp"
 "$CXX" "${COMMON[@]}" -std=c++17 -c "$OUT/runtime_symbols.cpp" -o "$OBJ/darwin/runtime_symbols.o"
 
-# libmcfm_runtime.a: everything, for the launcher library (linked whole, symbols hidden).
-# libmcfm_runtime.so: everything exported, for unit tests that run alone in their process.
-rm -f "$OUT/libmcfm_runtime.a"
+# libmcfm_runtime.a: everything. It is only ever linked whole with its symbols hidden (the
+# launcher library's version script, --exclude-libs for test executables): Android's system
+# libc++ has the same std::__1 names with another ABI, and system libraries loaded in the same
+# process (EGL, AAudio, ...) must never bind to ours.
+rm -f "$OUT/libmcfm_runtime.a" "$OUT/libmcfm_runtime.so"
 "$BIN/llvm-ar" rcs "$OUT/libmcfm_runtime.a" $(find "$OBJ" -name '*.o' | sort)
-"$CXX" -shared -nostdlib++ --unwindlib=none -Wl,-soname,libmcfm_runtime.so -Wl,-z,max-page-size=16384 \
-  -Wl,--gc-sections $(find "$OBJ" -name '*.o' | sort) -ldl -o "$OUT/libmcfm_runtime.so"
-echo "build_runtime: $OUT/libmcfm_runtime.so, libmcfm_runtime.a"
+echo "build_runtime: $OUT/libmcfm_runtime.a"

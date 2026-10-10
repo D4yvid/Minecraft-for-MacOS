@@ -9,6 +9,7 @@
 #include <cstring>
 #include <mutex>
 
+#include "audio_toolbox.h"
 #include "darwin.h"
 
 namespace mcfm {
@@ -135,6 +136,7 @@ void *AndroidLoaderOS::open_library(const std::string &name) {
   if (!h) log("cannot load " + path + ": " + dlerror());
   else stubs_.insert(h);
   if (h && name == "mcfm_stub_OpenGLES") gles_stub_ = h;
+  if (h && name == "mcfm_stub_AudioToolbox") audio_stub_ = h;
   return h;
 }
 
@@ -143,6 +145,9 @@ void *AndroidLoaderOS::symbol(void *library, const std::string &name) {
   if (library == &g_runtime) return mcfm_runtime_symbol(name.c_str());
   // OpenGLES: the system's GLES first (EAGL's classes and constants stay stubbed).
   if (library == gles_stub_ && is_gl_function(name)) return gles_symbol(name);
+  // AudioToolbox: ours on AAudio (audio_toolbox.cpp), the stub for anything else.
+  if (library == audio_stub_)
+    if (void *p = mcfm::audio::audio_symbol(name.c_str())) return p;
   // Stubs export the Mach-O names (leading '_'), which keeps them apart from bionic's.
   if (stubs_.count(library)) return dlsym(library, ("_" + name).c_str());
   return dlsym(library, name.c_str());
