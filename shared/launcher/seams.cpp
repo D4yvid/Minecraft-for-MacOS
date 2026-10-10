@@ -41,7 +41,11 @@ std::string store_id(void *) { return "mcfm-null"; }
 std::string app_receipt(void *) { return std::string(); }
 void ignore(void *) {}
 
-void *const kVtable[16] = {
+// As the compiler lays out a vtable: offset-to-top and RTTI words before the slots the vptr
+// points at, so a dynamic_cast or typeid on the store reads zeros instead of unrelated data.
+void *const kVtable[2 + 16] = {
+    nullptr,                                    // offset to top
+    nullptr,                                    // RTTI: none
     reinterpret_cast<void *>(&destroy),         // ~Store()
     reinterpret_cast<void *>(&destroy_delete),  // ~Store() deleting
     reinterpret_cast<void *>(&no),              // requiresRestorePurchasesButton
@@ -69,7 +73,7 @@ struct StoreVectorOut {
 
 StoreVectorOut create_stores(void * /*client*/, void *listener) {
   void **store = static_cast<void **>(::operator new(4 * sizeof(void *)));
-  store[0] = const_cast<void **>(null_store::kVtable);
+  store[0] = const_cast<void **>(null_store::kVtable + 2);
   store[1] = listener;
   store[2] = store[3] = nullptr;
   // StoreListener slot 2: onStoreInitialized(bool) — there is no store to use.

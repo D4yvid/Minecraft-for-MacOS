@@ -29,7 +29,7 @@ std::string device_id(void *) { return host().device_id; }
 std::string edition(void *) { return "win10"; }
 
 std::string create_uuid(void *) {
-  static std::mt19937_64 rng{std::random_device{}()};
+  thread_local std::mt19937_64 rng{std::random_device{}()};  // engine threads call this too
   unsigned char b[16];
   for (int i = 0; i < 16; i += 8) {
     unsigned long long r = rng();
