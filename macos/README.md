@@ -1,7 +1,9 @@
 # macOS
 
-Runs the iOS build natively on Apple Silicon as a Mac Catalyst app. See the top-level
-README for build steps (`make app`, `make check`, `make run`).
+Runs the iOS build natively on Apple Silicon as a Mac Catalyst app. **Deprecated build
+mode**: it keeps working until the Mach-O launcher ([docs/LAUNCHER.md](../docs/LAUNCHER.md))
+replaces it. Build steps: `make catalyst`, `make catalyst-check`, `make catalyst-run` (the old
+names `app`/`check`/`run` are aliases).
 
 - `src/main.mm` — entry point: Win10 UI + keyboard/mouse on the Apple address platform
 - `src/mac_input.mm` — GameController keyboard/mouse, hover, touch suppression

@@ -27,17 +27,21 @@ the same desktop UI to iOS and Android. One shared C++ core, three thin platform
 ```sh
 cp config.example.mk config.mk     # then set GAME = /path/to/minecraftpe2.app
 make test                          # host tests, no game files needed
-make app                           # builds dist/minecraftpe.app from your copy
-make check                         # verifies the bundle and launches it for 15 s
-make run
+make catalyst                      # builds dist/minecraftpe.app from your copy
+make catalyst-check                # verifies the bundle and launches it for 15 s
+make catalyst-run
 ```
+
+The Mac Catalyst build is **deprecated**: it works and is how the game runs today, but a
+standalone launcher will replace it ([docs/LAUNCHER.md](docs/LAUNCHER.md)). `make app`,
+`make check` and `make run` are aliases for now.
 
 Controls: WASD move · mouse look · left click break/attack · right click place/use ·
 Space jump · Shift sneak · 1–9 / scroll hotbar · E inventory · Esc pause · T chat.
 Hover the top-left corner to reveal the title bar.
 
 Your worlds live in `~/Documents/games/com.mojang`, outside the app, so rebuilding keeps
-them. `make app` refuses to run while the game is open.
+them. `make catalyst` refuses to run while the game is open.
 
 ## Other platforms
 

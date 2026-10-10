@@ -58,8 +58,9 @@ launcher (per platform: macOS app, Android APK, …)
 ```
 
 `shared/` grows a `launcher/` part (platform-free C++11: boot sequence, AppPlatform policy,
-stub tables), with per-host code under `macos/` and `android/`. The current Catalyst build
-stays the working macOS version until Stage 1 replaces it.
+stub tables), with per-host code under `macos/` and `android/`. The Mac Catalyst build
+(`make catalyst`) is a **deprecated build mode**: it is how the game runs today and keeps
+working until the launcher replaces it; `make app`/`run`/`check` are its aliases until then.
 
 ## Stage 0 — survey ☑
 Done 2026-10-10: imports, where Apple APIs are used, seams, boot sequence, layout, unwinding,
@@ -163,6 +164,6 @@ Acceptance: an APK that installs on Android 6+ arm64, imports a user-supplied IP
 - 2026-10-10: ANGLE from prebuilt binaries, fetched into a git-ignored folder.
 - 2026-10-10: CLI only; the IPA goes through `make` targets, no launcher UI for now.
 - 2026-10-10: Microsoft account, Xbox Live, TCUI and telemetry are dropped (see Patch policy).
-
-## Open decisions (owner)
-- Keep the Catalyst build after Stage 1 (iOS mod path) or retire it for macOS.
+- 2026-10-10: the Mac Catalyst build stays as a deprecated build mode (`make catalyst`,
+  `catalyst-run`, `catalyst-check`; `app`/`run`/`check` alias them and print a notice). When
+  Stage 1 lands, `app`/`run`/`check` move to the launcher.

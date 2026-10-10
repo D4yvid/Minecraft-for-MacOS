@@ -6,8 +6,10 @@ Reverse-engineering notes: docs/research/. Local game files and the IDA database
 
 ## Commands
 - `make test` — all host tests (no game files). Run before every commit.
-- `make app` / `make check` / `make run` — macOS build from `GAME` in config.mk; `check`
-  launches the game for 15 s (`make app` refuses while it runs — don't kill the user's game).
+- `make catalyst` / `catalyst-check` / `catalyst-run` — the **deprecated** Mac Catalyst build
+  from `GAME` (aliases `app`/`check`/`run`); `catalyst-check` launches the game for 15 s
+  (`make catalyst` refuses while it runs — don't kill the user's game). Its replacement, the
+  Mach-O launcher, is planned in docs/LAUNCHER.md.
 - `make android` — NDK r10c under Rosetta; `make android-apk APK=…`
 - `make ios` needs Xcode; without it `make ios-syntax` (part of `make test`) compiles iOS code.
 
@@ -23,4 +25,4 @@ Reverse-engineering notes: docs/research/. Local game files and the IDA database
   statics in entry points.
 - Features are plain `install()` functions for now; a module system is planned.
 - Logs are prefixed `mcfm:`.
-- `make check` closes a running game (smoke test); check `pgrep -x minecraftpe` first.
+- `make catalyst-check` closes a running game (smoke test); check `pgrep -x minecraftpe` first.

@@ -14,7 +14,11 @@ SHARED_HEADERS := $(wildcard shared/include/mcfm/*.h shared/include/mcfm/*/*.h s
 SHARED_TESTS := keymap_test input_state_test features_test
 MACOS_TESTS  := titlebar_test input_policy_test
 
-# ---------------------------------------------------------------- macOS (Mac Catalyst)
+# ---------------------------------------------------------------- macOS (Mac Catalyst) — DEPRECATED
+# The Catalyst build is a deprecated build mode: it keeps working until the Mach-O launcher
+# (docs/LAUNCHER.md) replaces it. Targets: catalyst, catalyst-run, catalyst-check; the old
+# names app, run, check are aliases (they will move to the launcher).
+CATALYST_DEPRECATED = @echo "mcfm: note: the Mac Catalyst build is deprecated; it will be replaced by the Mach-O launcher (docs/LAUNCHER.md)" >&2
 SDK      := $(shell xcrun --sdk macosx --show-sdk-path)
 IOSFW    := $(SDK)/System/iOSSupport/System/Library/Frameworks
 MAC_TARGET := arm64-apple-ios15.0-macabi
@@ -27,7 +31,7 @@ MAC_LDFLAGS  := -dynamiclib -F$(IOSFW) -framework Foundation -framework UIKit \
                 -framework GameController -framework QuartzCore \
                 -install_name @executable_path/Frameworks/libmcfm.dylib
 
-.PHONY: all macos app run check test clean ios ios-ipa ios-syntax android android-apk game-files
+.PHONY: all macos app run check catalyst catalyst-run catalyst-check test clean ios ios-ipa ios-syntax android android-apk game-files
 all: macos
 
 macos: $(MAC_DYLIB)
@@ -36,12 +40,18 @@ $(MAC_DYLIB): $(MAC_SRCS) $(SHARED_HEADERS) $(wildcard macos/src/*.h)
 	@mkdir -p $(dir $@)
 	clang++ $(MAC_CXXFLAGS) $(MAC_LDFLAGS) $(MAC_SRCS) -o $@
 
-app: $(MAC_DYLIB)
+catalyst: $(MAC_DYLIB)
+	$(CATALYST_DEPRECATED)
 	@test -n "$(GAME)" || { echo "Set GAME=<your decrypted minecraftpe2.app> (or put it in config.mk)"; exit 1; }
 	bash macos/tools/convert.sh "$(GAME)" "$(OUT_APP)" "$(MAC_DYLIB)"
 
-run:
+catalyst-run:
+	$(CATALYST_DEPRECATED)
 	open "$(OUT_APP)"
+
+app: catalyst
+run: catalyst-run
+check: catalyst-check
 
 # ---------------------------------------------------------------- iOS
 IOS_SDK    := $(shell xcrun --sdk iphoneos --show-sdk-path 2>/dev/null)
@@ -93,8 +103,9 @@ android-apk: android
 game-files:
 	bash tools/setup_game_files.sh $(if $(IOS),--ios "$(IOS)") $(if $(APK_IN),--apk "$(APK_IN)") $(if $(IDA),--ida)
 
-# Needs the built app (make app).
-check: $(BUILD)/test/macho_uuid_test $(BUILD)/test/keymap_test
+# Needs the built app (make catalyst).
+catalyst-check: $(BUILD)/test/macho_uuid_test $(BUILD)/test/keymap_test
+	$(CATALYST_DEPRECATED)
 	$(BUILD)/test/macho_uuid_test "$(OUT_APP)/minecraftpe" $(BUILD)/test/keymap_test
 	bash macos/tests/bundle_test.sh "$(OUT_APP)"
 	bash ios/tests/ipa_test.sh "$(GAME)"
@@ -137,6 +148,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	clang++ -std=c++11 -Wall android/tests/vtable_scan_test.cpp -o $(BUILD)/test/vtable_scan_test && $(BUILD)/test/vtable_scan_test
 	bash tools/tests/config_example_test.sh
 	bash tools/tests/makefile_deps_test.sh
+	bash tools/tests/catalyst_deprecated_test.sh
 	bash tools/tests/no_game_files_test.sh
 	bash tools/tests/setup_game_files_test.sh
 

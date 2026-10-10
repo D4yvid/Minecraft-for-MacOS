@@ -72,9 +72,10 @@ idalib. Re-creating the database: `make game-files IOS=<app> IDA=1` (~2 min).
 ### Daily commands
 ```bash
 make test        # all host tests, no game files (~1 min)
-make app         # dist/minecraftpe.app from GAME; refuses while the game runs
-make check       # bundle/IPA/UUID tests + 15 s launch — CLOSES a running game (smoke.sh pkill)
-make run
+make catalyst        # dist/minecraftpe.app from GAME; refuses while the game runs (alias: app)
+make catalyst-check  # bundle/IPA/UUID tests + 15 s launch — CLOSES a running game (alias: check)
+make catalyst-run    # (alias: run)
+# The Catalyst build is a deprecated build mode until the launcher replaces it (LAUNCHER.md).
 make android     # librunet.so + tests      make android-apk APK=…   make ios-ipa
 ```
 
@@ -148,7 +149,8 @@ make android     # librunet.so + tests      make android-apk APK=…   make ios-
 
 ### 6.0 Mach-O launcher
 The owner's main direction since 2026-10-10. See [LAUNCHER.md](LAUNCHER.md) (stages, tasks,
-acceptance, open decisions). Stage 0 found the engine uses no Apple framework at all; Stage 1
+acceptance, decisions). The Catalyst build is now a deprecated build mode (`make catalyst`).
+Stage 0 found the engine uses no Apple framework at all; Stage 1
 (macOS launcher on dyld with stub frameworks) is next.
 
 ### 6.1 Generic AppPlatform
