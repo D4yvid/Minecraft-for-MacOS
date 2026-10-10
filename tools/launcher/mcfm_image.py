@@ -2,7 +2,8 @@
 """Mach-O tools for the launcher (docs/LAUNCHER.md, Stage 1).
 
 usage: mcfm_image.py imports <macho>              imports as TSV: lib, symbol, fn|data
-       mcfm_image.py stubs <imports.tsv> <outdir> one C stub source per stubbed library
+       mcfm_image.py stubs <imports.tsv> <outdir> [--provided <lib> <symbols>]...
+                                                  one C stub source per stubbed library
        mcfm_image.py dylib <executable> <out> [--hooks <hooks.tsv>]
                                                   executable -> dylib loadable on macOS
 Exit 2 when the input is unsuitable.
@@ -83,7 +84,7 @@ def c_string(s):
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def cmd_stubs(tsv, outdir):
+def cmd_stubs(tsv, outdir, provided=None):
     by_lib = {}
     try:
         lines = open(tsv).read().splitlines()
@@ -100,6 +101,10 @@ def cmd_stubs(tsv, outdir):
             fail("bad kind in %s: %r" % (tsv, line))
         if lib in HOST_LIBS:
             continue
+        if provided and sym in provided.get(lib, ()):
+            by_lib.setdefault(lib, [])
+            continue
+
         syms = by_lib.setdefault(lib, [])  # a "lib" line alone still yields an (empty) stub
         if kind != "lib":
             syms.append((sym, kind))
@@ -258,8 +263,16 @@ def cmd_dylib(src, dst, hooks=()):
 def main(argv):
     if len(argv) == 3 and argv[1] == "imports":
         return cmd_imports(argv[2])
-    if len(argv) == 4 and argv[1] == "stubs":
-        return cmd_stubs(argv[2], argv[3])
+    if len(argv) >= 4 and argv[1] == "stubs" and (len(argv) - 4) % 3 == 0:
+        provided = {}
+        for k in range(4, len(argv), 3):
+            if argv[k] != "--provided":
+                fail(__doc__.strip())
+            try:
+                provided[argv[k + 1]] = set(open(argv[k + 2]).read().split())
+            except OSError as e:
+                fail("cannot read %s: %s" % (argv[k + 2], e))
+        return cmd_stubs(argv[2], argv[3], provided)
     if len(argv) in (4, 6) and argv[1] == "dylib":
         hooks = ()
         if len(argv) == 6:
