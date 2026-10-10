@@ -158,6 +158,11 @@ void mcfm_darwin_add_image(const void *header, intptr_t slide);
 // dispatch.cpp: runs the work queued on the main queue (the host loop calls it).
 void mcfm_darwin_drain_main_queue(void);
 
+// runtime_symbols.cpp (generated): the C++ runtime's own symbols (libc++, libc++abi, libunwind)
+// by linker name; the launcher library does not export them (see loader_android.h).
+void *mcfm_runtime_symbol(const char *name);
+size_t mcfm_runtime_symbol_count(void);
+
 // symbols.cpp: the address for a libSystem import (name without the Mach-O '_'), or null.
 void *mcfm_darwin_symbol(const char *name);
 // Every name in the table, sorted (for tests); returns the count.

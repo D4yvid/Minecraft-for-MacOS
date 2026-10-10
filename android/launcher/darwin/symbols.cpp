@@ -2,7 +2,8 @@
 // by its name without the Mach-O leading underscore. Each one is either
 //   SHIM:    our Darwin-behaviour implementation,
 //   BIONIC:  bionic's function or variable of the same name (same ABI, asserted per area),
-//   RUNTIME: this runtime's own export (libc++abi / libunwind, e.g. _Unwind_Resume).
+//   RUNTIME: this runtime's own definition (libc++abi / libunwind, e.g. _Unwind_Resume), from the
+//            generated table: the launcher library exports none of its C++ symbols.
 // Anything else is missing: the load fails naming it. Sorted by name (tools/tests check it).
 #include <dlfcn.h>
 #include <stdint.h>
@@ -402,22 +403,16 @@ int compare(const void *key, const void *entry) {
   return strcmp(static_cast<const char *>(key), static_cast<const Export *>(entry)->name);
 }
 
-void *runtime_handle() {
-  static void *handle = [] {
-    Dl_info info;
-    return dladdr(reinterpret_cast<void *>(&compare), &info) ? dlopen(info.dli_fname, RTLD_NOW | RTLD_NOLOAD) : nullptr;
-  }();
-  return handle;
-}
-
 }  // namespace
+
+extern "C" void *mcfm_runtime_symbol(const char *name);  // runtime_symbols.cpp (generated)
 
 extern "C" void *mcfm_darwin_symbol(const char *name) {
   const Export *e = static_cast<const Export *>(
       bsearch(name, kExports, sizeof kExports / sizeof kExports[0], sizeof kExports[0], compare));
   if (!e) return nullptr;
   if (e->kind == SHIM) return e->address;
-  if (e->kind == RUNTIME) return runtime_handle() ? dlsym(runtime_handle(), name) : nullptr;
+  if (e->kind == RUNTIME) return mcfm_runtime_symbol(name);
   return dlsym(RTLD_DEFAULT, name);
 }
 

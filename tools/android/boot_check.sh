@@ -14,7 +14,7 @@ EXPECTED=0
 while read -r unit size; do EXPECTED=$((EXPECTED + size / unit)); done < <(otool -l "$IMAGE" | awk '
   /sectname __mod_init_func/ {k=8} /sectname __init_offsets/ {k=4}
   k && $1=="size" {print k, $2; k=0}')
-PUSH=(--push "$OUT/runtime/libmcfm_runtime.so" --push "$IMAGE")
+PUSH=(--push "$OUT/libmcfm_launcher.so" --push "$IMAGE")
 for so in "$OUT"/stubs/*.so; do PUSH+=(--push "$so"); done
 echo "boot_check: loading the game on $("${ANDROID_SDK:-$HOME/Library/Android/sdk}/platform-tools/adb" shell getprop ro.build.version.release | tr -d '\r') ($EXPECTED initializers expected)"
 set +e

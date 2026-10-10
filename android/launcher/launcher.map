@@ -1,0 +1,8 @@
+/* libmcfm_launcher.so exports only its entry points: none of its C++ runtime's symbols, so system
+   libraries in the process keep binding to Android's own libc++ (docs/research/android-launcher.md). */
+{
+  global:
+    mcfm_run_main;
+  local:
+    *;
+};

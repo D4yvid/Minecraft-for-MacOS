@@ -66,10 +66,30 @@ constexpr const char kStubPrefix[] = "mcfm_stub_";
 
 bool is_stub(const std::string &name) { return name.compare(0, sizeof kStubPrefix - 1, kStubPrefix) == 0; }
 
-void *runtime() {
-  static void *handle = dlopen("libmcfm_runtime.so", RTLD_NOW | RTLD_NOLOAD);
-  return handle;
+// The OpenGLES framework's gl* functions come from the system's GLES 3: the library's exports;
+// for an extension function that GLES 3 has in core (glBindRenderbufferOES, glGenVertexArraysOES,
+// glDiscardFramebufferEXT = glInvalidateFramebuffer), the core function; only then
+// eglGetProcAddress (it can return GLES 1 entry points for OES names, which crash under a GLES 3
+// context). An unresolved gl* name stays unresolved: a draw call must never go to a stub.
+void *gles_symbol(const std::string &name) {
+  static void *gles = dlopen("libGLESv3.so", RTLD_NOW);
+  static void *egl = dlopen("libEGL.so", RTLD_NOW);
+  typedef void *(*GetProcAddress)(const char *);
+  static GetProcAddress get_proc = egl ? reinterpret_cast<GetProcAddress>(dlsym(egl, "eglGetProcAddress")) : nullptr;
+  if (!gles) return nullptr;
+  if (void *p = dlsym(gles, name.c_str())) return p;
+  std::string core;
+  if (name == "glDiscardFramebufferEXT") core = "glInvalidateFramebuffer";
+  else if (name.size() > 3 && name.compare(name.size() - 3, 3, "OES") == 0) core = name.substr(0, name.size() - 3);
+  if (!core.empty())
+    if (void *p = dlsym(gles, core.c_str())) return p;
+  return get_proc ? get_proc(name.c_str()) : nullptr;
 }
+
+bool is_gl_function(const std::string &name) { return name.compare(0, 2, "gl") == 0; }
+
+// open_library's handle for libc++: symbol() looks into the runtime's generated table.
+char g_runtime;
 
 }  // namespace
 
@@ -101,10 +121,7 @@ bool AndroidLoaderOS::map_zero(uint8_t *at, size_t size, int prot) {
 
 void *AndroidLoaderOS::open_library(const std::string &name) {
   if (name == "libSystem") return &g_libsystem;
-  if (name == "libc++") {
-    if (!runtime()) log("cannot find libmcfm_runtime.so in this process");
-    return runtime();
-  }
+  if (name == "libc++") return &g_runtime;
   if (name == "libz") return dlopen("libz.so", RTLD_NOW);
   if (!is_stub(name)) {
     log("no Android library for " + name);
@@ -117,11 +134,15 @@ void *AndroidLoaderOS::open_library(const std::string &name) {
   void *h = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
   if (!h) log("cannot load " + path + ": " + dlerror());
   else stubs_.insert(h);
+  if (h && name == "mcfm_stub_OpenGLES") gles_stub_ = h;
   return h;
 }
 
 void *AndroidLoaderOS::symbol(void *library, const std::string &name) {
   if (library == &g_libsystem) return mcfm_darwin_symbol(name.c_str());
+  if (library == &g_runtime) return mcfm_runtime_symbol(name.c_str());
+  // OpenGLES: the system's GLES first (EAGL's classes and constants stay stubbed).
+  if (library == gles_stub_ && is_gl_function(name)) return gles_symbol(name);
   // Stubs export the Mach-O names (leading '_'), which keeps them apart from bionic's.
   if (stubs_.count(library)) return dlsym(library, ("_" + name).c_str());
   return dlsym(library, name.c_str());
@@ -129,8 +150,7 @@ void *AndroidLoaderOS::symbol(void *library, const std::string &name) {
 
 void *AndroidLoaderOS::flat_symbol(const std::string &name) {
   if (void *p = mcfm_darwin_symbol(name.c_str())) return p;
-  if (runtime())
-    if (void *p = dlsym(runtime(), name.c_str())) return p;
+  if (void *p = mcfm_runtime_symbol(name.c_str())) return p;
   return dlsym(RTLD_DEFAULT, name.c_str());
 }
 

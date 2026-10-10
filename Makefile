@@ -217,15 +217,22 @@ $(ALAUNCH_OUT)/tests/%_test: android/launcher/tests/%_test.cpp $(RT_LIB)
 	@mkdir -p $(dir $@)
 	$(ACXX) $(RT_CXXFLAGS) $< $(RT_LDFLAGS) -o $@
 
-MCFM_RUN := $(ALAUNCH_OUT)/mcfm-run
-$(MCFM_RUN): android/launcher/run.cpp android/launcher/loader_android.cpp android/launcher/loader_android.h $(LOADER_SRCS) $(LOADER_HDRS) $(RT_LIB)
+# libmcfm_launcher.so: the loader, the launcher and the whole runtime, exporting only its entry
+# points (android/launcher/launcher.map). mcfm-run is a C program that dlopens it.
+LAUNCHER_SO := $(ALAUNCH_OUT)/libmcfm_launcher.so
+LAUNCHER_SO_SRCS := android/launcher/run.cpp android/launcher/loader_android.cpp $(LOADER_SRCS)
+$(LAUNCHER_SO): $(LAUNCHER_SO_SRCS) android/launcher/loader_android.h android/launcher/launcher.map $(LOADER_HDRS) $(RT_LIB)
 	@mkdir -p $(dir $@)
-	$(ACXX) $(RT_CXXFLAGS) -Ishared/loader -Ishared/apple -Iandroid/launcher android/launcher/run.cpp \
-	  android/launcher/loader_android.cpp $(LOADER_SRCS) $(RT_LDFLAGS) -ldl -o $@
+	$(ACXX) $(RT_CXXFLAGS) -fPIC -shared -Ishared/loader -Ishared/apple -Iandroid/launcher $(LAUNCHER_SO_SRCS) \
+	  $(ANDROID_LDFLAGS) -nostdlib++ --unwindlib=none -Wl,--whole-archive $(RT_OUT)/libmcfm_runtime.a -Wl,--no-whole-archive \
+	  -Wl,--version-script,android/launcher/launcher.map -Wl,-soname,libmcfm_launcher.so -ldl -lEGL -o $@
+MCFM_RUN := $(ALAUNCH_OUT)/mcfm-run
+$(MCFM_RUN): android/launcher/mcfm_run.c $(LAUNCHER_SO)
+	$(ACC) -Wall -O1 $(ANDROID_LDFLAGS) $< -ldl -o $@
 
 .PHONY: android-boot-check
 # Stage 3a acceptance on the running emulator/device: the converted game (make app) initializes.
-android-boot-check: $(MCFM_RUN) $(RT_LIB)
+android-boot-check: $(MCFM_RUN)
 	ANDROID_CC="$(ACC)" bash tools/android/boot_check.sh "$(LAUNCHER_OUT)" "$(ALAUNCH_OUT)"
 
 ANDROID_TESTS := pthread_test runtime_test files_test net_test
@@ -233,7 +240,7 @@ ANDROID_TESTS := pthread_test runtime_test files_test net_test
 # Needs a running emulator or device (make android-emulator).
 android-test: $(addprefix $(ALAUNCH_OUT)/tests/,$(ANDROID_TESTS)) $(MCFM_RUN)
 	@for t in $(ANDROID_TESTS); do bash tools/android/adb_run.sh --push $(RT_LIB) $(ALAUNCH_OUT)/tests/$$t || exit 1; done
-	bash tools/tests/android_runtime_symbols_test.sh $(RT_LIB) $(NDK64_BIN)/llvm-nm
+	bash tools/tests/android_runtime_symbols_test.sh $(RT_LIB) $(LAUNCHER_SO) $(NDK64_BIN)/llvm-nm
 	ANDROID_CC="$(ACC)" bash tools/tests/android_launcher_test.sh $(ALAUNCH_OUT)
 
 # ---------------------------------------------------------------- local game files

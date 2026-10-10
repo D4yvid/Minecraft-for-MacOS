@@ -2,9 +2,13 @@
 // LoaderOS on Android (docs/LAUNCHER.md, Stage 3a). Segments are copied into anonymous memory
 // and mprotect'ed (an app targeting SDK 29+ may not execute its own files). Imports resolve to:
 //   libSystem          -> the Darwin layer's table (mcfm_darwin_symbol)
-//   libc++             -> libmcfm_runtime.so (Apple-ABI libc++/libc++abi)
+//   libc++             -> the Apple-ABI libc++/libc++abi linked into this library, through its
+//                         generated symbol table: the library exports none of its C++ symbols,
+//                         because Android's system libc++ uses the same std::__1 names with
+//                         another ABI and system libraries (EGL, ...) must never bind to ours
 //   libz               -> the system's libz.so
-//   mcfm_stub_<lib>    -> <dir>/mcfm_stub_<lib>.so (symbols keep their Mach-O names)
+//   mcfm_stub_<lib>    -> <dir>/mcfm_stub_<lib>.so (symbols keep their Mach-O names), except
+//                         OpenGLES's gl* functions: the system's GLES (libGLESv3.so, EGL)
 // Unwind info is served to the runtime's libunwind through its dynamic section finder.
 #include <set>
 #include <string>
@@ -33,6 +37,7 @@ class AndroidLoaderOS : public LoaderOS {
  private:
   std::string dir_;          // where mcfm_stub_*.so and libmcfm_stubrt.so live
   std::set<void *> stubs_;   // dlopen handles of stub libraries
+  void *gles_stub_ = nullptr;
 };
 
 }  // namespace loader

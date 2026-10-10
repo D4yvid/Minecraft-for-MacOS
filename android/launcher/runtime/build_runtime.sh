@@ -3,7 +3,9 @@
 # Builds libmcfm_runtime.so for the Android launcher (docs/LAUNCHER.md, Stage 3a): LLVM 18.1.8
 # libc++, libc++abi and libunwind with Apple's arm64 ABI settings (runtime/include) plus the
 # Darwin libSystem layer (android/launcher/darwin). Writes:
-#   <outdir>/libmcfm_runtime.so
+#   <outdir>/libmcfm_runtime.so    everything exported (unit tests)
+#   <outdir>/libmcfm_runtime.a     the same objects (the launcher library links them, hidden)
+#   <outdir>/runtime_symbols.cpp   name -> address table of the C++ runtime's symbols
 #   <outdir>/include/        __config_site, __external_threading, __assertion_handler
 #   <outdir>/src/            the patched LLVM sources (their include/ dirs are the headers)
 # Code built against this runtime uses: $(runtime_cxxflags) below, printed by --print-cxxflags.
@@ -79,6 +81,19 @@ fail=0
 for j in "${jobs[@]}"; do wait "$j" || fail=1; done
 [ $fail = 0 ] || { echo "build_runtime: compilation failed" >&2; exit 1; }
 
+# The runtime's own table of its C++ symbols (libc++, libc++abi, libunwind): the launcher library
+# exports none of them (Android's system libc++ uses the same std::__1 names with another ABI, and
+# system libraries in the process must never bind to ours), so the loader finds the game's
+# libc++ imports here instead of with dlsym.
+"$BIN/llvm-nm" --defined-only --extern-only --format=just-symbols "$OBJ"/libcxx/*.o "$OBJ"/libcxxabi/*.o "$OBJ"/libunwind/*.o \
+  | grep -v ':$' | LC_ALL=C sort -u > "$OUT/runtime_symbols.txt"
+python3 -I "$ROOT/android/launcher/runtime/gen_runtime_symbols.py" "$OUT/runtime_symbols.txt" > "$OUT/runtime_symbols.cpp"
+"$CXX" "${COMMON[@]}" -std=c++17 -c "$OUT/runtime_symbols.cpp" -o "$OBJ/darwin/runtime_symbols.o"
+
+# libmcfm_runtime.a: everything, for the launcher library (linked whole, symbols hidden).
+# libmcfm_runtime.so: everything exported, for unit tests that run alone in their process.
+rm -f "$OUT/libmcfm_runtime.a"
+"$BIN/llvm-ar" rcs "$OUT/libmcfm_runtime.a" $(find "$OBJ" -name '*.o' | sort)
 "$CXX" -shared -nostdlib++ --unwindlib=none -Wl,-soname,libmcfm_runtime.so -Wl,-z,max-page-size=16384 \
   -Wl,--gc-sections $(find "$OBJ" -name '*.o' | sort) -ldl -o "$OUT/libmcfm_runtime.so"
-echo "build_runtime: $OUT/libmcfm_runtime.so"
+echo "build_runtime: $OUT/libmcfm_runtime.so, libmcfm_runtime.a"

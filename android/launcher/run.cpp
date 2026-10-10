@@ -1,4 +1,5 @@
-// mcfm-run <image> [options]: loads a converted Mach-O image on Android with our loader
+// mcfm_run_main(argc, argv), called by the mcfm-run executable (mcfm_run.c) after it loads
+// libmcfm_launcher.so. mcfm-run <image> [options]: loads a converted Mach-O image on Android with our loader
 // (docs/LAUNCHER.md, Stage 3a) and runs its initializers. Stubs and libmcfm_stubrt.so are taken
 // from the image's directory. Options (repeatable, in order, after loading):
 //   --call <symbol>[=<int>]   call the exported `int symbol(int)`, print "<symbol>=<result>"
@@ -6,8 +7,10 @@
 //   --hook <hex address>      (before loading) replace the converted image's hook at that unslid
 //                             address with `1000 + x` (the loader fixture's hook)
 //   --weak <symbol>           print "weak <symbol>=runtime" when every weak-bound slot of that
-//                             symbol holds libmcfm_runtime.so's definition, else "=other"
+//                             symbol holds the runtime's definition, else "=other"
 //   --initializers-only       load, run the initializers, print their count, exit
+//   --gl                      (before loading) make a GLES 3 context current: EGL pbuffer 1280x720
+#include <EGL/egl.h>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -31,6 +34,23 @@ namespace {
 
 int fixture_hook(int x) { return 1000 + x; }
 
+// A GLES 3 context on a pbuffer (no window before Stage 3c), current on this thread.
+bool make_gl_context(int width, int height) {
+  EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+  if (!eglInitialize(display, nullptr, nullptr)) return false;
+  const EGLint config_attrs[] = {EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
+                                 EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
+                                 EGL_DEPTH_SIZE, 24, EGL_STENCIL_SIZE, 8, EGL_NONE};
+  EGLConfig config;
+  EGLint count = 0;
+  if (!eglChooseConfig(display, config_attrs, &config, 1, &count) || count < 1) return false;
+  const EGLint surface_attrs[] = {EGL_WIDTH, width, EGL_HEIGHT, height, EGL_NONE};
+  EGLSurface surface = eglCreatePbufferSurface(display, config, surface_attrs);
+  const EGLint context_attrs[] = {EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE};
+  EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, context_attrs);
+  return surface != EGL_NO_SURFACE && context != EGL_NO_CONTEXT && eglMakeCurrent(display, surface, surface, context);
+}
+
 int usage(const char *message) {
   std::fprintf(stderr, "mcfm-run: %s\nusage: mcfm-run <image> [--hook <addr>]... [--initializers-only] "
                "[--call <sym>[=<int>]] [--int <sym>] [--weak <sym>]\n", message);
@@ -39,12 +59,17 @@ int usage(const char *message) {
 
 }  // namespace
 
-int main(int argc, char **argv) {
+extern "C" __attribute__((visibility("default"))) int mcfm_run_main(int argc, char **argv) {
   setvbuf(stdout, nullptr, _IOLBF, 0);
   if (argc < 2) return usage("no image");
   std::string path = argv[1];
   std::vector<uintptr_t> hooks;
   std::vector<const void *> replacements;
+  for (int i = 2; i < argc; i++)
+    if (std::strcmp(argv[i], "--gl") == 0 && !make_gl_context(1280, 720)) {
+      std::fprintf(stderr, "mcfm-run: cannot create a GLES 3 context\n");
+      return 1;
+    }
   for (int i = 2; i + 1 < argc; i++)
     if (std::strcmp(argv[i], "--hook") == 0) {
       hooks.push_back(static_cast<uintptr_t>(std::strtoull(argv[++i], nullptr, 16)));
@@ -92,6 +117,7 @@ int main(int argc, char **argv) {
     std::string a = argv[i];
     if (a == "--initializers-only") return 0;
     if (a == "--hook") { i++; continue; }
+    if (a == "--gl") continue;
     if (i + 1 >= argc) return usage(("missing value for " + a).c_str());
     std::string v = argv[++i];
     if (a == "--call") {
@@ -107,8 +133,7 @@ int main(int argc, char **argv) {
     } else if (a == "--weak") {
       std::vector<Fixup> fixups;
       decode_fixups(file.data(), file.size(), image.macho, &fixups, &error);
-      void *runtime = dlopen("libmcfm_runtime.so", RTLD_NOW | RTLD_NOLOAD);
-      void *want = runtime ? dlsym(runtime, v.c_str()) : nullptr;
+      void *want = mcfm_runtime_symbol(v.c_str());
       int slots = 0, ours = 0;
       for (const Fixup &x : fixups)
         if (x.kind == FixupKind::WeakBind && x.symbol == "_" + v) {
