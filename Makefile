@@ -11,7 +11,7 @@ OUT_APP ?= $(CURDIR)/dist/minecraftpe.app
 SHARED_INC   := -Ishared/include -Ishared/apple
 SHARED_CORE  := shared/src/platform.cpp shared/src/win10_ui.cpp shared/src/keyboard_mouse.cpp
 SHARED_HEADERS := $(wildcard shared/include/mcfm/*.h shared/include/mcfm/*/*.h shared/apple/*.h)
-SHARED_TESTS := keymap_test input_state_test features_test
+SHARED_TESTS := keymap_test input_state_test features_test launcher_app_platform_test
 MACOS_TESTS  := titlebar_test input_policy_test
 
 # ---------------------------------------------------------------- macOS (Mac Catalyst) — DEPRECATED
@@ -153,6 +153,11 @@ $(BUILD)/test/features_test: shared/tests/features_test.cpp shared/tests/fake_pl
 $(BUILD)/test/macho_uuid_test: shared/apple/macho_uuid_test.cpp shared/apple/macho_uuid.cpp shared/apple/macho_uuid.h
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -O1 $(SHARED_INC) shared/apple/macho_uuid_test.cpp shared/apple/macho_uuid.cpp -o $@
+
+LAUNCHER_SHARED_INC := -Ishared/launcher -Ishared/apple
+$(BUILD)/test/launcher_app_platform_test: shared/tests/launcher_app_platform_test.cpp shared/launcher/app_platform.cpp shared/launcher/app_platform.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -Wextra -O1 $(LAUNCHER_SHARED_INC) shared/tests/launcher_app_platform_test.cpp shared/launcher/app_platform.cpp -o $@
 
 $(BUILD)/test/titlebar_test: macos/tests/titlebar_test.cpp macos/src/titlebar_zone.h
 	@mkdir -p $(dir $@)
