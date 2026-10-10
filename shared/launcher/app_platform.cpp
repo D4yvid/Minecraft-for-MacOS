@@ -45,12 +45,34 @@ std::string create_uuid(void *) {
 
 template <class F> void *fn(F f) { return reinterpret_cast<void *>(f); }
 
+using ShowKeyboardFn = void (*)(void *, const std::string &, int, bool, bool, const void *);
+using HideKeyboardFn = void (*)(void *);
+ShowKeyboardFn g_base_show = nullptr;
+HideKeyboardFn g_base_hide = nullptr;
+KeyboardCallbacks &keyboard_callbacks() { static KeyboardCallbacks cb = {nullptr, nullptr}; return cb; }
+
+// Base first (it keeps isKeyboardVisible's flag), then the host.
+void show_keyboard(void *self, const std::string &text, int max_length, bool limit, bool numbers, const void *pos) {
+  if (g_base_show) g_base_show(self, text, max_length, limit, numbers, pos);
+  if (keyboard_callbacks().show) keyboard_callbacks().show(text);
+}
+void hide_keyboard(void *self) {
+  if (g_base_hide) g_base_hide(self);
+  if (keyboard_callbacks().hide) keyboard_callbacks().hide();
+}
+
 }  // namespace
 
 void set_host_info(const HostInfo &info) { host() = info; }
 
+void set_keyboard_callbacks(const KeyboardCallbacks &cb) { keyboard_callbacks() = cb; }
+
 void build_vtable(void **out, void *const *base, const EngineFns &fns) {
   for (size_t i = 0; i < kBaseSlots; i++) out[i] = base[i];
+  g_base_show = reinterpret_cast<ShowKeyboardFn>(base[9]);
+  g_base_hide = reinterpret_cast<HideKeyboardFn>(base[10]);
+  out[9] = fn(&show_keyboard);    // showKeyboard
+  out[10] = fn(&hide_keyboard);   // hideKeyboard
   out[2] = fn(&data_url);           // getDataUrl
   out[4] = fn(&data_url);           // getPackagePath
   out[18] = fn(&no_op);             // swapBuffers: the host presents

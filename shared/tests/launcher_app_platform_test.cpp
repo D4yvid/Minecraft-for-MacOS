@@ -26,7 +26,7 @@ int main() {
   set_host_info(info);
   build_vtable(vt, base, fns);
 
-  const int ours[] = {2, 4, 18, 20, 21, 22, 23, 24, 25, 33, 34, 35, 53, 66, 68, 69, 74, 80, 81, 82, 83, 84, 93, 96, 99, 100};
+  const int ours[] = {2, 4, 9, 10, 18, 20, 21, 22, 23, 24, 25, 33, 34, 35, 53, 66, 68, 69, 74, 80, 81, 82, 83, 84, 93, 96, 99, 100};
   for (size_t i = 0; i < kBaseSlots; i++) {
     bool mine = false;
     for (int s : ours) mine |= (s == static_cast<int>(i));

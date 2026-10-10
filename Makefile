@@ -11,7 +11,7 @@ OUT_APP ?= $(CURDIR)/dist/minecraftpe.app
 SHARED_INC   := -Ishared/include -Ishared/apple
 SHARED_CORE  := shared/src/platform.cpp shared/src/win10_ui.cpp shared/src/keyboard_mouse.cpp
 SHARED_HEADERS := $(wildcard shared/include/mcfm/*.h shared/include/mcfm/*/*.h shared/apple/*.h)
-SHARED_TESTS := keymap_test input_state_test features_test launcher_app_platform_test launcher_engine_test hook_table_test macho_uuid_bounds_test launcher_uuid_race_test launcher_platform_test
+SHARED_TESTS := keymap_test input_state_test features_test launcher_app_platform_test launcher_engine_test hook_table_test macho_uuid_bounds_test launcher_uuid_race_test launcher_platform_test launcher_text_test
 MACOS_TESTS  := titlebar_test input_policy_test resize_math_test
 
 # ---------------------------------------------------------------- macOS (Mac Catalyst) — DEPRECATED
@@ -80,7 +80,7 @@ ios-syntax:
 # ---------------------------------------------------------------- Mach-O launcher (docs/LAUNCHER.md)
 LAUNCHER_BIN := $(BUILD)/launcher/mcfm-launch
 LAUNCHER_SRCS := macos/launcher/main.mm shared/apple/macho_uuid.cpp shared/apple/hook_table.cpp \
-                 shared/launcher/app_platform.cpp shared/launcher/engine.cpp shared/launcher/seams.cpp
+                 shared/launcher/app_platform.cpp shared/launcher/engine.cpp shared/launcher/seams.cpp shared/launcher/text_input.cpp
 LAUNCHER_CXXFLAGS := -arch arm64 -mmacosx-version-min=11.0 -std=c++17 -fobjc-arc -O2 -Wall -Wextra \
                      -Wno-unused-parameter -Ishared/apple -Ishared/launcher -Imacos/launcher
 
@@ -201,6 +201,10 @@ $(BUILD)/test/launcher_uuid_race_test: shared/tests/launcher_uuid_race_test.cpp 
 $(BUILD)/test/launcher_platform_test: shared/tests/launcher_platform_test.cpp shared/launcher/launcher_platform.cpp shared/launcher/launcher_platform.h shared/apple/engine_mouse.h shared/src/keyboard_mouse.cpp shared/src/platform.cpp
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -Wextra -O1 $(LAUNCHER_SHARED_INC) $(SHARED_INC) shared/tests/launcher_platform_test.cpp shared/launcher/launcher_platform.cpp shared/src/keyboard_mouse.cpp shared/src/platform.cpp -o $@
+
+$(BUILD)/test/launcher_text_test: shared/tests/launcher_text_test.cpp shared/launcher/text_input.cpp shared/launcher/text_input.h shared/launcher/app_platform.cpp shared/launcher/app_platform.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -Wextra -O1 $(LAUNCHER_SHARED_INC) shared/tests/launcher_text_test.cpp shared/launcher/text_input.cpp shared/launcher/app_platform.cpp -o $@
 
 $(BUILD)/test/titlebar_test: macos/tests/titlebar_test.cpp macos/src/titlebar_zone.h
 	@mkdir -p $(dir $@)

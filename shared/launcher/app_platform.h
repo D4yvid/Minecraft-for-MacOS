@@ -27,6 +27,13 @@ struct EngineFns {
 
 void set_host_info(const HostInfo &info);
 
+// The engine opens / closes a text box (AppPlatform slots 9 showKeyboard, 10 hideKeyboard).
+struct KeyboardCallbacks {
+  void (*show)(const std::string &initial_text);
+  void (*hide)();
+};
+void set_keyboard_callbacks(const KeyboardCallbacks &callbacks);
+
 // out[i] = base[i] for every slot we do not implement.
 void build_vtable(void **out, void *const *base, const EngineFns &fns);
 
