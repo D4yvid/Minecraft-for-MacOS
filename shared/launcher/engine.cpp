@@ -23,11 +23,16 @@ EngineAddresses EngineAddresses::for_slide(uintptr_t slide) {
   a.graphics_renderer = addr::kFnGraphicsRenderer + slide;
   a.graphics_version = addr::kFnGraphicsVersion + slide;
   a.graphics_extensions = addr::kFnGraphicsExtensions + slide;
+  a.fire_suspended = addr::kFnFireAppSuspended + slide;
+  a.fire_resumed = addr::kFnFireAppResumed + slide;
+  a.fire_focus_lost = addr::kFnFireAppFocusLost + slide;
+  a.fire_focus_gained = addr::kFnFireAppFocusGained + slide;
   return a;
 }
 
 bool Engine::start(const EngineAddresses &a, const HostInfo &info, int width, int height) {
   set_host_info(info);
+  a_ = a;
   // AppPlatform: the base constructor (sets the singleton), then our vtable.
   platform_ = std::calloc(1, addr::kAppPlatformSize);
   context_ = std::calloc(1, 16);  // AppContext is an empty object on iOS
@@ -44,6 +49,16 @@ bool Engine::start(const EngineAddresses &a, const HostInfo &info, int width, in
   resize(width, height);
   return true;
 }
+
+void Engine::fire(uintptr_t notifier) {
+  if (!app_ || !notifier) return;  // not started yet
+  fn_at<void (*)(void *)>(notifier)(platform_);
+}
+
+void Engine::suspend() { fire(a_.fire_suspended); }
+void Engine::resume() { fire(a_.fire_resumed); }
+void Engine::focus_lost() { fire(a_.fire_focus_lost); }
+void Engine::focus_gained() { fire(a_.fire_focus_gained); }
 
 void Engine::frame() {
   if (!app_) return;  // not started yet

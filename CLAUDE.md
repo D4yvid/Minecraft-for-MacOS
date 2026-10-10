@@ -1,6 +1,7 @@
 # Minecraft for macOS — notes for Claude
 
-Mods for Minecraft PE 0.15.10 on macOS (Catalyst), iOS and Android from one C++11 core.
+Mods for Minecraft PE 0.15.10 on macOS (the Mach-O launcher; Catalyst deprecated), iOS and
+Android from one C++11 core.
 Read docs/HANDOFF.md (state, knowledge base, roadmap, pitfalls) and docs/ARCHITECTURE.md first.
 Reverse-engineering notes: docs/research/. Local game files and the IDA database: game-files/ (git-ignored, see docs/GAME_FILES.md); idalib venv: .venv/.
 
@@ -29,4 +30,5 @@ Reverse-engineering notes: docs/research/. Local game files and the IDA database
   statics in entry points.
 - Features are plain `install()` functions for now; a module system is planned.
 - Logs are prefixed `mcfm:`.
-- `make catalyst-check` closes a running game (smoke test); check `pgrep -x minecraftpe` first.
+- The owner may be playing: `make app`/`check`/`run` refuse while `mcfm-launch` runs;
+  `make catalyst-check` closes a running Catalyst game (check `pgrep -x minecraftpe` first).

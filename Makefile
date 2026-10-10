@@ -75,6 +75,8 @@ ios-syntax:
 
 # ---------------------------------------------------------------- Mach-O launcher (docs/LAUNCHER.md)
 LAUNCHER_BIN := $(BUILD)/launcher/mcfm-launch
+# Never rebuild dist/launcher under a running game or start a second one on the same worlds.
+LAUNCHER_NOT_RUNNING = @! pgrep -x mcfm-launch >/dev/null || { echo "The launcher game is running (mcfm-launch): quit it first"; exit 1; }
 AUDIO_PROVIDER := $(BUILD)/launcher/libmcfm_audiotoolbox.dylib
 LAUNCHER_SRCS := macos/launcher/main.mm shared/apple/macho_uuid.cpp shared/apple/hook_table.cpp \
                  shared/launcher/app_platform.cpp shared/launcher/engine.cpp shared/launcher/seams.cpp shared/launcher/text_input.cpp \
@@ -83,7 +85,7 @@ LAUNCHER_SRCS := macos/launcher/main.mm shared/apple/macho_uuid.cpp shared/apple
 LAUNCHER_CXXFLAGS := -arch arm64 -mmacosx-version-min=11.0 -std=c++17 -fobjc-arc -O2 -Wall -Wextra \
                      -Wno-unused-parameter -Ishared/apple -Ishared/launcher -Imacos/launcher $(SHARED_INC)
 
-$(LAUNCHER_BIN): $(LAUNCHER_SRCS) $(wildcard shared/launcher/*.h macos/launcher/*.h) shared/apple/hook_table.h shared/apple/macho_uuid.h shared/apple/addresses_0_15_10.h
+$(LAUNCHER_BIN): $(LAUNCHER_SRCS) $(SHARED_HEADERS) $(wildcard shared/launcher/*.h macos/launcher/*.h)
 	@mkdir -p $(dir $@)
 	clang++ $(LAUNCHER_CXXFLAGS) $(LAUNCHER_SRCS) -framework AppKit -framework QuartzCore -framework GameController \
 	  -Wl,-rpath,@executable_path -o $@
@@ -98,12 +100,14 @@ angle:
 
 .PHONY: launcher launcher-check
 launcher: $(LAUNCHER_BIN) $(AUDIO_PROVIDER)
+	$(LAUNCHER_NOT_RUNNING)
 	@test -n "$(GAME)" || { echo "Set GAME=<your decrypted minecraftpe2.app> (or put it in config.mk)"; exit 1; }
 	@test -f "$(ANGLE_DIR)/libGLESv2.dylib" -a -f "$(ANGLE_DIR)/libEGL.dylib" || { echo "Run make angle first (downloads ANGLE)"; exit 1; }
 	bash macos/tools/make_launcher.sh "$(GAME)" "$(LAUNCHER_OUT)" "$(LAUNCHER_BIN)" "$(ANGLE_DIR)" "$(AUDIO_PROVIDER)"
 
 # Loads the image built by make launcher; the census lists every stub the game called.
 launcher-check:
+	$(LAUNCHER_NOT_RUNNING)
 	@rm -f $(BUILD)/launcher/census.txt; mkdir -p $(BUILD)/launcher
 	@OUT="$$(MCFM_CENSUS="$(CURDIR)/$(BUILD)/launcher/census.txt" "$(LAUNCHER_OUT)/mcfm-launch" --frames 120 2>&1)"; RC=$$?; \
 	  echo "$$OUT" | grep -E "^mcfm: (game image|EGL|engine|[0-9]+ frames)" ; \
@@ -114,6 +118,7 @@ launcher-check:
 
 .PHONY: launcher-run
 launcher-run:
+	$(LAUNCHER_NOT_RUNNING)
 	"$(LAUNCHER_OUT)/mcfm-launch"
 
 # The default macOS build is the launcher (Stage 1, docs/LAUNCHER.md).
@@ -218,9 +223,10 @@ $(AUDIO_PROVIDER): macos/launcher/audio_toolbox.cpp
 	@mkdir -p $(dir $@)
 	clang++ -arch arm64 -mmacosx-version-min=11.0 -std=c++17 -O2 -Wall -Wextra -dynamiclib macos/launcher/audio_toolbox.cpp \
 	  -install_name @rpath/libmcfm_audiotoolbox.dylib -o $@
+# arm64 like the provider it loads (the launcher is Apple Silicon only).
 $(BUILD)/test/audio_toolbox_test: macos/tests/audio_toolbox_test.cpp
 	@mkdir -p $(dir $@)
-	clang++ -std=c++17 -Wall -O1 macos/tests/audio_toolbox_test.cpp -o $@
+	clang++ -arch arm64 -std=c++17 -Wall -O1 macos/tests/audio_toolbox_test.cpp -o $@
 
 $(BUILD)/test/mouse_math_test: macos/tests/mouse_math_test.cpp macos/launcher/mouse_math.h
 	@mkdir -p $(dir $@)

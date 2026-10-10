@@ -17,10 +17,13 @@ int main() {
   raw.feed_raw(3.0, 2.0, &dx, &dy);
   EXPECT(dx == 3 && dy == -2);
   // Once a raw mouse has reported, AppKit's accelerated deltas are not used for look.
+  // ... and AppKit's again when no raw motion came for a while (a device GameController
+  // does not see, e.g. a tablet), so it can still turn the camera.
   LookSource src;
-  EXPECT(src.use_appkit_delta());
-  src.raw_seen();
-  EXPECT(!src.use_appkit_delta());
+  EXPECT(src.use_appkit_delta(10.0));
+  src.raw_seen(10.0);
+  EXPECT(!src.use_appkit_delta(10.1));
+  EXPECT(src.use_appkit_delta(10.0 + LookSource::kRawQuiet + 0.01));
   // Mouse wheel: one hotbar step per click, however fast, sign gives the direction.
   HotbarScroll s;
   int steps = 0;

@@ -33,6 +33,17 @@ int main() {
   look.add(2.6f, 0.0f, &ox, &oy);
   EXPECT(ox == 2 || ox == 3);
 
+  // Releasing Cmd frees keys whose key-up AppKit swallowed while Cmd was held; modifiers stay.
+  EXPECT(is_modifier_vk(16) && is_modifier_vk(17) && is_modifier_vk(18) && is_modifier_vk(91));
+  EXPECT(!is_modifier_vk('W') && !is_modifier_vk(27));
+  HeldSet cmd;
+  cmd.set('W', true);
+  cmd.set(16, true);
+  int freed = 0, freed_key = 0;
+  cmd.release_if([](int c) { return !is_modifier_vk(c); }, [&](int c) { freed++; freed_key = c; });
+  EXPECT(freed == 1 && freed_key == 'W' && !cmd.held['W'] && cmd.held[16]);
+  EXPECT(cmd.set('W', true));  // the next real press goes through again
+
   if (fails) { std::printf("%d failure(s)\n", fails); return 1; }
   std::printf("input_state_test: all passed\n");
   return 0;

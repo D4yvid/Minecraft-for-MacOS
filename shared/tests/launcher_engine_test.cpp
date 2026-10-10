@@ -33,6 +33,11 @@ static void client_ctor(void *self, int argc, char **argv) {
 }
 static void app_init(void *, void *ctx) { calls.push_back("init"); init_ctx = ctx; }
 static std::string gfx(void *) { return "gfx"; }
+static void *lifecycle_platform = nullptr;
+static void fire_suspended(void *p) { calls.push_back("suspended"); lifecycle_platform = p; }
+static void fire_resumed(void *) { calls.push_back("resumed"); }
+static void fire_focus_lost(void *) { calls.push_back("focus_lost"); }
+static void fire_focus_gained(void *) { calls.push_back("focus_gained"); }
 
 int main() {
   for (auto &p : base_vtable) p = reinterpret_cast<void *>(&app_update);
@@ -43,6 +48,8 @@ int main() {
     Engine early;
     early.resize(10, 10);
     early.frame();
+    early.suspend();
+    early.focus_lost();
     EXPECT(calls.empty());
   }
   EngineAddresses a;
@@ -51,6 +58,10 @@ int main() {
   a.client_ctor = reinterpret_cast<uintptr_t>(&client_ctor);
   a.app_init = reinterpret_cast<uintptr_t>(&app_init);
   a.graphics_vendor = a.graphics_renderer = a.graphics_version = a.graphics_extensions = reinterpret_cast<uintptr_t>(&gfx);
+  a.fire_suspended = reinterpret_cast<uintptr_t>(&fire_suspended);
+  a.fire_resumed = reinterpret_cast<uintptr_t>(&fire_resumed);
+  a.fire_focus_lost = reinterpret_cast<uintptr_t>(&fire_focus_lost);
+  a.fire_focus_gained = reinterpret_cast<uintptr_t>(&fire_focus_gained);
   HostInfo info;
   info.data_dir = "/d/";
   Engine engine;
@@ -68,9 +79,20 @@ int main() {
   engine.resize(800, 600);
   EXPECT(calls.size() == 3 && calls[0] == "update" && calls[1] == "size" && calls[2] == "ui_size");
   EXPECT(last_w == 800 && last_h == 600);
+  // App lifecycle, as the iOS app delegate drives it: AppPlatform's notifiers on our platform
+  // (suspended = the save on quit, focus lost/gained = pause on Cmd-Tab).
+  calls.clear();
+  engine.focus_lost();
+  engine.focus_gained();
+  engine.suspend();
+  engine.resume();
+  EXPECT(calls.size() == 4 && calls[0] == "focus_lost" && calls[1] == "focus_gained" && calls[2] == "suspended" && calls[3] == "resumed");
+  EXPECT(lifecycle_platform == engine.platform());
 
   EngineAddresses s = EngineAddresses::for_slide(0x1000);
   EXPECT(s.platform_ctor == 0x10045F678 + 0x1000 && s.app_init == 0x1000555BC + 0x1000);
+  EXPECT(s.fire_suspended == 0x100460280 + 0x1000 && s.fire_resumed == 0x10046038C + 0x1000);
+  EXPECT(s.fire_focus_lost == 0x100460484 + 0x1000 && s.fire_focus_gained == 0x100460500 + 0x1000);
 
   size_t n = 0;
   const Hook *h = hooks(&n);

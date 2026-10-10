@@ -23,4 +23,9 @@ runs catalyst-check macos/tests/smoke.sh;    deprecated catalyst-check yes
 runs app macos/tools/make_launcher.sh;       deprecated app no
 runs run mcfm-launch;                        deprecated run no
 runs check "--frames 120";                   deprecated check no
+# The launcher targets refuse while the game runs (rebuilding dist/launcher or starting a
+# second instance on the same worlds would break the running one).
+runs app "pgrep -x mcfm-launch"
+runs check "pgrep -x mcfm-launch"
+runs run "pgrep -x mcfm-launch"
 [ $fails = 0 ] && echo "make_targets_test: passed" || { echo "$fails failure(s)"; exit 1; }

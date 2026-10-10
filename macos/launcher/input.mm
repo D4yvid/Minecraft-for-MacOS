@@ -44,6 +44,10 @@ void apply_capture() {
     CGWarpMouseCursorPosition(CGPointMake(NSMidX(f), top - NSMidY(f)));
   } else {
     [NSCursor unhide];
+    // The engine still has the pre-capture position; give it where the cursor is now.
+    NSPoint p = [g_view convertPoint:[g_view.window mouseLocationOutsideOfEventStream] fromView:nil];
+    view_to_pixels(p.x, p.y, g_view.bounds.size.height, g_view.window.backingScaleFactor, &g_x, &g_y);
+    kbm::mouse_move_abs(g_x, g_y);
   }
 }
 
@@ -71,7 +75,8 @@ void type_text(NSEvent *e) {  // text mode: characters go to the engine's text q
     else if (c < 0x20) continue;
     else {
       NSRange r = [chars rangeOfComposedCharacterSequenceAtIndex:i];
-      push_text(g_text_queue, [[chars substringWithRange:r] UTF8String]);
+      const char *utf8 = [[chars substringWithRange:r] UTF8String];  // NULL for an unpaired surrogate
+      if (utf8) push_text(g_text_queue, utf8);
       i = NSMaxRange(r) - 1;
     }
   }
@@ -79,11 +84,18 @@ void type_text(NSEvent *e) {  // text mode: characters go to the engine's text q
 
 // Raw look motion: GameController reports the mouse's own counts, without the system's
 // pointer acceleration (fast flicks must not turn further than slow ones of the same length).
+void paste_text() {  // Cmd-V in a text box
+  NSString *text = [NSPasteboard.generalPasteboard stringForType:NSPasteboardTypeString];
+  const char *utf8 = text.UTF8String;
+  if (utf8) push_text(g_text_queue, utf8);
+}
+
 void attach_mouse(GCMouse *mouse) {
   if (!mouse || [g_mice containsObject:mouse]) return;
   [g_mice addObject:mouse];
+  mouse.handlerQueue = dispatch_get_main_queue();  // the engine's input queues are main-thread only
   mouse.mouseInput.mouseMovedHandler = ^(GCMouseInput *, float dx, float dy) {
-    g_look_source.raw_seen();
+    g_look_source.raw_seen(CACurrentMediaTime());
     if (!g_captured) return;
     int ox = 0, oy = 0;
     g_raw_look.feed_raw(dx, dy, &ox, &oy);
@@ -122,6 +134,12 @@ void install(NSView *view, void **vtable, const InputAddresses &a) {
 void key_event(NSEvent *e) {
   bool down = e.type == NSEventTypeKeyDown;
   int vk = mac_keycode_to_vk(e.keyCode);
+  if (down && (e.modifierFlags & NSEventModifierFlagCommand)) {
+    // Command shortcuts belong to the app (menu) or the text box, never to the game.
+    if (g_text_mode && [e.charactersIgnoringModifiers isEqualToString:@"v"]) paste_text();
+    return;
+  }
+  if (g_text_mode && down && e.isARepeat && vk && g_keys.held[vk]) return;  // still held from before the box opened
   if (g_text_mode && down && vk != 27) {
     type_text(e);
     return;
@@ -137,6 +155,10 @@ void flags_changed(NSEvent *e) {
   bool down = (vk == 16 && (f & NSEventModifierFlagShift)) || (vk == 17 && (f & NSEventModifierFlagControl)) ||
               (vk == 18 && (f & NSEventModifierFlagOption)) || (vk == 91 && (f & NSEventModifierFlagCommand));
   key(vk, down);
+  // AppKit swallows key-ups released while Command is held: on Command release, free every
+  // held key except modifiers (a real press goes through again afterwards).
+  if (vk == 91 && !down)
+    g_keys.release_if([](int c) { return !mcfm::is_modifier_vk(c); }, [](int c) { kbm::key(c, false); });
 }
 
 void mouse_event(NSEvent *e) {
@@ -144,7 +166,7 @@ void mouse_event(NSEvent *e) {
                      e.type == NSEventTypeRightMouseDragged || e.type == NSEventTypeOtherMouseDragged)) {
     // Captured: look motion. Raw from GCMouse once it reports (no pointer acceleration);
     // AppKit's accelerated deltas only until then.
-    if (g_look_source.use_appkit_delta()) {
+    if (g_look_source.use_appkit_delta(CACurrentMediaTime())) {
       int dx = 0, dy = 0;
       g_look.feed(e.deltaX, e.deltaY, &dx, &dy);
       if (dx || dy) kbm::mouse_move_rel(dx, dy);
@@ -165,8 +187,20 @@ void mouse_event(NSEvent *e) {
 }
 
 void scroll_event(NSEvent *e) {
-  int notches = g_scroll.feed(e.scrollingDeltaY, e.hasPreciseScrollingDeltas, CACurrentMediaTime());
+  if (e.momentumPhase != NSEventPhaseNone) return;  // trackpad momentum: no hotbar spinning
+  double dy = e.scrollingDeltaY;
+  // A wheel turns the hotbar the same way whatever "natural scrolling" says (as on Windows).
+  if (!e.hasPreciseScrollingDeltas && e.isDirectionInvertedFromDevice) dy = -dy;
+  int notches = g_scroll.feed(dy, e.hasPreciseScrollingDeltas, CACurrentMediaTime());
   if (notches) kbm::mouse_wheel(notches, g_x, g_y);
+}
+
+void window_became_key() { apply_capture(); }
+
+void set_backing_scale(double scale) {
+  const char *s = getenv("MCFM_LOOK_SCALE");
+  double factor = s ? atof(s) : 1.0;
+  g_look.set_scale(scale * (factor > 0 ? factor : 1.0));
 }
 
 void focus_lost() {

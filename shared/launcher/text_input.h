@@ -3,6 +3,7 @@
 // feeds it: one element per character, "\b" per deleted character, {"\n", true} for return.
 // The queue is the engine's std::vector<TextEvent>; the launcher always runs the iOS binary
 // (libc++, same ABI as ours on Apple). C++11.
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -14,6 +15,7 @@ struct TextEvent {
   bool newline;
 };
 static_assert(sizeof(TextEvent) == 32, "TextEvent must match the engine (libc++ arm64)");
+static_assert(offsetof(TextEvent, newline) == 24, "TextEvent must match the engine (libc++ arm64)");
 
 void push_text(uintptr_t queue, const std::string &utf8);  // one element per UTF-8 character
 void push_backspace(uintptr_t queue);

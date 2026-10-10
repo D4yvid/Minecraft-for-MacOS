@@ -48,6 +48,13 @@ constexpr uintptr_t kFnGraphicsRenderer = 0x10003A8AC;
 constexpr uintptr_t kFnGraphicsVersion = 0x10003A680;
 constexpr uintptr_t kFnGraphicsExtensions = 0x10003A908;
 constexpr int kAppSlotUpdate = 19;                         // App::update()
+// AppPlatform's app lifecycle notifiers (non-virtual, `this` = the platform), as the iOS app
+// delegate calls them: background -> suspended (MinecraftClient saves), foreground -> resumed,
+// resign/become active -> focus lost/gained.
+constexpr uintptr_t kFnFireAppSuspended = 0x100460280;     // AppPlatform::_fireAppSuspended
+constexpr uintptr_t kFnFireAppResumed = 0x10046038C;
+constexpr uintptr_t kFnFireAppFocusLost = 0x100460484;
+constexpr uintptr_t kFnFireAppFocusGained = 0x100460500;
 // Seams (hooked by the launcher)
 constexpr uintptr_t kFnXblAppConfig = 0x100798B34;         // Xbox services config singleton (seam #3)
 constexpr uintptr_t kFnCreateStores = 0x100711774;         // StoreFactory::createStores, iOS (seam #2)

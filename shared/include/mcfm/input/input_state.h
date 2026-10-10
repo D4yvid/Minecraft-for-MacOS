@@ -13,6 +13,14 @@ struct HeldSet {
     held[code] = down;
     return true;
   }
+  // Releases the held codes `pred` accepts, exactly once each.
+  template <class P, class F> void release_if(P pred, F onRelease) {
+    for (int c = 1; c < 256; c++)
+      if (held[c] && pred(c)) {
+        held[c] = false;
+        onRelease(c);
+      }
+  }
   template <class F> void release_all(F onRelease) {
     for (int c = 1; c < 256; c++)
       if (held[c]) {
@@ -21,6 +29,9 @@ struct HeldSet {
       }
   }
 };
+
+// Shift, Control, Alt/Option, Win/Command (Windows virtual-key codes).
+inline bool is_modifier_vk(int vk) { return vk == 16 || vk == 17 || vk == 18 || vk == 91; }
 
 // While a text field has focus, only Esc goes to the engine (to close chat/entry).
 inline bool passes_while_typing(int vk) { return vk == 27; }

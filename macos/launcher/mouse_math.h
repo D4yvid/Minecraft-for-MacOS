@@ -29,15 +29,17 @@ class LookConverter {
   double scale_, rx_ = 0, ry_ = 0;
 };
 
-// Which deltas drive the camera: raw GameController deltas once a raw mouse has reported
-// (no pointer acceleration), AppKit's until then (e.g. no GameController device yet).
+// Which deltas drive the camera: raw GameController deltas while a raw mouse reports (no
+// pointer acceleration); AppKit's when none has for a moment (no GameController device yet,
+// or one GameController does not see) — never both at once.
 class LookSource {
  public:
-  void raw_seen() { raw_ = true; }
-  bool use_appkit_delta() const { return !raw_; }
+  static constexpr double kRawQuiet = 0.25;  // seconds without raw motion before AppKit's counts
+  void raw_seen(double now) { last_raw_ = now; }
+  bool use_appkit_delta(double now) const { return now - last_raw_ > kRawQuiet; }
 
  private:
-  bool raw_ = false;
+  double last_raw_ = -1e9;
 };
 
 // Hotbar steps. A mouse wheel click is one step, as on Windows. Trackpad (precise) scrolling

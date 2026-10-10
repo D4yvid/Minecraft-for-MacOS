@@ -244,6 +244,7 @@ HostInfo host_info(const std::string &game_data_dir) {
   layer.contentsScale = self.window.backingScaleFactor;
   layer.drawableSize = CGSizeMake(px.width, px.height);
   _engine.resize((int)px.width, (int)px.height);
+  mcfm::launcher::input::set_backing_scale(self.window.backingScaleFactor);
 }
 - (void)windowDidResize:(NSNotification *)n {
   [self updateSurfaceSize];
@@ -259,9 +260,23 @@ HostInfo host_info(const std::string &game_data_dir) {
 // Quit: the engine's threads (REST, audio, ...) are still running, so the game's static
 // destructors must not run; leave like --frames does.
 - (void)applicationWillTerminate:(NSNotification *)n {
+  // As iOS does when the app goes to the background: the game saves the world and options.
+  std::printf("mcfm: quitting: game saving (app suspended)\n");
+  _engine.suspend();
+  std::printf("mcfm: saved, bye\n");
   std::fflush(stdout);
   std::fflush(stderr);
   _exit(0);
+}
+// Switched away / back (Cmd-Tab): the game pauses and resumes, as on iOS.
+- (void)applicationDidResignActive:(NSNotification *)n {
+  _engine.focus_lost();
+}
+- (void)applicationDidBecomeActive:(NSNotification *)n {
+  _engine.focus_gained();
+}
+- (void)windowDidBecomeKey:(NSNotification *)n {
+  mcfm::launcher::input::window_became_key();
 }
 - (void)windowDidResignKey:(NSNotification *)n {
   mcfm::launcher::input::focus_lost();
@@ -270,6 +285,25 @@ HostInfo host_info(const std::string &game_data_dir) {
 @end
 
 namespace {
+
+NSMenu *main_menu() {
+  NSMenu *bar = [[NSMenu alloc] init];
+  NSMenuItem *app_item = [[NSMenuItem alloc] init];
+  NSMenu *app_menu = [[NSMenu alloc] init];
+  [app_menu addItemWithTitle:@"Quit Minecraft PE" action:@selector(terminate:) keyEquivalent:@"q"];
+  app_item.submenu = app_menu;
+  [bar addItem:app_item];
+  NSMenuItem *window_item = [[NSMenuItem alloc] init];
+  NSMenu *window_menu = [[NSMenu alloc] initWithTitle:@"Window"];
+  [window_menu addItemWithTitle:@"Minimize" action:@selector(performMiniaturize:) keyEquivalent:@"m"];
+  [window_menu addItemWithTitle:@"Close" action:@selector(performClose:) keyEquivalent:@"w"];
+  NSMenuItem *full = [window_menu addItemWithTitle:@"Enter Full Screen" action:@selector(toggleFullScreen:) keyEquivalent:@"f"];
+  full.keyEquivalentModifierMask = NSEventModifierFlagCommand | NSEventModifierFlagControl;
+  window_item.submenu = window_menu;
+  [bar addItem:window_item];
+  NSApp.windowsMenu = window_menu;
+  return bar;
+}
 
 int usage(const char *why) {
   std::fprintf(stderr, "mcfm: %s\nusage: mcfm-launch [--print-hooks] [--frames N [--screenshot out.ppm]] [image]\n", why);
@@ -336,6 +370,7 @@ int main(int argc, char **argv) {
   @autoreleasepool {
     NSApplication *app = [NSApplication sharedApplication];
     app.activationPolicy = NSApplicationActivationPolicyRegular;
+    app.mainMenu = main_menu();  // Cmd-Q / Cmd-W / Cmd-M / full screen are app commands, not game keys
     McfmApp *delegate = [[McfmApp alloc] initWithDataDir:data_dir frames:frames screenshot:screenshot];
     app.delegate = delegate;
     [app run];
