@@ -58,8 +58,8 @@
 - Test first: `ios/tests/ipa_test.sh` builds from the user's app and checks Payload structure, arm64-only, LC_LOAD_DYLIB present, dylib platform = iOS (vtool). Fails before tool exists.
 
 ### Task 6: Android import on the shared core
-- Copy runet-client `jni/` (minus `Libraries/Output/*minecraftpe*`), `Makefile`, `config.mk`, `APK.bat`, `.vscode` excluded; Substrate headers + `libsubstrate.a` → `android/third_party/substrate/` with LICENSE (LGPL-3.0).
-- `android/jni/platform_android.{hpp,cpp}`: RunetPlatform (VirtualTable on `_ZTV21AppPlatform_android23`, FindIndex by symbol, dlsym globals, `_ZN5Mouse4feedEccssss`).
+- Copy the old injection client `jni/` (minus `Libraries/Output/*minecraftpe*`), `Makefile`, `config.mk`, `APK.bat`, `.vscode` excluded; Substrate headers + `libsubstrate.a` → `android/third_party/substrate/` with LICENSE (LGPL-3.0).
+- `android/jni/platform_android.{hpp,cpp}`: AndroidPlatform (VirtualTable on `_ZTV21AppPlatform_android23`, FindIndex by symbol, dlsym globals, `_ZN5Mouse4feedEccssss`).
 - `Modules/Win10.UI.Module.cpp`: keep Options toggle + config; AppPlatform patches go through shared Win10UiModule with `enabled = isWindowsUIEnabled`.
 - `Android.mk` adds shared sources + include path, links `-lminecraftpe` from `$(MCPE_LIB_DIR)` (config: `APK=`, extracted by `android/tools/extract_lib.sh`), error if missing.
 - Verify: `make android` compiles + links with NDK r10c (Rosetta) against the user's `libminecraftpe.so`.

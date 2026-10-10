@@ -8,7 +8,7 @@
 #include <dlfcn.h>
 #include <map>
 
-namespace runet
+namespace mcfm
 {
 namespace hook
 {
@@ -146,4 +146,4 @@ namespace hook
 		int FindIndex(std::string symbolName);
 	};
 }; // namespace hook
-}; // namespace runet
+}; // namespace mcfm

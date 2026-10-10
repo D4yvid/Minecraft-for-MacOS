@@ -35,7 +35,7 @@ Each input is checked first (`tools/check_game.sh`: arm64 UUID
   owner's IPA). The original `.ipa` file is not on the machine, so
   `ios/minecraftpe2.ipa` was rebuilt by zipping `Payload/` (same contents as an IPA).
 - Android: **no original APK yet.** `android/apk/minecraftpe-0.15.10-standin.apk` and the
-  `decompiled/` tree come from runet-client's decompiled APK (so the smali has runet's
-  `runetOnCreate` edits); `…-standin-runet-patched.apk` also loads `librunet`. The `.so` files
+  `decompiled/` tree come from an earlier injection project's decompiled APK (so the smali
+  has that project's edits); `…-standin-*-patched.apk` also loads its library. The `.so` files
   are the game's own 0.15.10 libraries. Replace with an original APK when available:
   `make game-files APK_IN=…`.

@@ -189,8 +189,9 @@ our loader; fixture tests cover fixups, imports, initializers, exceptions and ho
    compact unwind support.
 4. ☐ GL: native GLES 3 via EGL (or ANGLE on Vulkan); audio: the FMOD AudioToolbox subset on
    AAudio/OpenSL ES.
-5. ☐ Android platform layer: `NativeActivity`-style launcher, input, text input, file paths,
-   IPA import screen.
+5. ☐ Android platform layer: **our own APK** (built from scratch, nothing from Mojang's APK)
+   whose activity loads the launcher `.so`; input, text input, file paths, IPA import screen.
+   It replaces the old Win10-UI mod that patches Mojang's APK (`android/`, `make android-apk`).
 
 Acceptance: an APK (target SDK 37) that installs on Android 9+ arm64, including 16 KB-page
 devices, imports a user-supplied IPA and plays.
@@ -201,6 +202,8 @@ devices, imports a user-supplied IPA and plays.
 - Module system on top of the launcher's platform layer (HANDOFF §6.3).
 
 ## Decisions
+- 2026-10-10: the Android app is our own APK that launches the launcher `.so` (not a patched
+  Mojang APK); the old Android mod's library is named `libmcfm.so` like everything else.
 - 2026-10-10: Android targets the latest SDK (37, 16 KB pages), minimum API 28; prebuilt APKs
   outside Google Play (replaces the earlier SDK 28 decision). Toolchain: NDK r27d (LLVM 18),
   libc++/libc++abi/libunwind from LLVM 18.1.8 built with Apple's arm64 ABI settings.

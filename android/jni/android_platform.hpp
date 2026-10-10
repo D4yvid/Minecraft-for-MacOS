@@ -1,7 +1,7 @@
 #pragma once
 // mcfm::Platform for the Android build of Minecraft PE 0.15.10 (armeabi-v7a): libminecraftpe.so
 // keeps its symbols, so everything is found with dlsym, and AppPlatform's vtable is patched
-// through runet's VirtualTable.
+// through mcfm::hook's VirtualTable.
 #include <mcfm/platform.h>
 
 #include "hook.hpp"
@@ -11,7 +11,7 @@ namespace android {
 
 class AndroidPlatform : public Platform {
  public:
-  explicit AndroidPlatform(runet::hook::soinfo *minecraftpe);
+  explicit AndroidPlatform(mcfm::hook::soinfo *minecraftpe);
 
   // false when this is not the supported game build (AppPlatform vtable symbol missing).
   bool valid() const { return appPlatform_.Valid(); }
@@ -22,8 +22,8 @@ class AndroidPlatform : public Platform {
   void mouse_feed(int btn, int state, int x, int y, int dx, int dy);
 
  private:
-  runet::hook::soinfo *minecraftpe_;
-  runet::hook::VirtualTable appPlatform_;
+  mcfm::hook::soinfo *minecraftpe_;
+  mcfm::hook::VirtualTable appPlatform_;
 };
 
 }  // namespace android

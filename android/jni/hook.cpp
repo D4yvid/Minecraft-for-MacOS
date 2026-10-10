@@ -10,7 +10,7 @@
 #include "log.hpp"
 #include "vtable_scan.hpp"
 
-using namespace runet::hook;
+using namespace mcfm::hook;
 
 VirtualTable::VirtualTable(hook::soinfo *handle, std::string symbolName)
 	: handle(handle)

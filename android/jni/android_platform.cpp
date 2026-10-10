@@ -27,7 +27,7 @@ const char *slot_symbol(engine::Slot s) {
 
 }  // namespace
 
-AndroidPlatform::AndroidPlatform(runet::hook::soinfo *minecraftpe)
+AndroidPlatform::AndroidPlatform(mcfm::hook::soinfo *minecraftpe)
     : minecraftpe_(minecraftpe), appPlatform_(minecraftpe, kAppPlatformVtable) {}
 
 void AndroidPlatform::log(const char *msg) { __android_log_print(ANDROID_LOG_INFO, "mcfm", "%s", msg); }

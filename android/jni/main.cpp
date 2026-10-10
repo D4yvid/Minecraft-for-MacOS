@@ -1,4 +1,4 @@
-// Android entry point: loaded by MainActivity (System.loadLibrary("runet")), it attaches to
+// Android entry point: loaded by MainActivity (System.loadLibrary("mcfm")), it attaches to
 // libminecraftpe.so and installs the shared hardcoded Win10 (desktop) UI.
 #include <dlfcn.h>
 #include <jni.h>
@@ -12,7 +12,7 @@ namespace {
 
 void init() {
   // Only dlsym is used on the handle, so the plain (possibly opaque) dlopen handle is fine.
-  runet::hook::soinfo *minecraftpe = (runet::hook::soinfo *)::dlopen("libminecraftpe.so", RTLD_NOW);
+  mcfm::hook::soinfo *minecraftpe = (mcfm::hook::soinfo *)::dlopen("libminecraftpe.so", RTLD_NOW);
   if (!minecraftpe) {
     LOGE("couldn't open libminecraftpe.so: %s", dlerror());
     return;
@@ -33,6 +33,3 @@ extern "C" jint JNI_OnLoad(JavaVM *, void *) {
   init();
   return JNI_VERSION_1_2;
 }
-
-// Kept so APKs patched for runet-client (which call runetOnCreate) still link.
-extern "C" void Java_com_mojang_minecraftpe_MainActivity_runetOnCreate(JNIEnv *, jobject) {}

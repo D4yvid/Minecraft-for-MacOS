@@ -147,7 +147,7 @@ check: launcher-check
 NDK ?= $(HOME)/Library/Android/ndk/android-ndk-r10c
 RELEASE_BUILD ?= 0
 ANDROID_OUT := $(CURDIR)/$(BUILD)/android
-ANDROID_LIB := $(ANDROID_OUT)/libs/armeabi-v7a/librunet.so
+ANDROID_LIB := $(ANDROID_OUT)/libs/armeabi-v7a/libmcfm.so
 HOST_X86 := $(if $(filter arm64,$(shell uname -m)),/usr/bin/arch -x86_64,)
 
 android:
@@ -157,7 +157,7 @@ android:
 	bash android/tests/lib_test.sh "$(ANDROID_LIB)" "$(NDK)"
 	bash android/tests/pick_gnustl_test.sh "$(NDK)" "$(dir $(ANDROID_LIB))"
 
-APK ?= $(firstword $(filter-out %runet-patched.apk,$(wildcard $(GAME_FILES)/android/apk/*.apk)))
+APK ?= $(firstword $(filter-out %-patched.apk,$(wildcard $(GAME_FILES)/android/apk/*.apk)))
 ANDROID_APK ?= $(CURDIR)/dist/minecraftpe-mcfm.apk
 android-apk: android
 	@test -n "$(APK)" || { echo "Set APK=<your Minecraft PE 0.15.10 .apk> (or put it in config.mk)"; exit 1; }

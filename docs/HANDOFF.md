@@ -27,7 +27,7 @@ by modding the shipped engine — never redistributing it. Next goals set by the
 | macOS launcher (default, `make app`) | iOS binary loaded by our own launcher: no Catalyst/UIKit, every framework stubbed; ANGLE/Metal window, keyboard, raw mouse look, text entry, sound, no Xbox prompt | ✅ `make test`; `make check` (120 frames); owner played a world 2026-10-10 |
 | macOS Catalyst (deprecated, `make catalyst`) | Win10 UI, keyboard+mouse with pointer capture, resizable window that the engine follows, auto-hiding/fading title bar, App Store receipt prompt skipped | ✅ `make check` (bundle test + 15 s launch with log asserts); owner's screenshots (Win10 title screen, game filling the window). Hand checks M1–M7 below **not** all confirmed |
 | iOS | Win10 UI + receipt skip dylib, `make ios-ipa` → unsigned IPA | ✅ compiles for iOS (`make ios-syntax`), IPA structure test with a stub dylib. ❓ never linked against the real iOS SDK (no Xcode here), never run on a device |
-| Android | Win10 UI via `librunet.so`, `make android-apk` | ✅ builds with NDK r10c, library + APK pipeline tests on stand-in APKs. ❓ never run on a device |
+| Android | Win10 UI via `libmcfm.so`, `make android-apk` (patches Mojang's APK; Stage 3 replaces it with our own launcher APK) | ✅ builds with NDK r10c, library + APK pipeline tests on stand-in APKs. ❓ never run on a device |
 | Shared core | `Platform` interface, `win10_ui`, `keyboard_mouse`, input logic | ✅ host tests (C++11), ASan/UBSan clean |
 | Repo hygiene | Apache-2.0, no Mojang files, `make test` from a fresh clone | ✅ `no_game_files_test`, fresh-clone run |
 
@@ -58,7 +58,7 @@ rebuild it: [GAME_FILES.md](GAME_FILES.md). The Makefile uses it by default (`GA
   `~/Downloads/Payload/minecraftpe2.app`.
 - IDA database: `game-files/ida/minecraftpe2-arm64.i64` (auto-analysed).
 - Android: `libminecraftpe.so` with symbols, decompiled tree, and **stand-in** APKs rebuilt
-  from runet-client's decompiled APK — no original Android APK on the machine; ask the owner
+  from an earlier injection project's decompiled APK — no original Android APK on the machine; ask the owner
   for one before Android device work.
 
 ### idalib (scripted IDA)
@@ -83,7 +83,7 @@ make catalyst        # deprecated Catalyst build; refuses while that game runs
 make catalyst-check  # bundle/IPA/UUID tests + 15 s launch — CLOSES a running Catalyst game
 make catalyst-run
 # The Catalyst build is a deprecated build mode until the launcher replaces it (LAUNCHER.md).
-make android     # librunet.so + tests      make android-apk APK=…   make ios-ipa
+make android     # libmcfm.so + tests       make android-apk APK=…   make ios-ipa
 ```
 
 ## 4. How it works (beyond ARCHITECTURE.md)
@@ -198,8 +198,8 @@ rebinding the GL imports to our own GLES-on-Metal (or ANGLE) and inline-hooking 
 Prerequisite for both B-style hooks on Apple: an inline hooking library (none in the repo).
 
 ### 6.3 Module system
-Deferred by the owner ("later we'll build a better module system"). The runet-style
-registry was deliberately removed; today features are `install()` functions called from the
+Deferred by the owner ("later we'll build a better module system"). The old injection
+project's registry was deliberately removed; today features are `install()` functions called from the
 entry points. Requirements gathered so far: per-platform availability, enable/disable at
 runtime, persisted config, ordering/dependencies, C++11. Design it with the owner first.
 
@@ -208,7 +208,7 @@ runtime, persisted config, ordering/dependencies, C++11. Design it with the owne
   the iOS `ShowKeyboardView` popup.
 - Keyboard + mouse on iPad (UIKit `prefersPointerLocked`, no CoreGraphics on iOS) and on
   Android (physical mice/keyboards; `getDefaultInputMode` now named).
-- In-game settings for the mod (needs a UI hook; runet had an Options-screen toggle).
+- In-game settings for the mod (needs a UI hook; the old injection project had an Options-screen toggle).
 - Clipboard, full-screen key, controller support, scroll/look sensitivity settings.
 - Xbox Live / Realms are not functional in these copies; decide whether to hide them.
 

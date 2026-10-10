@@ -17,7 +17,7 @@ we *find* them and what the OS around the game looks like.
    (IDA addresses + LC_UUID guard)                          (dlsym on libminecraftpe.so)
                     │                       │                     │
               macos/ glue                ios/ glue           android/ glue
-   GameController + UIKit input,     Win10 UI only        JNI_OnLoad, runet hooking,
+   GameController + UIKit input,     Win10 UI only        JNI_OnLoad, vtable hooking,
    pointer lock, resize, title bar                         APK packaging
 ```
 
@@ -85,6 +85,6 @@ before looking for it in the stripped iOS binary.
   `LC_LOAD_DYLIB @executable_path/Frameworks/libmcfm.dylib` (`tools/inject.py`) and
   signs it ad hoc.
 - iOS: `ios/tools/make_ipa.sh` does the injection into an arm64-only IPA, unsigned.
-- Android: `android/tools/build_apk.sh` adds `System.loadLibrary("runet")` after
+- Android: `android/tools/build_apk.sh` adds `System.loadLibrary("mcfm")` after
   gnustl_shared in `MainActivity` (`patch_smali.py`), adds the libraries, rebuilds with
   apktool and debug-signs.

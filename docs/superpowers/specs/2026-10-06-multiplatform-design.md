@@ -3,7 +3,7 @@
 ## Goal
 One public repo (`github.com/D4yvid/Minecraft-for-MacOS`, Apache-2.0) that builds mods for
 Minecraft PE **0.15.10** on macOS (Catalyst-converted iOS app), iOS (injected IPA) and Android
-(runet-client, injected APK), with game logic written once in a shared, platform-neutral core.
+(the old injection client, injected APK), with game logic written once in a shared, platform-neutral core.
 No Mojang files (IPA, APK, `.app`, `libminecraftpe.so`, assets) are ever committed; every build
 takes the user's own copy as input.
 
@@ -30,7 +30,7 @@ shared/
   tests/                    host unit tests (all pure logic + module tests against a FakePlatform)
 macos/   Catalyst glue: GameController/UIKit input, pointer lock, resize, title bar; app conversion
 ios/     iOS glue + `make ios-ipa GAME=<ipa>` producing an injected, unsigned IPA
-android/ runet-client (jni/, build files) using shared/ for Win10 UI; Substrate in third_party
+android/ the old injection client (jni/, build files) using shared/ for Win10 UI; Substrate in third_party
 tools/   inject.py, convert.sh (macOS), ida/ (RE scripts)
 docs/    ARCHITECTURE.md (+ superpowers history), per-platform READMEs
 ```
@@ -71,7 +71,7 @@ class Client { public: explicit Client(Platform &); void add(Module *); bool ini
 - **apple/AddressPlatform**: today's `engine.mm` generalised: UUID guard, address table keyed by
   Slot/Global, vtable slot patch with vm_protect restore, `mouse_feed` = MouseDevice::feed
   (sub_1000201BC) for buttons/abs and a direct MouseAction push for relative motion.
-- **android/RunetPlatform**: runet `hook::VirtualTable` on `_ZTV21AppPlatform_android23`, slot
+- **android/AndroidPlatform**: `mcfm::hook::VirtualTable` on `_ZTV21AppPlatform_android23`, slot
   index found with `FindIndex(<base or android override symbol>)`; `global` via dlsym
   `_ZN8Keyboard7_inputsE` / `_ZN8Keyboard7_statesE`; `mouse_feed` via dlsym `_ZN5Mouse4feedEccssss`.
   Android keeps its own Options-screen toggle and config file, passing `enabled()` to Win10UiModule.
@@ -80,7 +80,7 @@ class Client { public: explicit Client(Platform &); void add(Module *); bool ini
 - macOS: Win10Ui(always) + KeyboardMouse + Catalyst glue + store skip (unchanged behaviour).
 - iOS: Win10Ui(enabled on iPad or when `NSUserDefaults` `mcfm.win10ui` is true) + store skip.
   Keyboard/mouse on iPad is a later step (needs UIKit pointer lock instead of CoreGraphics).
-- Android: Win10Ui(runet config toggle). Keyboard/mouse later.
+- Android: Win10Ui(config toggle). Keyboard/mouse later.
 
 ## Build
 Top-level `Makefile`: `make test` (host tests, no game files), `make macos` / `make app
@@ -90,7 +90,7 @@ GAME=<ipa>`, `make android` (delegates to `android/Makefile`, needs NDK r10c + u
 (cryptid 0), arm64 slice UUID `01DFB489-A881-3BDD-8F98-6F016E409625`.
 
 ## Licensing
-Apache-2.0 for the project (runet-client relicensed by its author). `android/third_party/substrate`
+Apache-2.0 for the project (the old injection client relicensed by its author). `android/third_party/substrate`
 keeps LGPL-3.0 with its notice; AOSP-derived code keeps its header. NOTICE lists both.
 
 ## Testing
@@ -105,6 +105,6 @@ with NDK r10c when available; otherwise documented as untested.
 - Win10 UI is hardcoded on (as in the macOS mod) on every platform: no iPad/defaults
   toggle on iOS, no Options toggle on Android. It also patches PlatformType and
   UseMetadataDrivenScreens where known (Android).
-- Android: runet's Client/modules, Substrate and minecraft headers are not imported; the
+- Android: the old client's modules, Substrate and minecraft headers are not imported; the
   library finds everything with dlsym and no longer links against libminecraftpe.so.
 - Targets: Mac Catalyst and iOS 15.0 (current libc++ minimum).

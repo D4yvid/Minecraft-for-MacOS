@@ -3,8 +3,8 @@ Copyright 2026 Dayvid Albuquerque
 
 Licensed under the Apache License, Version 2.0 (see LICENSE).
 
-The Android injection code in android/jni (android, hook, jni, maps) comes from
-runet-client by the same author, relicensed here under Apache-2.0.
+The Android injection code in android/jni (android, hook, jni, maps) comes from an earlier
+project by the same author, relicensed here under Apache-2.0.
 
 android/jni/hook.hpp contains code from the Android Open Source Project:
   Copyright (C) 2008 The Android Open Source Project. All rights reserved.

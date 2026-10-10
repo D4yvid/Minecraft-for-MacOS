@@ -1,6 +1,6 @@
 #!/bin/bash
-# usage: build_apk.sh <Minecraft PE 0.15.10 .apk> <libs dir with librunet.so + libgnustl_shared.so> <out.apk>
-# Decompiles your APK, makes MainActivity load librunet, adds the libraries, rebuilds and
+# usage: build_apk.sh <Minecraft PE 0.15.10 .apk> <libs dir with libmcfm.so + libgnustl_shared.so> <out.apk>
+# Decompiles your APK, makes MainActivity load libmcfm, adds the libraries, rebuilds and
 # signs it with a local debug key (MCFM_KEYSTORE, default build/android/debug.keystore).
 # Needs apktool and a JDK (brew install apktool).
 set -euo pipefail
@@ -11,7 +11,7 @@ JDK="$(brew --prefix openjdk 2>/dev/null || true)/bin"; [ -x "$JDK/java" ] && ex
 command -v apktool >/dev/null || die "apktool not found (brew install apktool)"
 command -v jarsigner >/dev/null && command -v keytool >/dev/null || die "a JDK is needed (brew install openjdk)"
 [ -f "$APK" ] || die "APK $APK not found"
-for lib in librunet.so libgnustl_shared.so; do [ -f "$LIBS/$lib" ] || die "$LIBS/$lib missing (run make android)"; done
+for lib in libmcfm.so libgnustl_shared.so; do [ -f "$LIBS/$lib" ] || die "$LIBS/$lib missing (run make android)"; done
 case "$OUT" in *.apk) ;; *) die "output must end in .apk: $OUT" ;; esac
 KEYSTORE="${MCFM_KEYSTORE:-$ROOT/build/android/debug.keystore}"
 
@@ -23,14 +23,14 @@ MAIN="$WORK/app/smali/com/mojang/minecraftpe/MainActivity.smali"
 [ -f "$WORK/app/lib/armeabi-v7a/libminecraftpe.so" ] || die "$APK has no armeabi-v7a libminecraftpe.so"
 bash "$ROOT/android/tools/check_apk_lib.sh" "$WORK/app/lib/armeabi-v7a/libminecraftpe.so" >/dev/null || die "unsupported APK"
 python3 -I "$ROOT/android/tools/patch_smali.py" "$MAIN" >/dev/null
-cp "$LIBS/librunet.so" "$WORK/app/lib/armeabi-v7a/"
+cp "$LIBS/libmcfm.so" "$WORK/app/lib/armeabi-v7a/"
 GAME_STL="$WORK/app/lib/armeabi-v7a/libgnustl_shared.so"
 STL="$(NDK="${NDK:-$HOME/Library/Android/ndk/android-ndk-r10c}" bash "$ROOT/android/tools/pick_gnustl.sh" \
-  "$GAME_STL" "$LIBS/libgnustl_shared.so" "$LIBS/librunet.so")"
+  "$GAME_STL" "$LIBS/libgnustl_shared.so" "$LIBS/libmcfm.so")"
 if [ "$STL" = "$GAME_STL" ]; then
   echo "build_apk: keeping the game's own libgnustl_shared.so"
 else
-  echo "build_apk: using the NDK r10c libgnustl_shared.so (the game's lacks symbols librunet needs)"
+  echo "build_apk: using the NDK r10c libgnustl_shared.so (the game's lacks symbols libmcfm needs)"
   cp "$LIBS/libgnustl_shared.so" "$GAME_STL"
 fi
 apktool b -o "$WORK/unsigned.apk" "$WORK/app" >/dev/null || die "apktool could not rebuild the APK"

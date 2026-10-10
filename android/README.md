@@ -4,7 +4,9 @@ Adds the Windows 10 (desktop) UI to Minecraft PE 0.15.10 for Android (armeabi-v7
 Requires **Android 6.0 or newer**: the mod patches `AppPlatform_android23`, the platform
 class the game uses from Android 6; on Android 5 the game uses another class and the mod
 has no effect.
-Based on the injection code of [runet-client](https://github.com/D4yvid/runet-client).
+It patches Mojang's Android APK; the Android launcher (docs/LAUNCHER.md, Stage 3) will
+replace it with an APK of our own that runs the iOS game image, so this mod is kept as it
+is until then.
 
 ## Build the library (no game files needed)
 
@@ -22,7 +24,7 @@ curl -LO https://dl.google.com/android/ndk/android-ndk-r10c-darwin-x86_64.bin
 replace each with the link 7-Zip names in its error output.)
 
 ```sh
-make android    # build/android/libs/armeabi-v7a/{librunet.so,libgnustl_shared.so}
+make android    # build/android/libs/armeabi-v7a/{libmcfm.so,libgnustl_shared.so}
 ```
 
 `NDK=` in `config.mk` if it lives elsewhere. Everything in `libminecraftpe.so` is found
@@ -39,9 +41,7 @@ adb install dist/minecraftpe-mcfm.apk
 ```
 
 `build_apk.sh` decompiles the APK, makes `MainActivity` call
-`System.loadLibrary("runet")` right after `gnustl_shared`, adds the two libraries,
-rebuilds and signs with a debug key in `build/android/debug.keystore`. The library keeps
-the name `librunet.so` and the `runetOnCreate` stub so APKs patched for runet-client work
-too.
+`System.loadLibrary("mcfm")` right after `gnustl_shared`, adds the two libraries,
+rebuilds and signs with a debug key in `build/android/debug.keystore`.
 
 Logs: `adb logcat -s mcfm`.
