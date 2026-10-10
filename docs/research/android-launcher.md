@@ -108,3 +108,15 @@ By the work a shim does:
   constructors it can evaluate, so fixture initializers make an external call. ✅
 - The game's `sysctlbyname` names: `hw.machine`, `hw.cputype`, `hw.cpusubtype`,
   `machdep.cpu.vendor` (answered as an arm64 Darwin device, the last one ENOENT). ✅
+
+## Known gaps of the Darwin layer (3a)
+- `dispatch_sync` runs the block on the queue's thread: an exception escaping it terminates
+  instead of reaching the caller; thread-local state differs from the caller's.
+- `dispatch_once` with a throwing block leaves the predicate unrun (Darwin hangs later callers).
+- The global-queue pool grows to 64 threads at most; queues are never freed.
+- `sendmsg`/`recvmsg` drop control messages; `getifaddrs` has no link-layer entries;
+  `kqueue`/`kevent` and terminals are unsupported; `CCCrypt` is unimplemented and `CCHmac`
+  supports SHA-256 only.
+- `SA_SIGINFO` handlers get no `ucontext`.
+- `printf("%Lf")` from the game would read a 16-byte `long double` (Darwin's is 8) ❓.
+- Linux-only errno numbers reach the game as 1000 + the Linux number.

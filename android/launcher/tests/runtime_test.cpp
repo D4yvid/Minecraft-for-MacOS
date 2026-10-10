@@ -19,6 +19,8 @@
 
 #include "darwin.h"
 
+extern "C" void mcfm_darwin_CCHmacInit(void *, uint32_t, const void *, size_t);
+extern "C" void mcfm_darwin_CCHmacFinal(void *, void *);
 extern "C" int mcfm_darwin_CCCrypt(int, int, int, const void *, size_t, const void *, const void *, size_t, void *,
                                    size_t, size_t *);
 
@@ -142,6 +144,20 @@ int main() {
   size_t moved = 99;
   char out[16];
   EXPECT(mcfm_darwin_CCCrypt(0, 0, 0, "k", 1, nullptr, "in", 2, out, sizeof out, &moved) == -4305 && moved == 0);
+
+  // 9. Linux-only errno numbers do not alias Darwin ones (EBADE is 52, Darwin's ENETRESET) and
+  // come back unchanged.
+  EXPECT(mcfm_darwin_errno(EBADE) != 52 && mcfm_bionic_errno(mcfm_darwin_errno(EBADE)) == EBADE);
+  EXPECT(mcfm_darwin_errno(ENOTEMPTY) == darwin::kENOTEMPTY && mcfm_bionic_errno(darwin::kENOTEMPTY) == ENOTEMPTY);
+
+  // 10. CCHmac with an unsupported algorithm (SHA-1: a 20-byte MAC) writes nothing.
+  unsigned char hmac[384], mac[20 + 12];
+  memset(mac, 0xAA, sizeof mac);
+  mcfm_darwin_CCHmacInit(hmac, static_cast<uint32_t>(darwin::kCCHmacAlgSHA1), "k", 1);
+  mcfm_darwin_CCHmacFinal(hmac, mac);
+  bool untouched = true;
+  for (unsigned char b : mac) untouched &= b == 0xAA;
+  EXPECT(untouched);
 
   if (fails) { printf("%d failure(s)\n", fails); return 1; }
   printf("runtime_test: all passed\n");

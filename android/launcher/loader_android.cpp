@@ -136,12 +136,14 @@ void *AndroidLoaderOS::flat_symbol(const std::string &name) {
 
 bool AndroidLoaderOS::register_unwind(uintptr_t header, uintptr_t text_lo, uintptr_t text_hi, uintptr_t compact_unwind,
                                       size_t compact_size, uintptr_t eh_frame, size_t eh_size) {
-  std::lock_guard<std::mutex> hold(g_lock);
-  if (g_count == kMaxImages) return false;
-  if (g_count == 0 && __unw_add_find_dynamic_unwind_sections(find_sections) != 0) return false;
-  UnwindSections s = {header, eh_frame, eh_size, compact_unwind, compact_size};
-  g_ranges[g_count++] = Range{text_lo, text_hi, s};
-  // Called once the image is mapped and bound, before its initializers: those may register
+  {
+    std::lock_guard<std::mutex> hold(g_lock);
+    if (g_count == kMaxImages) return false;
+    if (g_count == 0 && __unw_add_find_dynamic_unwind_sections(find_sections) != 0) return false;
+    UnwindSections s = {header, eh_frame, eh_size, compact_unwind, compact_size};
+    g_ranges[g_count++] = Range{text_lo, text_hi, s};
+  }
+  // Without the lock: callbacks may unwind (find_sections takes it). Called once the image is mapped and bound, before its initializers: those may register
   // _dyld_register_func_for_add_image callbacks, which see this image.
   mcfm_darwin_add_image(reinterpret_cast<const void *>(header), slide_of(header));
   return true;

@@ -12,6 +12,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
+#include <sys/select.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -51,10 +52,22 @@ static_assert(darwin::kSizeof_sockaddr_in == sizeof(sockaddr_in) && darwin::kSiz
                   darwin::kOffsetof_sockaddr_in6_sin6_addr == offsetof(sockaddr_in6, sin6_addr),
               "inet addresses: same after the first two bytes");
 static_assert(darwin::kSizeof_linger == sizeof(struct linger) && darwin::kSizeof_ip_mreq == sizeof(struct ip_mreq) &&
-                  darwin::kSizeof_ipv6_mreq == sizeof(struct ipv6_mreq) && darwin::kSizeof_timeval == sizeof(struct timeval),
+                  darwin::kSizeof_ipv6_mreq == sizeof(struct ipv6_mreq),
               "socket option values with the same layout");
 
 namespace {
+
+// Darwin's struct timeval: a 32-bit tv_usec followed by 4 bytes of padding the game may leave
+// uninitialized (bionic's tv_usec is 64-bit): never handed to bionic as it is.
+struct DarwinTimeval {
+  long tv_sec;
+  int32_t tv_usec;
+  int32_t padding;
+};
+static_assert(sizeof(DarwinTimeval) == darwin::kSizeof_timeval && darwin::kSizeof_timeval_tv_usec == 4, "timeval");
+
+timeval to_bionic(const DarwinTimeval &d) { return timeval{d.tv_sec, d.tv_usec}; }
+DarwinTimeval to_darwin(const timeval &b) { return DarwinTimeval{b.tv_sec, static_cast<int32_t>(b.tv_usec), 0}; }
 
 int to_bionic_family(int d) {
   if (d == darwin::kAF_INET6) return AF_INET6;
@@ -98,6 +111,10 @@ bool to_bionic(const void *darwin_addr, socklen_t darwin_len, sockaddr_storage *
 // kernel does); *darwin_len becomes the full Darwin length.
 void to_darwin(const sockaddr *b, socklen_t b_len, void *darwin_addr, socklen_t *darwin_len) {
   if (!darwin_addr || !darwin_len) return;
+  if (b_len < 2) {  // no address (recvfrom on a stream, an unnamed peer)
+    *darwin_len = 0;
+    return;
+  }
   uint8_t tmp[sizeof(sockaddr_storage)];
   memset(tmp, 0, sizeof tmp);
   size_t full;
@@ -126,9 +143,8 @@ const Pair kEaiErrors[] = {MCFM_DARWIN_EAI_ERRORS(MCFM_PAIR)};
 const Pair kAiFlags[] = {
     {darwin::kAI_PASSIVE, AI_PASSIVE},         {darwin::kAI_CANONNAME, AI_CANONNAME},
     {darwin::kAI_NUMERICHOST, AI_NUMERICHOST}, {darwin::kAI_NUMERICSERV, AI_NUMERICSERV},
-    {darwin::kAI_ADDRCONFIG, AI_ADDRCONFIG},   {darwin::kAI_V4MAPPED, AI_V4MAPPED},
-    {darwin::kAI_ALL, AI_ALL},
-};
+    {darwin::kAI_ADDRCONFIG, AI_ADDRCONFIG},
+};  // AI_V4MAPPED and AI_ALL: bionic refuses them (EAI_BADFLAGS); getaddrinfo emulates them
 const Pair kIfFlags[] = {
     {darwin::kIFF_UP, IFF_UP},           {darwin::kIFF_BROADCAST, IFF_BROADCAST}, {darwin::kIFF_LOOPBACK, IFF_LOOPBACK},
     {darwin::kIFF_POINTOPOINT, IFF_POINTOPOINT}, {darwin::kIFF_RUNNING, IFF_RUNNING}, {darwin::kIFF_MULTICAST, IFF_MULTICAST},
@@ -210,11 +226,17 @@ static_assert(sizeof(DarwinMsghdr) == darwin::kSizeof_msghdr && offsetof(DarwinM
                   offsetof(DarwinMsghdr, flags) == darwin::kOffsetof_msghdr_msg_flags,
               "msghdr");
 
+extern "C" void mcfm_darwin_freeaddrinfo(addrinfo *list);
+
+// bionic's list -> ours (Darwin sockaddrs); nullptr when out of memory.
 addrinfo *copy_addrinfo(const addrinfo *b) {
   addrinfo *head = nullptr, **tail = &head;
   for (; b; b = b->ai_next) {
     addrinfo *d = static_cast<addrinfo *>(calloc(1, sizeof(addrinfo) + sizeof(sockaddr_storage)));
-    if (!d) break;
+    if (!d) {
+      mcfm_darwin_freeaddrinfo(head);
+      return nullptr;
+    }
     d->ai_flags = to_darwin_flags(kAiFlags, b->ai_flags);
     d->ai_family = to_darwin_family(b->ai_family);
     d->ai_socktype = b->ai_socktype;
@@ -327,6 +349,14 @@ int mcfm_darwin_setsockopt(int fd, int darwin_level, int darwin_name, const void
   }
   int level, name;
   if (!option(darwin_level, darwin_name, &level, &name)) return -1;
+  if (level == SOL_SOCKET && (name == SO_RCVTIMEO || name == SO_SNDTIMEO)) {
+    if (!value || len < sizeof(DarwinTimeval)) {
+      errno = EINVAL;
+      return -1;
+    }
+    timeval b = to_bionic(*static_cast<const DarwinTimeval *>(value));
+    return setsockopt(fd, level, name, &b, sizeof b);
+  }
   return setsockopt(fd, level, name, value, len);
 }
 
@@ -342,6 +372,20 @@ int mcfm_darwin_getsockopt(int fd, int darwin_level, int darwin_name, void *valu
   }
   int level, name;
   if (!option(darwin_level, darwin_name, &level, &name)) return -1;
+  if (level == SOL_SOCKET && (name == SO_RCVTIMEO || name == SO_SNDTIMEO)) {
+    if (!value || !len || *len < sizeof(DarwinTimeval)) {
+      errno = EINVAL;
+      return -1;
+    }
+    timeval b;
+    socklen_t blen = sizeof b;
+    int r = getsockopt(fd, level, name, &b, &blen);
+    if (r == 0) {
+      *static_cast<DarwinTimeval *>(value) = to_darwin(b);
+      *len = sizeof(DarwinTimeval);
+    }
+    return r;
+  }
   int r = getsockopt(fd, level, name, value, len);
   if (r == 0 && level == SOL_SOCKET && name == SO_ERROR && value) *static_cast<int *>(value) = mcfm_darwin_errno(*static_cast<int *>(value));
   return r;
@@ -403,11 +447,19 @@ ssize_t mcfm_darwin_write(int fd, const void *buf, size_t n) {
   return nosigpipe(fd) ? send(fd, buf, n, MSG_NOSIGNAL) : write(fd, buf, n);
 }
 
+// Darwin's select leaves the timeout as it was (Linux updates it).
+int mcfm_darwin_select(int n, fd_set *r, fd_set *w, fd_set *e, DarwinTimeval *timeout) {
+  if (!timeout) return select(n, r, w, e, nullptr);
+  timeval b = to_bionic(*timeout);
+  return select(n, r, w, e, &b);
+}
+
 int mcfm_darwin_poll(struct pollfd *fds, nfds_t n, int timeout) {
-  // POLLWRNORM/POLLWRBAND differ (Darwin 0x4/0x100, bionic 0x100/0x200); the rest is the same.
+  // POLLWRNORM/POLLWRBAND differ (Darwin 0x4/0x100, bionic 0x100/0x200); Darwin's POLLEXTEND
+  // and the like (0x200 and up) have no bionic counterpart; the rest is the same.
   for (nfds_t i = 0; i < n; i++) {
     short e = fds[i].events;
-    short b = static_cast<short>(e & ~(0x100));
+    short b = static_cast<short>(e & 0xFF);
     if (e & 0x100) b |= POLLWRBAND;
     fds[i].events = b;
   }
@@ -423,21 +475,69 @@ int mcfm_darwin_poll(struct pollfd *fds, nfds_t n, int timeout) {
   return r;
 }
 
-int mcfm_darwin_getaddrinfo(const char *node, const char *service, const addrinfo *hints, addrinfo **res) {
+// IPv4 results as IPv4-mapped IPv6 addresses (::ffff:a.b.c.d), for AI_V4MAPPED.
+void map_v4(addrinfo *list) {
+  for (addrinfo *ai = list; ai; ai = ai->ai_next) {
+    if (ai->ai_family != static_cast<int>(darwin::kAF_INET) || !ai->ai_addr) continue;
+    uint8_t *d = reinterpret_cast<uint8_t *>(ai->ai_addr);  // room for a sockaddr_storage
+    uint8_t port[2], v4[4];
+    memcpy(port, d + 2, 2);
+    memcpy(v4, d + 4, 4);
+    memset(d, 0, sizeof(sockaddr_in6));
+    d[0] = sizeof(sockaddr_in6);
+    d[1] = static_cast<uint8_t>(darwin::kAF_INET6);
+    memcpy(d + 2, port, 2);
+    d[8 + 10] = 0xff;
+    d[8 + 11] = 0xff;
+    memcpy(d + 8 + 12, v4, 4);
+    ai->ai_family = static_cast<int>(darwin::kAF_INET6);
+    ai->ai_addrlen = sizeof(sockaddr_in6);
+  }
+}
+
+addrinfo *append(addrinfo *a, addrinfo *b) {
+  if (!a) return b;
+  addrinfo *t = a;
+  while (t->ai_next) t = t->ai_next;
+  t->ai_next = b;
+  return a;
+}
+
+int lookup_darwin(const char *node, const char *service, const addrinfo *hints, int bionic_family, addrinfo **out) {
   addrinfo b;
   memset(&b, 0, sizeof b);
   if (hints) {
     b.ai_flags = to_bionic_flags(kAiFlags, hints->ai_flags);
-    b.ai_family = to_bionic_family(hints->ai_family);
-    if (b.ai_family < 0) return eai_to_darwin(EAI_FAMILY);
     b.ai_socktype = hints->ai_socktype;
     b.ai_protocol = hints->ai_protocol;
   }
+  b.ai_family = bionic_family;
   addrinfo *list = nullptr;
-  int r = getaddrinfo(node, service, hints ? &b : nullptr, &list);
+  int r = getaddrinfo(node, service, &b, &list);
   if (r != 0) return eai_to_darwin(r);
-  *res = copy_addrinfo(list);
+  *out = copy_addrinfo(list);
   freeaddrinfo(list);
+  return *out ? 0 : eai_to_darwin(EAI_MEMORY);
+}
+
+// AI_V4MAPPED with an AF_INET6 hint: IPv6 results, or the IPv4 ones mapped when there are none;
+// with AI_ALL both. Darwin ignores both flags for other families.
+int mcfm_darwin_getaddrinfo(const char *node, const char *service, const addrinfo *hints, addrinfo **res) {
+  int family = hints ? to_bionic_family(hints->ai_family) : AF_UNSPEC;
+  if (family < 0) return eai_to_darwin(EAI_FAMILY);
+  bool v4mapped = hints && family == AF_INET6 && (hints->ai_flags & darwin::kAI_V4MAPPED);
+  if (!v4mapped) return lookup_darwin(node, service, hints, family, res);
+  bool all = (hints->ai_flags & darwin::kAI_ALL) != 0;
+  addrinfo *v6 = nullptr, *v4 = nullptr;
+  int r6 = lookup_darwin(node, service, hints, AF_INET6, &v6);
+  if (r6 == 0 && !all) {
+    *res = v6;
+    return 0;
+  }
+  int r4 = lookup_darwin(node, service, hints, AF_INET, &v4);
+  if (r4 == 0) map_v4(v4);
+  if (!v6 && !v4) return r6;
+  *res = append(v6, v4);
   return 0;
 }
 
@@ -488,6 +588,8 @@ void mcfm_darwin_freehostent(hostent *h) {
   free(h);
 }
 
+void mcfm_darwin_freeifaddrs(ifaddrs *list);
+
 int mcfm_darwin_getifaddrs(ifaddrs **out) {
   ifaddrs *list = nullptr;
   if (getifaddrs(&list) != 0) return -1;
@@ -497,7 +599,12 @@ int mcfm_darwin_getifaddrs(ifaddrs **out) {
     if (b->ifa_addr && to_darwin_family(b->ifa_addr->sa_family) < 0) continue;
     size_t name_len = strlen(b->ifa_name) + 1;
     ifaddrs *d = static_cast<ifaddrs *>(calloc(1, sizeof(ifaddrs) + 3 * sizeof(sockaddr_storage) + name_len));
-    if (!d) break;
+    if (!d) {
+      freeifaddrs(list);
+      mcfm_darwin_freeifaddrs(head);
+      errno = ENOMEM;
+      return -1;
+    }
     sockaddr_storage *space = reinterpret_cast<sockaddr_storage *>(d + 1);
     d->ifa_name = reinterpret_cast<char *>(space + 3);
     memcpy(d->ifa_name, b->ifa_name, name_len);

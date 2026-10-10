@@ -71,23 +71,33 @@ namespace {
 typedef mcfm_darwin_queue Queue;
 typedef mcfm_darwin_queue_kind Kind;
 
-// The pool behind every concurrent queue.
+// The pool behind every concurrent queue. It grows (up to kMaxWorkers) whenever work arrives and
+// no worker is idle, so blocks waiting for later blocks cannot starve the pool (libdispatch
+// overcommits the same way). Never destroyed: workers may still run at exit.
+constexpr int kMaxWorkers = 64;
 struct Pool {
   std::mutex lock;
   std::condition_variable ready;
   std::deque<Work> items;
-  bool started = false;
-} g_pool;
+  int workers = 0, idle = 0;
+};
+Pool &pool() {
+  static Pool *p = new Pool;
+  return *p;
+}
 
 void *pool_worker(void *) {
   pthread_setname_np(pthread_self(), "mcfm-dispatch");
+  Pool &p = pool();
   for (;;) {
     Work w;
     {
-      std::unique_lock<std::mutex> hold(g_pool.lock);
-      g_pool.ready.wait(hold, [] { return !g_pool.items.empty(); });
-      w = g_pool.items.front();
-      g_pool.items.pop_front();
+      std::unique_lock<std::mutex> hold(p.lock);
+      p.idle++;
+      p.ready.wait(hold, [&p] { return !p.items.empty(); });
+      p.idle--;
+      w = p.items.front();
+      p.items.pop_front();
     }
     run(w);
   }
@@ -121,14 +131,14 @@ void *serial_worker(void *arg) {
 
 void enqueue(Queue *q, const Work &w) {
   if (q->kind == Kind::Concurrent) {
-    std::lock_guard<std::mutex> hold(g_pool.lock);
-    if (!g_pool.started) {
-      g_pool.started = true;
-      long n = sysconf(_SC_NPROCESSORS_ONLN);
-      for (long i = 0; i < (n > 1 ? n : 2); i++) start_thread(pool_worker, nullptr);
+    Pool &p = pool();
+    std::lock_guard<std::mutex> hold(p.lock);
+    p.items.push_back(w);
+    if (p.idle < static_cast<int>(p.items.size()) && p.workers < kMaxWorkers) {
+      p.workers++;
+      start_thread(pool_worker, nullptr);
     }
-    g_pool.items.push_back(w);
-    g_pool.ready.notify_one();
+    p.ready.notify_one();
     return;
   }
   std::lock_guard<std::mutex> hold(q->lock);
@@ -140,7 +150,12 @@ void enqueue(Queue *q, const Work &w) {
   q->ready.notify_one();
 }
 
-Queue g_global[4] = {Queue(Kind::Concurrent), Queue(Kind::Concurrent), Queue(Kind::Concurrent), Queue(Kind::Concurrent)};
+// The four global queues, never destroyed (workers may run past exit).
+Queue *global_queue(int index) {
+  static Queue *queues[4] = {new Queue(Kind::Concurrent), new Queue(Kind::Concurrent), new Queue(Kind::Concurrent),
+                             new Queue(Kind::Concurrent)};
+  return queues[index];
+}
 
 struct Semaphore {
   std::mutex lock;
@@ -183,13 +198,17 @@ void run_sync(void *arg) {
 
 extern "C" {
 
-// &_dispatch_main_q is dispatch_get_main_queue(); the game only uses its address.
-Queue mcfm_darwin_dispatch_main_q(Kind::Main);
+// &_dispatch_main_q is dispatch_get_main_queue(); the game only uses its address. Never
+// destroyed: other threads may queue main-thread work at exit.
+void *mcfm_darwin_dispatch_main_queue(void) {
+  static Queue *q = new Queue(Kind::Main);
+  return q;
+}
 
 void *mcfm_darwin_dispatch_get_global_queue(long priority, unsigned long) {
   // DISPATCH_QUEUE_PRIORITY_HIGH 2, DEFAULT 0, LOW -2, BACKGROUND INT16_MIN
   int index = priority >= 2 ? 0 : priority >= 0 ? 1 : priority >= -2 ? 2 : 3;
-  return &g_global[index];
+  return global_queue(index);
 }
 
 void *mcfm_darwin_dispatch_queue_create(const char *, const void *attr) {
@@ -216,15 +235,25 @@ void mcfm_darwin_dispatch_sync(void *queue, void *block) {
 }
 
 // The predicate: 0 not run, 1 running, ~0l done (the value Darwin's inline fast path checks).
+// A block that throws leaves it unrun (0) for the next caller instead of blocking them forever.
 void mcfm_darwin_dispatch_once(long *predicate, void *block) {
   std::atomic<long> &state = *reinterpret_cast<std::atomic<long> *>(predicate);
-  long expected = 0;
-  if (state.compare_exchange_strong(expected, 1)) {
-    invoke_block(block);
-    state.store(~0l, std::memory_order_release);
-    return;
+  for (;;) {
+    long expected = 0;
+    if (state.compare_exchange_strong(expected, 1)) {
+      try {
+        invoke_block(block);
+      } catch (...) {
+        state.store(0, std::memory_order_release);
+        throw;
+      }
+      state.store(~0l, std::memory_order_release);
+      return;
+    }
+    if (expected == ~0l) return;
+    sched_yield();  // another thread runs it (or it threw and we try again)
+    if (state.load(std::memory_order_acquire) == ~0l) return;
   }
-  while (state.load(std::memory_order_acquire) != ~0l) sched_yield();
 }
 
 void *mcfm_darwin_dispatch_semaphore_create(long value) {
@@ -263,7 +292,7 @@ uint64_t mcfm_darwin_dispatch_time(uint64_t when, int64_t delta) {
 
 // The host's loop (mcfm-run; the platform layer in 3b) runs the main queue's work here.
 void mcfm_darwin_drain_main_queue(void) {
-  Queue *q = &mcfm_darwin_dispatch_main_q;
+  Queue *q = static_cast<Queue *>(mcfm_darwin_dispatch_main_queue());
   for (;;) {
     Work w;
     {

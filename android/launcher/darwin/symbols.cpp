@@ -50,7 +50,7 @@ void mcfm_darwin__Block_object_dispose(const void *, int);
 void *mcfm_darwin_Block_copy(const void *);
 void mcfm_darwin_Block_release(const void *);
 extern void *mcfm_darwin_NSConcreteGlobalBlock[32], *mcfm_darwin_NSConcreteStackBlock[32], *mcfm_darwin_NSConcreteMallocBlock[32];
-extern struct mcfm_darwin_queue mcfm_darwin_dispatch_main_q;
+void *mcfm_darwin_dispatch_main_queue(void);
 void mcfm_darwin_dispatch_async(void *, void *);
 void mcfm_darwin_dispatch_async_f(void *, void *, void (*)(void *));
 void *mcfm_darwin_dispatch_get_global_queue(long, unsigned long);
@@ -86,6 +86,7 @@ void mcfm_darwin_getsockopt(void); void mcfm_darwin_inet_ntop(void); void mcfm_d
 void mcfm_darwin_poll(void); void mcfm_darwin_recv(void); void mcfm_darwin_recvfrom(void); void mcfm_darwin_recvmsg(void);
 void mcfm_darwin_send(void); void mcfm_darwin_sendmsg(void); void mcfm_darwin_sendto(void);
 void mcfm_darwin_setsockopt(void); void mcfm_darwin_socket(void); void mcfm_darwin_write(void);
+void mcfm_darwin_select(void);
 // crypto.cpp, locale.cpp
 void mcfm_darwin_CCCrypt(void); void mcfm_darwin_CCHmacFinal(void); void mcfm_darwin_CCHmacInit(void);
 void mcfm_darwin_CCHmacUpdate(void); void mcfm_darwin_CC_SHA256_Final(void); void mcfm_darwin_CC_SHA256_Init(void);
@@ -145,7 +146,7 @@ const Export kExports[] = {
     B("__strcat_chk")
     S("__tolower", mcfm_darwin___tolower)
     S("__toupper", mcfm_darwin___toupper)
-    S("_dispatch_main_q", &mcfm_darwin_dispatch_main_q)
+    S("_dispatch_main_q", mcfm_darwin_dispatch_main_queue())
     S("_dyld_register_func_for_add_image", mcfm_darwin__dyld_register_func_for_add_image)
     B("abort")
     S("accept", mcfm_darwin_accept)
@@ -328,7 +329,7 @@ const Export kExports[] = {
     B("rename")
     B("rmdir")
     B("sched_yield")
-    B("select")
+    S("select", mcfm_darwin_select)
     S("semaphore_create", mcfm_darwin_semaphore_create)
     S("semaphore_destroy", mcfm_darwin_semaphore_destroy)
     S("semaphore_signal", mcfm_darwin_semaphore_signal)

@@ -56,8 +56,9 @@ char *mcfm_darwin_setlocale(int category, const char *name) {
   return r;
 }
 
+// Darwin treats a NULL name as "C"; bionic would crash on it.
 locale_t mcfm_darwin_newlocale(int mask, const char *name, locale_t base) {
-  return newlocale(to_bionic_mask(mask), name, base);
+  return newlocale(to_bionic_mask(mask), name ? name : "C", base);
 }
 
 }  // extern "C"

@@ -9,13 +9,19 @@
 
 #include "darwin.h"
 
+namespace {
+constexpr int kLinuxOnlyErrnoBase = 1000;  // Darwin's errno numbers end at 107
+}
+
 extern "C" int mcfm_darwin_errno(int e) {
   switch (e) {
     case 0: return 0;
 #define MCFM_CASE(name, value) case name: return value;
     MCFM_DARWIN_ERRNOS(MCFM_CASE)
 #undef MCFM_CASE
-    default: return e;
+    // Linux-only numbers would alias unrelated Darwin ones (EBADE 52 is Darwin's ENETRESET):
+    // moved above Darwin's range, and back by mcfm_bionic_errno.
+    default: return e + kLinuxOnlyErrnoBase;
   }
 }
 
@@ -26,7 +32,7 @@ extern "C" int mcfm_bionic_errno(int e) {
     MCFM_DARWIN_ERRNOS(MCFM_CASE)
 #undef MCFM_CASE
     case darwin::kENOTSUP: return ENOTSUP;  // Darwin keeps ENOTSUP (45) apart from EOPNOTSUPP (102)
-    default: return e;
+    default: return e >= kLinuxOnlyErrnoBase ? e - kLinuxOnlyErrnoBase : e;
   }
 }
 

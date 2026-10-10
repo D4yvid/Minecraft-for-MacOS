@@ -107,7 +107,8 @@ void part1_stdio_errno() {
   big = strtol("12", nullptr, 10);
   LINE("strtol ok %ld errno %d", big, errno);
   errno = 123;
-  LINE("errno kept %d", errno);
+  big = strtol("34", nullptr, 10);  // succeeds: errno untouched
+  LINE("errno kept across a successful call %d (%ld)", errno, big);
   int fd = open("conformance.tmp", O_CREAT | O_EXCL | O_WRONLY, 0644);
   LINE("open O_EXCL existing %d errno %d %s", fd, errno, strerror(errno));
   unlink("conformance.tmp");
@@ -121,9 +122,12 @@ void part1_stdio_errno() {
   unlink("conformance.tmp");
   mkdir("conformance.dir", 0755);
   close(open("conformance.dir/file", O_CREAT | O_WRONLY, 0644));
-  LINE("rmdir non-empty %d errno %d (ENOTEMPTY %d) %s", rmdir("conformance.dir"), errno, ENOTEMPTY, strerror(errno));
+  int rm = rmdir("conformance.dir");
+  int rm_errno = errno;
+  LINE("rmdir non-empty %d errno %d (ENOTEMPTY %d) %s", rm, rm_errno, ENOTEMPTY, strerror(rm_errno));
   std::string longname(300, 'n');
-  LINE("open long name %d errno %d (ENAMETOOLONG %d)", open(longname.c_str(), O_RDONLY), errno, ENAMETOOLONG);
+  int long_fd = open(longname.c_str(), O_RDONLY);
+  LINE("open long name %d errno %d (ENAMETOOLONG %d)", long_fd, errno, ENAMETOOLONG);
   LINE("strerror_r %d [%s]", strerror_r(EAGAIN, buf, sizeof buf), buf);
   unlink("conformance.dir/file");
   rmdir("conformance.dir");
@@ -175,7 +179,8 @@ void part2_files_system_signals() {
   LINE("lstat link %d lnk %d size %lld", lstat("c2/link", &st), S_ISLNK(st.st_mode), static_cast<long long>(st.st_size));
   LINE("stat via link %d reg %d", stat("c2/link", &st), S_ISREG(st.st_mode));
   LINE("stat dir %d dir %d mode %o", stat("c2/sub", &st), S_ISDIR(st.st_mode), st.st_mode & 0777);
-  LINE("stat missing %d errno %d", stat("c2/missing", &st), errno);
+  int missing = stat("c2/missing", &st);
+  LINE("stat missing %d errno %d", missing, errno);
   int fd = open("c2/file.txt", O_RDONLY);
   LINE("fstat %d size %lld", fstat(fd, &st), static_cast<long long>(st.st_size));
   void *map = mmap(nullptr, 12, PROT_READ, MAP_PRIVATE, fd, 0);
@@ -210,7 +215,8 @@ void part2_files_system_signals() {
   while (readdir_r(dir, &entry, &result) == 0 && result) count += entry.d_name[0] == 'f' && entry.d_namlen == 3;
   closedir(dir);
   LINE("readdir_r c2/sub files %d", count);
-  LINE("opendir missing %s errno %d", opendir("c2/nope") ? "opened" : "null", errno);
+  DIR *nope = opendir("c2/nope");
+  LINE("opendir missing %s errno %d", nope ? "opened" : "null", errno);
   for (int k = 0; k < 40; k++) {
     char name[32];
     snprintf(name, sizeof name, "c2/sub/f%02d", k);
@@ -232,7 +238,8 @@ void part2_files_system_signals() {
   LINE("sysctl hw.cputype %d %d", sysctlbyname("hw.cputype", &cputype, &ilen, nullptr, 0), cputype);
   LINE("sysctl hw.cpusubtype %d", sysctlbyname("hw.cpusubtype", &cputype, &ilen, nullptr, 0));
   len = sizeof machine;
-  LINE("sysctl unknown %d errno %d", sysctlbyname("mcfm.nothing", machine, &len, nullptr, 0), errno);
+  int unknown = sysctlbyname("mcfm.nothing", machine, &len, nullptr, 0);
+  LINE("sysctl unknown %d errno %d", unknown, errno);
 
   struct sigaction sa, old;
   memset(&sa, 0, sizeof sa);
@@ -253,7 +260,8 @@ void part2_files_system_signals() {
   LINE("signal SIGPIPE now ignored %d", signal(SIGPIPE, SIG_DFL) == SIG_IGN);
   struct termios t;
   fd = open("c2.tty", O_CREAT | O_RDWR, 0644);  // a regular file: not a terminal on either system
-  LINE("tcgetattr %d errno %d", tcgetattr(fd, &t), errno);
+  int tc = tcgetattr(fd, &t);
+  LINE("tcgetattr %d errno %d", tc, errno);
   close(fd);
   unlink("c2.tty");
 
@@ -328,6 +336,20 @@ void part3_mach_blocks_dispatch() {
   // (The predicate's "done" value is ~0l for the 2016 game's inline check; current libdispatch
   // stores another value, so it is not printed.)
   LINE("dispatch_once runs %d", once_runs);
+  // 16 blocks wait for a 17th on the same global queue: a fixed pool of ncpu threads would hang.
+  dispatch_semaphore_t gate = dispatch_semaphore_create(0), finished = dispatch_semaphore_create(0);
+  for (int k = 0; k < 16; k++)
+    dispatch_async(pool, ^{
+      dispatch_semaphore_wait(gate, DISPATCH_TIME_FOREVER);
+      dispatch_semaphore_signal(finished);
+    });
+  dispatch_async(pool, ^{
+    for (int k = 0; k < 16; k++) dispatch_semaphore_signal(gate);
+  });
+  int finished_count = 0;
+  for (int k = 0; k < 16; k++)
+    finished_count += dispatch_semaphore_wait(finished, dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0;
+  LINE("global queue overcommit %d", finished_count);
 
   dispatch_queue_t serial = dispatch_queue_create("mcfm.conformance", nullptr);
   __block int counter = 0;
@@ -357,6 +379,16 @@ void part3_mach_blocks_dispatch() {
     }
   });
   LINE("exception inside a block caught %d", caught);
+  __block bool caught_async = false;
+  dispatch_async(serial, ^{
+    try {
+      throw std::runtime_error("in async block");
+    } catch (const std::runtime_error &) {
+      caught_async = true;
+    }
+  });
+  dispatch_sync(serial, ^{});
+  LINE("exception inside an async block caught %d", caught_async);
   LINE("semaphore timeout %ld", dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 20 * NSEC_PER_MSEC)));
   dispatch_semaphore_signal(done);
   LINE("semaphore available %ld", dispatch_semaphore_wait(done, DISPATCH_TIME_NOW));
@@ -406,13 +438,27 @@ void tcp_echo(int family) {
   int type = 0;
   olen = sizeof type;
   getsockopt(client, SOL_SOCKET, SO_TYPE, &type, &olen);
+  timeval rcv;
+  memset(&rcv, 0xEE, sizeof rcv);
+  rcv.tv_sec = 3;
+  rcv.tv_usec = 500000;  // a whole number of Linux timer ticks (it rounds socket timeouts up to them)
+  int set_timeout = setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &rcv, sizeof rcv);
+  timeval back;
+  memset(&back, 0, sizeof back);
+  olen = sizeof back;
+  getsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &back, &olen);
+  LINE("tcp %s SO_RCVTIMEO %d back %ld.%06d", family == AF_INET ? "v4" : "v6", set_timeout, static_cast<long>(back.tv_sec),
+       static_cast<int>(back.tv_usec));
   LINE("tcp %s nodelay %d type %d", name, nodelay != 0, type);
   send(client, "ping", 4, 0);
   char buf[16] = {0};
   fd_set readable;
   FD_ZERO(&readable);
   FD_SET(accepted, &readable);
-  timeval tv = {2, 0};
+  timeval tv;
+  memset(&tv, 0xEE, sizeof tv);  // Darwin's tv_usec is 32-bit: the padding after it is garbage
+  tv.tv_sec = 2;
+  tv.tv_usec = 0;
   int ready = select(accepted + 1, &readable, nullptr, nullptr, &tv);
   ssize_t n = recv(accepted, buf, sizeof buf, 0);
   LINE("tcp %s select %d recv %zd %s", name, ready, n, buf);
@@ -479,6 +525,15 @@ void part4_network() {
                                              NI_NUMERICHOST | NI_NUMERICSERV), host, serv);
     freeaddrinfo(res);
   }
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_INET6;
+  hints.ai_flags = AI_V4MAPPED | AI_NUMERICHOST;
+  r = getaddrinfo("127.0.0.1", "80", &hints, &res);
+  LINE("getaddrinfo v4mapped %d family v6 %d %s", r, res && res->ai_family == AF_INET6,
+       res ? inet_ntop(AF_INET6, &reinterpret_cast<sockaddr_in6 *>(res->ai_addr)->sin6_addr, host, sizeof host) : "-");
+  if (res) freeaddrinfo(res);
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_flags = AI_NUMERICHOST;
   r = getaddrinfo("not a host name!", nullptr, &hints, &res);
   LINE("getaddrinfo bad %d %s", r, gai_strerror(r));
   in6_addr six;
@@ -510,6 +565,16 @@ void part4_network() {
 
   ifaddrs *ifs = nullptr;
   int loopback = 0;
+  timeval wait;
+  memset(&wait, 0xEE, sizeof wait);
+  wait.tv_sec = 0;
+  wait.tv_usec = 30000;
+  int idle = socket(AF_INET, SOCK_DGRAM, 0);
+  fd_set none;
+  FD_ZERO(&none);
+  FD_SET(idle, &none);
+  LINE("select timeout %d", select(idle + 1, &none, nullptr, nullptr, &wait));
+  close(idle);
   LINE("getifaddrs %d", getifaddrs(&ifs));
   for (ifaddrs *i = ifs; i; i = i->ifa_next)
     if (i->ifa_addr && i->ifa_addr->sa_family == AF_INET && (i->ifa_flags & IFF_LOOPBACK) &&
@@ -559,6 +624,9 @@ void part5_locale_ctype_crypto() {
   uselocale(previous);
   freelocale(c_locale);
   LINE("newlocale numeric %d", newlocale(LC_NUMERIC_MASK, "C", nullptr) != nullptr);
+  locale_t null_name = newlocale(LC_CTYPE_MASK, nullptr, nullptr);  // NULL name: the C locale
+  LINE("newlocale null name %d", null_name != nullptr);
+  if (null_name) freelocale(null_name);
 
   unsigned char digest[CC_SHA256_DIGEST_LENGTH];
   CC_SHA256_CTX sha;

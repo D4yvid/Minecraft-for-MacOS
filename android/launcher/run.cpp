@@ -68,6 +68,9 @@ int main(int argc, char **argv) {
   opts.initializers_run = &initializers;
   opts.argc = argc;
   opts.argv = const_cast<const char **>(argv);
+  opts.envp = const_cast<const char **>(environ);
+  static const char *apple[] = {nullptr};  // Darwin's "apple" strings: none
+  opts.apple = apple;
   Image image;
   std::string error;
   bool loaded = load_image(os, fd, file.data(), file.size(), opts, &image, &error);

@@ -331,11 +331,20 @@ int mcfm_darwin_sigaction(int signo, const darwin::sigaction_t *act, darwin::sig
     next.sa_flags &= ~SA_SIGINFO;
     next.sa_handler = act->handler;
   } else {
-    g_handlers[b].function.store(act->handler);
+    // The signal is blocked while the trampoline's record changes, so it never sees a new
+    // handler with the old flags (one-argument vs SA_SIGINFO) or the reverse.
+    sigset_t block, saved;
+    sigemptyset(&block);
+    sigaddset(&block, b);
+    pthread_sigmask(SIG_BLOCK, &block, &saved);
     g_handlers[b].darwin_flags.store(act->flags);
     g_handlers[b].darwin_mask.store(act->mask);
+    g_handlers[b].function.store(act->handler);
     next.sa_flags |= SA_SIGINFO;
     next.sa_sigaction = trampoline;
+    int r = sigaction(b, &next, nullptr);
+    pthread_sigmask(SIG_SETMASK, &saved, nullptr);
+    return r;
   }
   return sigaction(b, &next, nullptr);
 }

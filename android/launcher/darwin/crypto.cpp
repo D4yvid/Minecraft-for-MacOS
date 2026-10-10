@@ -163,10 +163,7 @@ void mcfm_darwin_CCHmacUpdate(void *context, const void *data, size_t length) {
 
 void mcfm_darwin_CCHmacFinal(void *context, void *mac) {
   Hmac *h = static_cast<Hmac *>(context);
-  if (h->algorithm != darwin::kCCHmacAlgSHA256) {
-    memset(mac, 0, 32);
-    return;
-  }
+  if (h->algorithm != darwin::kCCHmacAlgSHA256) return;  // unsupported: the MAC is left as it was (its size is unknown here)
   uint8_t inner[32];
   sha_final(inner, &h->inner);
   sha_update(&h->outer, inner, sizeof inner);
