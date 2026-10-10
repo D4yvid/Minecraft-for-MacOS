@@ -175,6 +175,16 @@ ANDROID_LDFLAGS := -Wl,-z,max-page-size=16384
 LLVM_RUNTIMES ?= $(CURDIR)/$(BUILD)/llvm-runtimes
 API ?= 37
 
+# The app (Stage 3c): JDK + Kotlin compiler, build-tools and the API 37 platform.
+JVM_TOOLS ?= $(HOME)/Library/Android/jvm-tools
+JAVA_HOME_APP := $(JVM_TOOLS)/jdk-21/Contents/Home
+KOTLINC := $(JVM_TOOLS)/kotlinc/bin/kotlinc
+BUILD_TOOLS := $(ANDROID_SDK)/build-tools/37.0.0
+ANDROID_JAR := $(ANDROID_SDK)/platforms/android-37.0/android.jar
+.PHONY: android-app-sdk
+android-app-sdk: android-sdk
+	bash tools/android/fetch_jvm_tools.sh "$(JVM_TOOLS)"
+
 .PHONY: android-sdk llvm-runtimes android-emulator android-emulator-stop darwin-abi
 # Regenerates the Darwin ABI tables from the macOS SDK (committed; darwin_abi_test checks them).
 darwin-abi:

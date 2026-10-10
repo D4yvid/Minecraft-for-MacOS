@@ -1,5 +1,5 @@
 #!/bin/bash
-# fetch_sdk.sh / fetch_llvm_runtimes.sh: unpack only archives whose checksum matches and that
+# fetch_sdk.sh / fetch_llvm_runtimes.sh / fetch_jvm_tools.sh: unpack only archives whose checksum matches and that
 # hold the expected directory; keep what is present. Local stand-in archives (no network).
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -36,4 +36,23 @@ llvm "libfoo|0000" "$T/llvm2" >/dev/null 2>&1 && { echo "FAIL: wrong SHA-256 acc
 [ -z "$(ls -A "$T/llvm2" 2>/dev/null)" ] || { echo "FAIL: files left after a checksum failure (llvm)"; fails=$((fails+1)); }
 llvm "libbar|$BSHA" "$T/llvm3" >/dev/null 2>&1 && { echo "FAIL: tarball without its directory accepted"; fails=$((fails+1)); }
 [ -z "$(ls -A "$T/llvm3" 2>/dev/null)" ] || { echo "FAIL: files left after a bad tarball"; fails=$((fails+1)); }
+# JVM tools (Stage 3c): tar.gz and zip archives with SHA-256, unpacked under their name.
+mkdir -p "$T/j/jdk-x/bin" && echo java > "$T/j/jdk-x/bin/java"
+(cd "$T/j" && tar czf "$T/jdk.tar.gz" jdk-x)
+mkdir -p "$T/k/kotlinc/bin" && echo kotlinc > "$T/k/kotlinc/bin/kotlinc"
+(cd "$T/k" && zip -qr "$T/kotlin.zip" kotlinc)
+JSHA="$(shasum -a 256 "$T/jdk.tar.gz" | awk '{print $1}')"
+KSHA="$(shasum -a 256 "$T/kotlin.zip" | awk '{print $1}')"
+jvm() { FETCH_JVM_TOOLS="$1" bash "$ROOT/tools/android/fetch_jvm_tools.sh" "$2"; }
+jvm "jdk-21|$BASE/jdk.tar.gz|$JSHA|jdk-x kotlinc|$BASE/kotlin.zip|$KSHA|kotlinc" "$T/jvm1" >/dev/null \
+  || { echo "FAIL: good JVM tools refused"; fails=$((fails+1)); }
+[ "$(cat "$T/jvm1/jdk-21/bin/java" 2>/dev/null)" = java ] && [ "$(cat "$T/jvm1/kotlinc/bin/kotlinc" 2>/dev/null)" = kotlinc ] \
+  || { echo "FAIL: JVM tools not unpacked under their names"; fails=$((fails+1)); }
+jvm "jdk-21|$BASE/jdk.tar.gz|0000|jdk-x" "$T/jvm2" >/dev/null 2>&1 && { echo "FAIL: wrong SHA-256 accepted (jvm)"; fails=$((fails+1)); }
+[ -z "$(ls -A "$T/jvm2" 2>/dev/null)" ] || { echo "FAIL: files left after a checksum failure (jvm)"; fails=$((fails+1)); }
+jvm "kotlinc|$BASE/kotlin.zip|$KSHA|wrong" "$T/jvm3" >/dev/null 2>&1 && { echo "FAIL: archive without its directory accepted (jvm)"; fails=$((fails+1)); }
+[ -z "$(ls -A "$T/jvm3" 2>/dev/null)" ] || { echo "FAIL: files left after a bad archive (jvm)"; fails=$((fails+1)); }
+echo changed > "$T/jvm1/kotlinc/bin/kotlinc"
+jvm "kotlinc|$BASE/missing.zip|$KSHA|kotlinc" "$T/jvm1" >/dev/null || { echo "FAIL: present JVM tool not kept"; fails=$((fails+1)); }
+[ "$(cat "$T/jvm1/kotlinc/bin/kotlinc")" = changed ] || { echo "FAIL: present JVM tool replaced"; fails=$((fails+1)); }
 [ $fails = 0 ] && echo "fetch_sdk_test: passed" || { echo "$fails failure(s)"; exit 1; }
