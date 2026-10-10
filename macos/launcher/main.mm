@@ -19,6 +19,8 @@
 #include "egl_min.h"
 #include "engine.h"
 #include "hook_table.h"
+#include "input.h"
+#include "launcher_platform.h"
 #include "macho_uuid.h"
 #include "resize_math.h"
 #include "screenshot.h"
@@ -119,6 +121,21 @@ HostInfo host_info(const std::string &game_data_dir) {
 @implementation McfmView
 - (CALayer *)makeBackingLayer { return [CAMetalLayer layer]; }
 - (BOOL)wantsUpdateLayer { return YES; }
+- (BOOL)acceptsFirstResponder { return YES; }
+- (void)keyDown:(NSEvent *)e { mcfm::launcher::input::key_event(e); }
+- (void)keyUp:(NSEvent *)e { mcfm::launcher::input::key_event(e); }
+- (void)flagsChanged:(NSEvent *)e { mcfm::launcher::input::flags_changed(e); }
+- (void)mouseMoved:(NSEvent *)e { mcfm::launcher::input::mouse_event(e); }
+- (void)mouseDragged:(NSEvent *)e { mcfm::launcher::input::mouse_event(e); }
+- (void)rightMouseDragged:(NSEvent *)e { mcfm::launcher::input::mouse_event(e); }
+- (void)otherMouseDragged:(NSEvent *)e { mcfm::launcher::input::mouse_event(e); }
+- (void)mouseDown:(NSEvent *)e { mcfm::launcher::input::mouse_event(e); }
+- (void)mouseUp:(NSEvent *)e { mcfm::launcher::input::mouse_event(e); }
+- (void)rightMouseDown:(NSEvent *)e { mcfm::launcher::input::mouse_event(e); }
+- (void)rightMouseUp:(NSEvent *)e { mcfm::launcher::input::mouse_event(e); }
+- (void)otherMouseDown:(NSEvent *)e { mcfm::launcher::input::mouse_event(e); }
+- (void)otherMouseUp:(NSEvent *)e { mcfm::launcher::input::mouse_event(e); }
+- (void)scrollWheel:(NSEvent *)e { mcfm::launcher::input::scroll_event(e); }
 @end
 
 @interface McfmApp : NSObject <NSApplicationDelegate, NSWindowDelegate>
@@ -184,6 +201,9 @@ HostInfo host_info(const std::string &game_data_dir) {
   NSSize px = [self pixelSize];
   if (!_engine.start(EngineAddresses::for_slide(g_slide), host_info(_dataDir), (int)px.width, (int)px.height)) exit(5);
   std::printf("mcfm: engine started (%dx%d)\n", (int)px.width, (int)px.height);
+  mcfm::launcher::input::install(self.window.contentView, _engine.vtable(), mcfm::launcher::InputAddresses::for_slide(g_slide));
+  self.window.acceptsMouseMovedEvents = YES;
+  [self.window makeFirstResponder:self.window.contentView];
   // Common modes: keep rendering during live resize and while a menu is open.
   NSTimer *timer = [NSTimer timerWithTimeInterval:1.0 / 60 target:self selector:@selector(frame) userInfo:nil repeats:YES];
   [[NSRunLoop currentRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
@@ -229,6 +249,9 @@ HostInfo host_info(const std::string &game_data_dir) {
 // Moved between a Retina and a non-Retina display: new pixel size for the same window.
 - (void)windowDidChangeBackingProperties:(NSNotification *)n {
   [self updateSurfaceSize];
+}
+- (void)windowDidResignKey:(NSNotification *)n {
+  mcfm::launcher::input::focus_lost();
 }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)app { return YES; }
 @end

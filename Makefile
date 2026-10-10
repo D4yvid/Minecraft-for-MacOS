@@ -12,7 +12,7 @@ SHARED_INC   := -Ishared/include -Ishared/apple
 SHARED_CORE  := shared/src/platform.cpp shared/src/win10_ui.cpp shared/src/keyboard_mouse.cpp
 SHARED_HEADERS := $(wildcard shared/include/mcfm/*.h shared/include/mcfm/*/*.h shared/apple/*.h)
 SHARED_TESTS := keymap_test input_state_test features_test launcher_app_platform_test launcher_engine_test hook_table_test macho_uuid_bounds_test launcher_uuid_race_test launcher_platform_test launcher_text_test
-MACOS_TESTS  := titlebar_test input_policy_test resize_math_test
+MACOS_TESTS  := titlebar_test input_policy_test resize_math_test mac_keymap_test
 
 # ---------------------------------------------------------------- macOS (Mac Catalyst) — DEPRECATED
 # The Catalyst build is a deprecated build mode: it keeps working until the Mach-O launcher
@@ -80,9 +80,11 @@ ios-syntax:
 # ---------------------------------------------------------------- Mach-O launcher (docs/LAUNCHER.md)
 LAUNCHER_BIN := $(BUILD)/launcher/mcfm-launch
 LAUNCHER_SRCS := macos/launcher/main.mm shared/apple/macho_uuid.cpp shared/apple/hook_table.cpp \
-                 shared/launcher/app_platform.cpp shared/launcher/engine.cpp shared/launcher/seams.cpp shared/launcher/text_input.cpp
+                 shared/launcher/app_platform.cpp shared/launcher/engine.cpp shared/launcher/seams.cpp shared/launcher/text_input.cpp \
+                 shared/launcher/launcher_platform.cpp macos/launcher/input.mm macos/launcher/mac_keymap.cpp \
+                 shared/src/keyboard_mouse.cpp shared/src/platform.cpp shared/src/keymap.cpp
 LAUNCHER_CXXFLAGS := -arch arm64 -mmacosx-version-min=11.0 -std=c++17 -fobjc-arc -O2 -Wall -Wextra \
-                     -Wno-unused-parameter -Ishared/apple -Ishared/launcher -Imacos/launcher
+                     -Wno-unused-parameter -Ishared/apple -Ishared/launcher -Imacos/launcher $(SHARED_INC)
 
 $(LAUNCHER_BIN): $(LAUNCHER_SRCS) $(wildcard shared/launcher/*.h macos/launcher/*.h) shared/apple/hook_table.h shared/apple/macho_uuid.h shared/apple/addresses_0_15_10.h
 	@mkdir -p $(dir $@)
@@ -205,6 +207,10 @@ $(BUILD)/test/launcher_platform_test: shared/tests/launcher_platform_test.cpp sh
 $(BUILD)/test/launcher_text_test: shared/tests/launcher_text_test.cpp shared/launcher/text_input.cpp shared/launcher/text_input.h shared/launcher/app_platform.cpp shared/launcher/app_platform.h
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -Wextra -O1 $(LAUNCHER_SHARED_INC) shared/tests/launcher_text_test.cpp shared/launcher/text_input.cpp shared/launcher/app_platform.cpp -o $@
+
+$(BUILD)/test/mac_keymap_test: macos/tests/mac_keymap_test.cpp macos/launcher/mac_keymap.cpp macos/launcher/mac_keymap.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++17 -Wall -O1 -Imacos/launcher macos/tests/mac_keymap_test.cpp macos/launcher/mac_keymap.cpp -o $@
 
 $(BUILD)/test/titlebar_test: macos/tests/titlebar_test.cpp macos/src/titlebar_zone.h
 	@mkdir -p $(dir $@)
