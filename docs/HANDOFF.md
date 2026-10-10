@@ -28,7 +28,8 @@ by modding the shipped engine — never redistributing it. Next goals set by the
 | macOS launcher (default, `make app`) | iOS binary loaded by our own launcher: no Catalyst/UIKit, every framework stubbed; ANGLE/Metal window, keyboard, raw mouse look, text entry, sound, no Xbox prompt | ✅ `make test`; `make check` (120 frames); owner played a world 2026-10-10 |
 | macOS Catalyst (deprecated, `make catalyst`) | Win10 UI, keyboard+mouse with pointer capture, resizable window that the engine follows, auto-hiding/fading title bar, App Store receipt prompt skipped | ✅ `make check` (bundle test + 15 s launch with log asserts); owner's screenshots (Win10 title screen, game filling the window). Hand checks M1–M7 below **not** all confirmed |
 | iOS | Win10 UI + receipt skip dylib, `make ios-ipa` → unsigned IPA | ✅ compiles for iOS (`make ios-syntax`), IPA structure test with a stub dylib. ❓ never linked against the real iOS SDK (no Xcode here), never run on a device |
-| Android | Win10 UI via `libmcfm.so`, `make android-apk` (patches Mojang's APK; Stage 3 replaces it with our own launcher APK) | ✅ builds with NDK r10c, library + APK pipeline tests on stand-in APKs. ❓ never run on a device |
+| Android app (`make android-app`) | Our own Kotlin APK (target SDK 37, min 28, 16 KB pages): imports the user's decrypted IPA, runs the iOS image with our loader over a Darwin libSystem layer and an Apple-ABI libc++; GLES 3 window, touch GUI, soft keyboard, a mouse and keys, FMOD on AAudio, saves in the background | ✅ `make android-app-check` on the Android 17 and 9 emulators (import, title screen, a world created by touch, background/resume); `make android-test`. ❓ never run on a physical device |
+| Android, legacy mod | Win10 UI via `libmcfm.so`, `make android-apk` (patches Mojang's APK; replaced by the app above) | ✅ builds with NDK r10c, library + APK pipeline tests on stand-in APKs. ❓ never run on a device |
 | Shared core | `Platform` interface, `win10_ui`, `keyboard_mouse`, input logic | ✅ host tests (C++11), ASan/UBSan clean |
 | Repo hygiene | Apache-2.0, no Mojang files, `make test` from a fresh clone | ✅ `no_game_files_test`, fresh-clone run |
 
@@ -91,6 +92,9 @@ make android-emulator [API=28]   # boots the API 37 (16 KB pages) or API 28 emul
 make android-test                # runtime, Darwin layer and loader tests on the device
 make android-boot-check          # the converted game (make app) initializes on the device
 make android-frames-check        # ... boots, renders 120 frames, screenshot in build/android-launcher
+make android-app-sdk             # once: JDK 21, kotlinc, build-tools/platform 37 (for the app)
+make android-app                 # dist/android/mcfm.apk (Kotlin, aapt2, d8, zipalign, apksigner)
+make android-app-check IPA=…     # clean install, import, title, new world by touch, resume
 ```
 
 ## 4. How it works (beyond ARCHITECTURE.md)
@@ -176,8 +180,11 @@ Android 17 and 9 emulators the same loader maps the game and all its initializer
 Darwin libSystem layer (`android/launcher/darwin/`) and an Apple-ABI libc++ runtime
 (`android/launcher/runtime/`). **Stage 3b landed (2026-10-10):** the engine boots there with the
 launcher's AppPlatform and renders the title screen (GLES 3, FMOD on AAudio; `make
-android-frames-check`). Next: Stage 3c (our own Kotlin APK, window, input) per LAUNCHER.md;
-findings in research/macho-launcher.md and research/android-launcher.md.
+android-frames-check`). **Stage 3c landed (2026-10-10), Stage 3 done:** our own Kotlin APK
+(`android/app/`, built by `make android-app` without Gradle) imports the user's IPA on the device
+and plays: window, touch, soft keyboard, lifecycle (`make android-app-check` on Android 17 and 9).
+Findings in research/macho-launcher.md and research/android-launcher.md. Next candidates: a
+physical-device run, world export/import in the app, the generic AppPlatform (6.1).
 
 ### 6.1 Generic AppPlatform
 Goal: one shared, platform-neutral `AppPlatform` behaviour definition instead of ad-hoc slot
@@ -257,13 +264,19 @@ runtime, persisted config, ordering/dependencies, C++11. Design it with the owne
   offset-to-top word — always use `vtable_scan.hpp`.
 - The owner may be playing: check `pgrep -x minecraftpe` before `make app` (refuses) and
   before `make check` (would close the game).
+- **Android app**: no `INTERNET` permission → `socket()` EPERM and RakNet's null peer crashed the
+  Play screen; an app's stdout/stderr go nowhere (forwarded to logcat, tag `mcfm`);
+  `Android/data` is unreachable by adb/`run-as` on Android 11+ (worlds are in `files/home`);
+  `adb exec-in run-as … 'cat > f'` truncates big files (push to `/data/local/tmp`, `run-as cp`).
+- **Darwin variadic ABI**: a test that calls a variadic `mcfm_darwin_*` shim from NDK code
+  passes the arguments in registers, the shim reads the stack: call the `_impl` function.
 
 ## 8. Open questions for the owner
 
 - Which platform leads the generic AppPlatform work (macOS first, as so far?).
 - Renderer target: Metal on Apple only, or one backend for all (Vulkan/ANGLE)?
 - Module system expectations (in-game UI? config file? hot reload?).
-- An original Android 0.15.10 APK and a test device (Android 6+) for on-device runs.
+- A physical Android device (arm64, Android 9+) for an on-device run of the app.
 - Install Xcode to link and sideload the iOS build?
 - Old public commits still contain `/Users/dayvid/...` paths and the author email; history
   rewrite was recommended against (owner hasn't decided).

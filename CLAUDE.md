@@ -17,7 +17,7 @@ Reverse-engineering notes: docs/research/. Local game files and the IDA database
   user's game).
 - Engine code in the launcher image is patched only at conversion (`mcfm_image.py dylib --hooks`,
   hooks in `shared/launcher/seams.cpp`); never write to its `__TEXT` at runtime.
-- `make android` — NDK r10c under Rosetta; `make android-apk APK=…` (the old Win10-UI mod)
+- `make android` — NDK r10c under Rosetta; `make android-apk APK=…` (the legacy Win10-UI mod)
 - Android launcher (Stage 3): `make android-sdk llvm-runtimes` once, `make android-emulator`,
   then `make android-test` / `make android-boot-check` / `make android-frames-check` (need
   `make app`'s converted game). Everything built against our Apple-ABI libc++ lives in
@@ -27,6 +27,11 @@ Reverse-engineering notes: docs/research/. Local game files and the IDA database
   `android/launcher/darwin/` is the Darwin libSystem layer: Darwin numbers and layouts only
   from the generated `darwin_abi.h` (`make darwin-abi`), every import in `symbols.cpp` (sorted).
   Darwin variadic calls pass all variadic arguments on the stack (see `darwin/stdio.c`).
+- Android app (Stage 3c, `android/app/`, Kotlin, no Gradle): `make android-app-sdk` once, then
+  `make android-app` (dist/android/mcfm.apk) and `make android-app-check IPA=…` on a running
+  emulator (clean install, import, title, new world by touch, resume). Logs: `adb logcat -s mcfm`;
+  the app's files: `adb shell run-as io.github.d4yvid.mcfm`. One game per process: the render
+  thread (`android/launcher/game_thread.cpp`) owns EGL and the engine; JNI only queues.
 - `make ios` needs Xcode; without it `make ios-syntax` (part of `make test`) compiles iOS code.
 
 ## Rules

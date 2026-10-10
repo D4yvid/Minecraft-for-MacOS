@@ -163,7 +163,7 @@ one process and finds every one of its 95,676 fixup locations equal (3 `strcmp`/
 entry-point variants and `dyld_stub_binder` accepted explicitly); the owner played a world with
 our loader; fixture tests cover fixups, imports, initializers, exceptions and hooks.
 
-## Stage 3 — Android (3a ☑, 3b ☑, 3c ☐)
+## Stage 3 — Android ☑ (2026-10-10)
 1. ☑ **Target the latest Android: SDK 37 (Android 17), 16 KB pages**; minimum API 28 (the
    oldest image we test). Prebuilt APKs, not on Google Play (its policy forbids running code
    that did not come from Play, i.e. the user's IPA). From target SDK 29 an app may not map its
@@ -171,7 +171,7 @@ our loader; fixture tests cover fixups, imports, initializers, exceptions and ho
    `mprotect`s it (verified on the API 28 emulator); our `.so` files are 16 KB aligned.
    Split: **3a** load the game and run its initializers on Android (loader, libc translation,
    Apple-ABI libc++, stubs; command-line test over adb); **3b** engine boot, EGL/GLES, audio;
-   **3c** APK, `NativeActivity`, input, text, IPA import.
+   **3c** our APK (Kotlin, built by make), window, input, text, IPA import.
 2. ☑ **libc translation layer** (Darwin ABI → bionic), `android/launcher/darwin/`: every
    libSystem symbol the game imports is in one sorted table (`symbols.cpp`: shimmed, bionic's,
    or the runtime's); numbers and layouts come from `darwin_abi.h`, generated from the macOS
@@ -194,14 +194,22 @@ our loader; fixture tests cover fixups, imports, initializers, exceptions and ho
    pthread layer) and libunwind patched for compact unwind on Android; exports all 285 libc++
    symbols the game imports.
 4. ☑ GL: the image's `OpenGLES` imports resolve to the system's GLES 3 (core functions for the
-   OES/EXT names GLES 3 has, then `eglGetProcAddress`; EAGL stays stubbed). Audio: FMOD's
+   OES/EXT names GLES 3 has; never `eglGetProcAddress`, which can hand back GLES 1 entry points;
+   EAGL stays stubbed). Audio: FMOD's
    RemoteIO AudioUnit on an AAudio stream (`android/launcher/audio_toolbox.cpp`); AudioQueue and
    AudioFile unimplemented (the banks are PCM16 and FMOD ADPCM). The engine boots with the
    macOS launcher's AppPlatform code (`shared/launcher`) in `mcfm-run --boot` (headless GLES 3
-   pbuffer until 3c's window).
-5. ☐ Android platform layer: **our own APK** (built from scratch, nothing from Mojang's APK)
-   whose activity loads the launcher `.so`; input, text input, file paths, IPA import screen.
-   It replaces the old Win10-UI mod that patches Mojang's APK (`android/`, `make android-apk`).
+   pbuffer; 3c draws into the app's window).
+5. ☑ Android platform layer: **our own APK** (`android/app/`, Kotlin; built from scratch by
+   `make android-app` with aapt2, kotlinc, d8, zipalign and apksigner, no Gradle, nothing from
+   Mojang's APK). `ImportActivity` imports the user's decrypted IPA (`Payload/*.app/minecraftpe2`
+   converted on the device by `shared/loader/convert.cpp`, byte-identical to `mcfm_image.py`,
+   and its `data/`); `GameActivity` hands its surface, lifecycle and input to a native render
+   thread (`android/launcher/game_thread.cpp`) that owns EGL and the engine. Touch goes to
+   `Multitouch::feed`; keys, a mouse and soft-keyboard text through `shared/` keyboard_mouse;
+   the game saves when the app goes to the background. Worlds live in internal storage
+   (`files/home`). It replaces the old Win10-UI mod that patches Mojang's APK (`android/`,
+   `make android-apk`, legacy).
 
 Stage 3a acceptance (met 2026-10-10): `make android-boot-check` loads the converted game with
 `mcfm-run` and all 3,972 initializers run, on Android 17 (16 KB pages) and Android 9 (4 KB);
@@ -212,8 +220,14 @@ Stage 3b acceptance (met 2026-10-10): `make android-frames-check` boots the game
 (16 KB pages) and Android 9, renders the Win10 Edition title screen (120 frames, screenshot
 checked), FMOD plays through AAudio (24 kHz int16 stereo) and the options are saved on suspend.
 
+Stage 3c acceptance (met 2026-10-10): `make android-app` builds a signed, 16 KB-aligned APK
+(target SDK 37, min SDK 28, 14.5 MB); `make android-app-check` passes on Android 17 (16 KB
+pages) and Android 9 from a clean install: the IPA is imported on the device, the title screen
+renders in the window, touch taps create a world and it renders, the game saves in the
+background and draws again after resuming (screenshots checked).
+
 Acceptance: an APK (target SDK 37) that installs on Android 9+ arm64, including 16 KB-page
-devices, imports a user-supplied IPA and plays.
+devices, imports a user-supplied IPA and plays — met by 3c.
 
 ## Later
 - Linux arm64 / Windows on ARM launchers (Stage 2 loader + Stage 3 translation, different host).

@@ -20,7 +20,7 @@ runs, also `MAP_FIXED` inside a `PROT_NONE` reservation; anonymous RW memory swi
 `app_data_file`), while anonymous executable memory stays allowed (JITs use it), so the Android
 `LoaderOS` copies each segment into anonymous memory (`pread`) and `mprotect`s it to the
 segment's protection; no code signatures. The Mach-O segments are 16 KB aligned, so they fit
-4 KB and 16 KB pages. (The app domain is checked in Stage 3c ❓.)
+4 KB and 16 KB pages. The app domain works the same way (Stage 3c). ✅
 
 ## Our loader on Android (spike `run`, 2026-10-10)
 `shared/loader` built unchanged with NDK r27 loaded a small macOS arm64 dylib (classic fixups)
@@ -142,5 +142,43 @@ By the work a shim does:
 - Android 9's toybox tar cannot chown and macOS tar adds AppleDouble files: the data push uses
   `COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs` and `tar -xof`. ✅
 - Calls from our code to game functions with `bool`/`char` parameters must pass them widened to
-  32 bits (Apple callers extend, AAPCS64 callers need not; Apple callees may rely on it) ❓ (3c,
-  input).
+  32 bits (Apple callers extend, AAPCS64 callers need not; Apple callees may rely on it). In 3c
+  the input calls take ints and pointers only (`Multitouch::feed(int ×5)`); the base
+  `showKeyboard`'s bools are passed on as the game's caller widened them. ✅ (Keep it in mind for
+  new engine calls.)
+
+## Stage 3c findings (2026-10-10)
+- **The app domain** (`untrusted_app`, target SDK 37) runs the loader as `mcfm-run` did: segments
+  copied into anonymous memory and `mprotect`ed; the launcher and the stubs are loaded from the
+  APK in place (stored, 16 KB aligned, `extractNativeLibs=false`). ✅
+- **INTERNET permission**: without it `socket()` fails with EPERM; RakNet's `Startup` returned
+  5 (`SOCKET_PORT_ALREADY_IN_USE`, its code for any bind failure), the game deleted its peer,
+  and the Play screen's LAN discovery (`getBroadcastAddresses`, slot 77) dereferenced it. The
+  shell user that runs `mcfm-run` has network access, so 3b never saw it. ✅
+- **LAN broadcast**: the game ORs each local address with its netmask, which it asks with Darwin
+  `SIOCGIFCONF`/`SIOCGIFNETMASK` (`0xC00C6924`, `0xC0206925`; packed `ifconf`, 32-byte `ifreq`);
+  without them it guesses `255.255.254.0`. Translated in `net.cpp`. Wi-Fi drops broadcasts unless
+  the app holds a multicast lock (taken while resumed). ✅
+- The game's UPnP discovery (miniupnpc) logs `setsockopt(IP_MULTICAST_TTL,...): Invalid argument`
+  (it passes `optlen` 0, the same on iOS) and, on the emulator, `sendto: Operation not
+  permitted` for the SSDP multicast; harmless, no port mapping. ✅
+- **Input mode**: AppPlatform's `getDefaultInputMode` (slot 96) returns 2 (touch): the touch GUI
+  with the D-pad. A physical mouse and keys still go through `keyboard_mouse` without switching
+  the mode at runtime. Touch: `Multitouch::feed(button, state, x, y, slot)` `0x100020EFC`, down
+  `(1, 1)`, move `(0, 0)`, up and cancel `(1, 0)`, pixel coordinates, slots 0–11. ✅
+- **Text input**: `showKeyboard` reaches the app through a JNI callback; the soft keyboard talks
+  to a `BaseInputConnection` on the game's view, whose commits and backspaces become the engine's
+  keyboard text events. Return does what iOS's `-[ShowKeyboardView textViewShouldReturn:]`
+  does: a `"\n"` text event, then Enter (VK 13) pressed and released in the engine's `Keyboard`;
+  without the key the text box stays in edit mode. The game's own Done button calls
+  `hideKeyboard`. Typed on the Android 9 emulator's keyboard (letters, backspace, ✓). ✅
+- **Lifecycle**: `onPause` waits until the render thread has suspended the engine (the game saves
+  `options.txt` and the world's `level.dat`); `surfaceDestroyed` waits until the thread let go of
+  the window; the EGL context survives a lost window, so resuming needs no reload. The game shows
+  its Game Menu when it comes back. One game per process: `GameActivity` is `singleTask`
+  (reopening the app after `ImportActivity` finished had stacked a second one). ✅
+- **Storage**: `Android/data/<package>` is out of reach of `adb shell`, `run-as` and file managers
+  on Android 11+, so the game's home (worlds, options) is `files/home`; `adb shell run-as
+  io.github.d4yvid.mcfm` reaches it. `adb exec-in run-as … 'cat > file'` dropped bytes from a
+  59 MB IPA; `adb push` to `/data/local/tmp` and `run-as cp` is exact. ✅
+- An app's stdout/stderr go nowhere: `JNI_OnLoad` forwards them to logcat (tag `mcfm`). ✅
