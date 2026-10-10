@@ -120,3 +120,27 @@ By the work a shim does:
 - `SA_SIGINFO` handlers get no `ucontext`.
 - `printf("%Lf")` from the game would read a 16-byte `long double` (Darwin's is 8) ❓.
 - Linux-only errno numbers reach the game as 1000 + the Linux number.
+
+## Stage 3b findings (2026-10-10)
+- **One C++ runtime per process**: Android's system libc++ uses the same `std::__1` names with
+  another ABI. An executable or library exporting our runtime made system code bind to it
+  (libEGL's static constructors locked our Darwin-layout `std::mutex` → EINVAL;
+  libaudiofoundation's `std::regex` freed a pointer with a stripped heap tag). The runtime is a
+  static archive linked whole with its symbols hidden (`libmcfm_launcher.so`'s version script;
+  `--exclude-libs` in tests); the loader resolves the game's libc++ imports through a table
+  generated from the runtime's objects. ✅
+- **Apple's arm64 C++ ABI returns `this` from constructors and destructors** (inherited from the
+  32-bit ARM ABI) and the game uses it (`v = basic_string(copy); v[1] = …` in vector growth).
+  Clang refuses `-fc++-abi=applearm64` for non-Darwin triples, so 472 generated thunks keep
+  `this` in x0 (with CFI, so exceptions pass through). None of the game's 285 libc++ imports has
+  more than 6 parameters, so Darwin's packed stack arguments never matter for them. Still
+  generic: array cookies for `new[]`/`delete[]` across the boundary ❓. ✅
+- GLES: the emulator's `eglGetProcAddress("glBindRenderbufferOES")` returns the GLES 1 encoder's
+  function, which crashes under a GLES 3 context; core GLES 3 functions are used for OES names. ✅
+- The emulator renders through "Android Emulator OpenGL ES Translator (Apple M4)" (Metal); the
+  title screen matches macOS. FMOD opens its output at 24 kHz int16 stereo. ✅
+- Android 9's toybox tar cannot chown and macOS tar adds AppleDouble files: the data push uses
+  `COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs` and `tar -xof`. ✅
+- Calls from our code to game functions with `bool`/`char` parameters must pass them widened to
+  32 bits (Apple callers extend, AAPCS64 callers need not; Apple callees may rely on it) ❓ (3c,
+  input).

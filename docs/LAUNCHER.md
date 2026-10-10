@@ -163,7 +163,7 @@ one process and finds every one of its 95,676 fixup locations equal (3 `strcmp`/
 entry-point variants and `dyld_stub_binder` accepted explicitly); the owner played a world with
 our loader; fixture tests cover fixups, imports, initializers, exceptions and hooks.
 
-## Stage 3 — Android (3a ☑, 3b ☐, 3c ☐)
+## Stage 3 — Android (3a ☑, 3b ☑, 3c ☐)
 1. ☑ **Target the latest Android: SDK 37 (Android 17), 16 KB pages**; minimum API 28 (the
    oldest image we test). Prebuilt APKs, not on Google Play (its policy forbids running code
    that did not come from Play, i.e. the user's IPA). From target SDK 29 an app may not map its
@@ -193,8 +193,12 @@ our loader; fixture tests cover fixups, imports, initializers, exceptions and ho
    NonUniqueARMRTTIBit type_info, Darwin `mbstate_t` and ctype tables, threading over the Darwin
    pthread layer) and libunwind patched for compact unwind on Android; exports all 285 libc++
    symbols the game imports.
-4. ☐ GL: native GLES 3 via EGL (or ANGLE on Vulkan); audio: the FMOD AudioToolbox subset on
-   AAudio/OpenSL ES.
+4. ☑ GL: the image's `OpenGLES` imports resolve to the system's GLES 3 (core functions for the
+   OES/EXT names GLES 3 has, then `eglGetProcAddress`; EAGL stays stubbed). Audio: FMOD's
+   RemoteIO AudioUnit on an AAudio stream (`android/launcher/audio_toolbox.cpp`); AudioQueue and
+   AudioFile unimplemented (the banks are PCM16 and FMOD ADPCM). The engine boots with the
+   macOS launcher's AppPlatform code (`shared/launcher`) in `mcfm-run --boot` (headless GLES 3
+   pbuffer until 3c's window).
 5. ☐ Android platform layer: **our own APK** (built from scratch, nothing from Mojang's APK)
    whose activity loads the launcher `.so`; input, text input, file paths, IPA import screen.
    It replaces the old Win10-UI mod that patches Mojang's APK (`android/`, `make android-apk`).
@@ -203,6 +207,10 @@ Stage 3a acceptance (met 2026-10-10): `make android-boot-check` loads the conver
 `mcfm-run` and all 3,972 initializers run, on Android 17 (16 KB pages) and Android 9 (4 KB);
 `make android-test` (pthread, runtime, files, network unit tests; loader fixture; Darwin
 conformance transcript) is green on both.
+
+Stage 3b acceptance (met 2026-10-10): `make android-frames-check` boots the game on Android 17
+(16 KB pages) and Android 9, renders the Win10 Edition title screen (120 frames, screenshot
+checked), FMOD plays through AAudio (24 kHz int16 stereo) and the options are saved on suspend.
 
 Acceptance: an APK (target SDK 37) that installs on Android 9+ arm64, including 16 KB-page
 devices, imports a user-supplied IPA and plays.

@@ -19,7 +19,11 @@ Reverse-engineering notes: docs/research/. Local game files and the IDA database
   hooks in `shared/launcher/seams.cpp`); never write to its `__TEXT` at runtime.
 - `make android` — NDK r10c under Rosetta; `make android-apk APK=…` (the old Win10-UI mod)
 - Android launcher (Stage 3): `make android-sdk llvm-runtimes` once, `make android-emulator`,
-  then `make android-test` / `make android-boot-check` (needs `make app`'s converted game).
+  then `make android-test` / `make android-boot-check` / `make android-frames-check` (need
+  `make app`'s converted game). Everything built against our Apple-ABI libc++ lives in
+  `libmcfm_launcher.so`, which exports no C++ symbols (Android's libc++ has the same names):
+  never link the runtime into a binary that exports it. Game-facing constructors/destructors
+  go through generated this-returning thunks (Apple arm64 C++ ABI).
   `android/launcher/darwin/` is the Darwin libSystem layer: Darwin numbers and layouts only
   from the generated `darwin_abi.h` (`make darwin-abi`), every import in `symbols.cpp` (sorted).
   Darwin variadic calls pass all variadic arguments on the stack (see `darwin/stdio.c`).

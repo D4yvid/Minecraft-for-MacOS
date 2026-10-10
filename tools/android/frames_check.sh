@@ -17,14 +17,17 @@ DATA="$(cat "$DIST/data_dir.txt")"
 [ -d "$DATA" ] || { echo "frames_check: game data not found: $DATA" >&2; exit 2; }
 ANDROID_CC="${ANDROID_CC:?set ANDROID_CC}" bash "$ROOT/tools/launcher/build_stubs.sh" --target android "$DIST/imports.tsv" "$OUT/stubs" >/dev/null
 
-STAMP="$(cd "$DATA" && find . -type f -exec stat -f '%N %z %m' {} + | sort | shasum | awk '{print $1}')"
+STAMP="v2-$(cd "$DATA" && find . -type f -exec stat -f '%N %z %m' {} + | sort | shasum | awk '{print $1}')"
 if [ "$("$ADB" shell cat "$DIR/data/.mcfm-stamp" 2>/dev/null | tr -d '\r')" != "$STAMP" ]; then
   echo "frames_check: pushing data/ ($(du -sh "$DATA" | awk '{print $1}'))"
   T="$(mktemp -d)"
-  tar -C "$DATA" -cf "$T/data.tar" .
+  # No AppleDouble (._*) files or extended attributes; the device extracts without owners
+  # (toybox tar would try to chown to the Mac's uid, which fails on Android 9).
+  COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs -C "$DATA" -cf "$T/data.tar" .
   "$ADB" shell "rm -rf $DIR/data && mkdir -p $DIR/data" >/dev/null
   "$ADB" push "$T/data.tar" "$DIR/data.tar" >/dev/null 2>&1
-  "$ADB" shell "cd $DIR/data && tar -xf ../data.tar && rm ../data.tar && echo $STAMP > .mcfm-stamp"
+  "$ADB" shell "cd $DIR/data && tar -xof ../data.tar && rm ../data.tar && echo $STAMP > .mcfm-stamp" \
+    || { echo "frames_check: cannot unpack data/ on the device" >&2; exit 1; }
   rm -rf "$T"
 fi
 "$ADB" shell "rm -rf $DIR/home $DIR/shot.ppm" >/dev/null

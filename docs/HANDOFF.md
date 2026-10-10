@@ -90,6 +90,7 @@ make android-sdk llvm-runtimes   # NDK r27d, adb, emulator, API 37/28 images; LL
 make android-emulator [API=28]   # boots the API 37 (16 KB pages) or API 28 emulator headless
 make android-test                # runtime, Darwin layer and loader tests on the device
 make android-boot-check          # the converted game (make app) initializes on the device
+make android-frames-check        # ... boots, renders 120 frames, screenshot in build/android-launcher
 ```
 
 ## 4. How it works (beyond ARCHITECTURE.md)
@@ -173,7 +174,9 @@ loader (`shared/loader/`, macOS layer `macos/launcher/loader_macos.cpp`) runs th
 and matches dyld on every fixup (`make loader-check`). **Stage 3a landed (2026-10-10):** on
 Android 17 and 9 emulators the same loader maps the game and all its initializers run, over a
 Darwin libSystem layer (`android/launcher/darwin/`) and an Apple-ABI libc++ runtime
-(`android/launcher/runtime/`). Next: Stage 3b (engine boot, EGL/GLES, audio) per LAUNCHER.md;
+(`android/launcher/runtime/`). **Stage 3b landed (2026-10-10):** the engine boots there with the
+launcher's AppPlatform and renders the title screen (GLES 3, FMOD on AAudio; `make
+android-frames-check`). Next: Stage 3c (our own Kotlin APK, window, input) per LAUNCHER.md;
 findings in research/macho-launcher.md and research/android-launcher.md.
 
 ### 6.1 Generic AppPlatform
