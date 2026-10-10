@@ -144,7 +144,11 @@ void apply(const Event &e, uintptr_t slide, TouchSlots *touches) {
     case EventType::MouseWheel: keyboard_mouse::mouse_wheel(e.a, int(e.x), int(e.y)); break;
     case EventType::Text: push_text(addr::kKeyboardText + slide, e.text); break;
     case EventType::Backspace: push_backspace(addr::kKeyboardText + slide); break;
-    case EventType::Return: push_return(addr::kKeyboardText + slide); break;
+    case EventType::Return:  // as iOS's textViewShouldReturn: the newline, then Enter pressed (ends editing)
+      push_return(addr::kKeyboardText + slide);
+      keyboard_mouse::key(0x0D, true);
+      keyboard_mouse::key(0x0D, false);
+      break;
   }
 }
 
