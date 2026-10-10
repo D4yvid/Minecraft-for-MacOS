@@ -109,7 +109,10 @@ bool load_image(LoaderOS &os, int fd, const uint8_t *file, size_t size, const Lo
       where = "flat";
       value = os.flat_symbol(name);
     }
-    if (!value && !f.weak_import) return fail(error, "missing symbol: " + where + ": " + f.symbol);
+    // dyld's lazy-binding helper: every lazy pointer is bound here up front, so it is never
+    // called (and modern libSystem no longer exports it).
+    bool lazy_helper = f.symbol == "dyld_stub_binder";
+    if (!value && !f.weak_import && !lazy_helper) return fail(error, "missing symbol: " + where + ": " + f.symbol);
     write64(slot, value ? reinterpret_cast<uint64_t>(value) + static_cast<uint64_t>(f.addend) : 0);
   }
 

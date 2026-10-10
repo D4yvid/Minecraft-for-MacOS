@@ -249,6 +249,10 @@ $(BUILD)/test/loader_core_test: shared/tests/loader_core_test.cpp shared/tests/m
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=address -Ishared/loader -Ishared/apple shared/tests/loader_core_test.cpp $(LOADER_SRCS) -o $@
 
+$(BUILD)/test/loader_run: tools/loader/loader_run.cpp macos/launcher/loader_macos.cpp macos/launcher/loader_macos.h $(LOADER_SRCS) $(wildcard shared/loader/*.h)
+	@mkdir -p $(dir $@)
+	clang++ -arch arm64 -std=c++17 -Wall -O1 -Ishared/loader -Ishared/apple -Imacos/launcher tools/loader/loader_run.cpp macos/launcher/loader_macos.cpp $(LOADER_SRCS) -o $@
+
 $(BUILD)/test/titlebar_test: macos/tests/titlebar_test.cpp macos/src/titlebar_zone.h
 	@mkdir -p $(dir $@)
 	clang++ -std=c++17 -Wall -O1 macos/tests/titlebar_test.cpp -o $@

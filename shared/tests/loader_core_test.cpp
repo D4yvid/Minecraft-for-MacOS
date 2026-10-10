@@ -101,7 +101,9 @@ std::map<uint64_t, uint64_t> expected_slots(const std::vector<uint8_t> &file, co
     switch (x.kind) {
       case FixupKind::Rebase: want[addr] = read64(file.data() + s.fileoff + x.offset) + slide; break;
       case FixupKind::Bind:
-      case FixupKind::LazyBind: want[addr] = fake_address(dlsym_name(x.symbol)) + x.addend; break;
+      case FixupKind::LazyBind:
+        want[addr] = x.symbol == "dyld_stub_binder" ? 0 : fake_address(dlsym_name(x.symbol)) + x.addend;
+        break;
       case FixupKind::WeakBind:
         if (host_has_weak) want[addr] = fake_address("host:" + dlsym_name(x.symbol)) + x.addend;
         break;  // no host definition: the slot keeps what rebase/bind put there (the image's own)
@@ -116,6 +118,7 @@ void check_fixture(const char *image_path, const char *symbols_txt, bool host_ha
   std::vector<uint8_t> file = slurp(image_path);
   FakeOS os(file);
   os.host_has_weak = host_has_weak;
+  os.missing.insert("dyld_stub_binder");  // gone from modern libSystem; never called (all binds eager)
   uint64_t answer = symbol_address(symbols_txt, "_fixture_answer");
   EXPECT(answer != 0);
   const uintptr_t hook_addresses[] = {static_cast<uintptr_t>(answer)};
