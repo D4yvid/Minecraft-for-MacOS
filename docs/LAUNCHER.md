@@ -215,6 +215,8 @@ devices, imports a user-supplied IPA and plays.
 ## Decisions
 - 2026-10-10: the Android app is our own APK that launches the launcher `.so` (not a patched
   Mojang APK); the old Android mod's library is named `libmcfm.so` like everything else.
+- 2026-10-10: the Android app code (activity, IPA import, settings) is written in Kotlin; the
+  launcher, loader and Darwin layer stay native (C++).
 - 2026-10-10: Android targets the latest SDK (37, 16 KB pages), minimum API 28; prebuilt APKs
   outside Google Play (replaces the earlier SDK 28 decision). Toolchain: NDK r27d (LLVM 18),
   libc++/libc++abi/libunwind from LLVM 18.1.8 built with Apple's arm64 ABI settings.
