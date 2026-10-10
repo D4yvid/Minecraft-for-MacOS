@@ -34,7 +34,8 @@ done
 # loader-check: every loader source and header must make it stale.
 make -s build/launcher/loader-check >/dev/null || { echo "FAIL: cannot build loader-check"; exit 1; }
 CBIN=build/launcher/loader-check
-CSRCS="$(git ls-files 'shared/loader/*.cpp' 'shared/loader/*.h' 'shared/apple/hook_table.*' 'macos/launcher/loader_macos.*')"
+# (The loader's sources; shared/loader/convert.cpp is the importer's, not part of loader-check.)
+CSRCS="$(git ls-files 'shared/loader/*.cpp' 'shared/loader/*.h' 'shared/apple/hook_table.*' 'macos/launcher/loader_macos.*' | grep -v '^shared/loader/convert\.cpp$')"
 setmtime $((T - 10)) $CSRCS
 setmtime "$T" "$CBIN"
 make -q "$CBIN" 2>/dev/null || { echo "FAIL: loader-check out of date with no edits"; fails=$((fails+1)); }

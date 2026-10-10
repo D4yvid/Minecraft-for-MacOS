@@ -3,6 +3,8 @@
 {
   global:
     mcfm_run_main;
+    JNI_OnLoad;
+    Java_io_github_d4yvid_mcfm_Native_*;
   local:
     *;
 };

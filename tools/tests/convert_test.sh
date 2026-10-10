@@ -16,6 +16,11 @@ python3 -I "$ROOT/tools/launcher/mcfm_image.py" dylib "$T/f/fixture" "$T/py-noho
 "$TOOL" "$T/f/fixture" /dev/null "$T/cc-nohooks.dylib" && cmp -s "$T/py-nohooks.dylib" "$T/cc-nohooks.dylib" \
   || { echo "FAIL: fixture without hooks differs"; fails=$((fails+1)); }
 
+# The import the Android app runs (shared/launcher/game_import.cpp) on the same fixture.
+make -s -C "$ROOT" build/test/game_import_test >/dev/null || { echo "FAIL: build game_import_test"; exit 1; }
+mkdir -p "$T/import"
+"$ROOT/build/test/game_import_test" "$T/f/fixture" "$T/f/hooks.tsv" "$T/py.dylib" "$T/import" || fails=$((fails+1))
+
 # A FAT binary: the arm64 slice is converted.
 echo 'int main(void) { return 0; }' > "$T/x.c"
 clang -arch x86_64 -mmacosx-version-min=11.0 "$T/x.c" -o "$T/x86"

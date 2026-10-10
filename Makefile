@@ -232,9 +232,10 @@ $(ALAUNCH_OUT)/tests/%_test: android/launcher/tests/%_test.cpp $(RT_LIB)
 # libmcfm_launcher.so: the loader, the launcher and the whole runtime, exporting only its entry
 # points (android/launcher/launcher.map). mcfm-run is a C program that dlopens it.
 LAUNCHER_SO := $(ALAUNCH_OUT)/libmcfm_launcher.so
-LAUNCHER_SO_SRCS := android/launcher/run.cpp android/launcher/boot.cpp android/launcher/loader_android.cpp \
+LAUNCHER_SO_SRCS := android/launcher/run.cpp android/launcher/boot.cpp android/launcher/app.cpp android/launcher/loader_android.cpp \
   android/launcher/audio_toolbox.cpp $(LOADER_SRCS) shared/apple/macho_uuid.cpp shared/launcher/app_platform.cpp \
-  shared/launcher/engine.cpp shared/launcher/seams.cpp shared/launcher/text_input.cpp
+  shared/launcher/engine.cpp shared/launcher/seams.cpp shared/launcher/text_input.cpp shared/launcher/game_import.cpp \
+  shared/loader/convert.cpp
 $(LAUNCHER_SO): $(LAUNCHER_SO_SRCS) $(wildcard android/launcher/*.h shared/launcher/*.h shared/include/mcfm/*.h) android/launcher/launcher.map $(LOADER_HDRS) $(RT_LIB)
 	@mkdir -p $(dir $@)
 	$(ACXX) $(RT_CXXFLAGS) -fPIC -shared -Ishared/loader -Ishared/apple -Ishared/launcher -Ishared/include -Iandroid/launcher $(LAUNCHER_SO_SRCS) \
@@ -357,6 +358,12 @@ $(BUILD)/test/macho_file_test: shared/tests/macho_file_test.cpp $(LOADER_SRCS) $
 $(BUILD)/test/macho_fixups_test: shared/tests/macho_fixups_test.cpp $(LOADER_SRCS) $(LOADER_HDRS)
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=undefined -Ishared/loader -Ishared/apple shared/tests/macho_fixups_test.cpp $(LOADER_SRCS) -o $@
+
+$(BUILD)/test/game_import_test: shared/tests/game_import_test.cpp shared/launcher/game_import.cpp shared/launcher/game_import.h \
+  shared/loader/convert.cpp shared/loader/convert.h shared/apple/macho_uuid.cpp
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=address,undefined -Ishared/loader -Ishared/launcher -Ishared/apple \
+	  shared/tests/game_import_test.cpp shared/launcher/game_import.cpp shared/loader/convert.cpp shared/apple/macho_uuid.cpp -o $@
 
 $(BUILD)/test/convert_tool: tools/loader/convert_tool.cpp shared/loader/convert.cpp shared/loader/convert.h
 	@mkdir -p $(dir $@)
