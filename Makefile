@@ -358,6 +358,11 @@ $(BUILD)/test/macho_fixups_test: shared/tests/macho_fixups_test.cpp $(LOADER_SRC
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=undefined -Ishared/loader -Ishared/apple shared/tests/macho_fixups_test.cpp $(LOADER_SRCS) -o $@
 
+$(BUILD)/test/convert_tool: tools/loader/convert_tool.cpp shared/loader/convert.cpp shared/loader/convert.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=address,undefined -fno-sanitize-recover=undefined -Ishared/loader \
+	  tools/loader/convert_tool.cpp shared/loader/convert.cpp -o $@
+
 $(BUILD)/test/fixups_dump: tools/loader/fixups_dump.cpp $(LOADER_SRCS) $(LOADER_HDRS)
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -O1 -Ishared/loader -Ishared/apple tools/loader/fixups_dump.cpp $(LOADER_SRCS) -o $@
@@ -398,6 +403,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/launcher_converter_edges_test.sh
 	bash tools/tests/thin_arm64_test.sh
 	bash tools/tests/loader_test.sh
+	bash tools/tests/convert_test.sh
 	$(MAKE) --no-print-directory $(AUDIO_PROVIDER) $(BUILD)/test/audio_toolbox_test && $(BUILD)/test/audio_toolbox_test $(AUDIO_PROVIDER) && MCFM_AUDIO_DISABLE=1 $(BUILD)/test/audio_toolbox_test $(AUDIO_PROVIDER)
 	bash tools/tests/launcher_provider_test.sh
 	bash tools/tests/fetch_angle_test.sh
