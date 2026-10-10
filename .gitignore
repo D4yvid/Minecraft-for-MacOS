@@ -21,6 +21,7 @@ lib*.so
 android/Application/
 *.keystore
 
-# local reverse-engineering workspace (game binaries, IDA databases): never committed
-.research/
 .DS_Store
+
+# your own game files and analysis (tools/setup_game_files.sh): never committed
+game-files/

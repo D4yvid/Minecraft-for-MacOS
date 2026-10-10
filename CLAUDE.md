@@ -2,7 +2,7 @@
 
 Mods for Minecraft PE 0.15.10 on macOS (Catalyst), iOS and Android from one C++11 core.
 Read docs/HANDOFF.md (state, knowledge base, roadmap, pitfalls) and docs/ARCHITECTURE.md first.
-Reverse-engineering notes: docs/research/. Local game binaries and the IDA database: .research/ (git-ignored).
+Reverse-engineering notes: docs/research/. Local game files and the IDA database: game-files/ (git-ignored, see docs/GAME_FILES.md); idalib venv: .venv/.
 
 ## Commands
 - `make test` — all host tests (no game files). Run before every commit.

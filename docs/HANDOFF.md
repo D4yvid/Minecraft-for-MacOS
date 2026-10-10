@@ -46,23 +46,24 @@ stays while the pointer is on it; still OK after full screen. No system beep on 
 - `gh` logged in as D4yvid.
 
 ### Game inputs (never committed)
-- iOS app: `~/Downloads/Payload/minecraftpe2.app` (decrypted, fat armv7+arm64, arm64 UUID
-  `01DFB489-A881-3BDD-8F98-6F016E409625`). `config.mk` has `GAME =` pointing at it.
-- `.research/` (git-ignored, ~413 MB): `ios-ida/mcpe` (thin arm64 game binary) +
-  `ios-ida/mcpe.i64` (IDA database, auto-analysed); `android/libminecraftpe.so` (0.15.10,
-  armeabi-v7a, with symbols); `android/standin*.apk` (APKs rebuilt from runet-client's
-  decompiled tree, used by `android/tests/apk_test.sh`).
-- No original Android APK on the machine; ask the owner for one before Android device work.
+Everything lives in the git-ignored **`game-files/`** — layout, provenance and how to
+rebuild it: [GAME_FILES.md](GAME_FILES.md). The Makefile uses it by default (`GAME`, `APK`).
+- iOS: decrypted 0.15.10 app, IPA, thin arm64 binary (arm64 UUID
+  `01DFB489-A881-3BDD-8F98-6F016E409625`); the owner's source copy is
+  `~/Downloads/Payload/minecraftpe2.app`.
+- IDA database: `game-files/ida/minecraftpe2-arm64.i64` (auto-analysed).
+- Android: `libminecraftpe.so` with symbols, decompiled tree, and **stand-in** APKs rebuilt
+  from runet-client's decompiled APK — no original Android APK on the machine; ask the owner
+  for one before Android device work.
 
 ### idalib (scripted IDA)
+`.venv/` (git-ignored) is set up with idalib:
 ```bash
-python3 -m venv .research/venv
-.research/venv/bin/pip install "/Applications/IDA Professional 9.4.app/Contents/MacOS/idalib/python/idapro-0.0.9-py3-none-any.whl"
-.research/venv/bin/python "/Applications/IDA Professional 9.4.app/Contents/MacOS/idalib/python/py-activate-idalib.py" -d "/Applications/IDA Professional 9.4.app/Contents/MacOS"
-.research/venv/bin/python -I tools/ida/q.py .research/ios-ida/mcpe.i64 d 0x10070f670
+.venv/bin/python -I tools/ida/q.py game-files/ida/minecraftpe2-arm64.i64 d 0x10070f670
 ```
+Recreate it with the commands in [tools/ida/README.md](../tools/ida/README.md).
 `idat` with `-S script.py` does **not** work here (IDAPython not configured for idat) — use
-idalib. Re-creating the database: `idat -A -B .research/ios-ida/mcpe` (~2 min).
+idalib. Re-creating the database: `make game-files IOS=<app> IDA=1` (~2 min).
 
 ### Daily commands
 ```bash

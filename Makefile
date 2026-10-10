@@ -3,7 +3,9 @@
 -include config.mk
 
 BUILD   ?= build
-GAME    ?=
+# Your own game files (make game-files), used when config.mk doesn't say otherwise.
+GAME_FILES := $(CURDIR)/game-files
+GAME    ?= $(wildcard $(GAME_FILES)/ios/Payload/minecraftpe2.app)
 OUT_APP ?= $(CURDIR)/dist/minecraftpe.app
 
 SHARED_INC   := -Ishared/include -Ishared/apple
@@ -25,7 +27,7 @@ MAC_LDFLAGS  := -dynamiclib -F$(IOSFW) -framework Foundation -framework UIKit \
                 -framework GameController -framework QuartzCore \
                 -install_name @executable_path/Frameworks/libmcfm.dylib
 
-.PHONY: all macos app run check test clean ios ios-ipa ios-syntax android android-apk
+.PHONY: all macos app run check test clean ios ios-ipa ios-syntax android android-apk game-files
 all: macos
 
 macos: $(MAC_DYLIB)
@@ -80,17 +82,23 @@ android:
 	bash android/tests/lib_test.sh "$(ANDROID_LIB)" "$(NDK)"
 	bash android/tests/pick_gnustl_test.sh "$(NDK)" "$(dir $(ANDROID_LIB))"
 
-APK ?=
+APK ?= $(firstword $(filter-out %runet-patched.apk,$(wildcard $(GAME_FILES)/android/apk/*.apk)))
 ANDROID_APK ?= $(CURDIR)/dist/minecraftpe-mcfm.apk
 android-apk: android
 	@test -n "$(APK)" || { echo "Set APK=<your Minecraft PE 0.15.10 .apk> (or put it in config.mk)"; exit 1; }
 	NDK="$(NDK)" bash android/tools/build_apk.sh "$(APK)" "$(dir $(ANDROID_LIB))" "$(ANDROID_APK)"
+
+# ---------------------------------------------------------------- local game files
+# make game-files IOS=<minecraftpe2.ipa|.app> [APK_IN=<0.15.10 .apk>] [IDA=1]
+game-files:
+	bash tools/setup_game_files.sh $(if $(IOS),--ios "$(IOS)") $(if $(APK_IN),--apk "$(APK_IN)") $(if $(IDA),--ida)
 
 # Needs the built app (make app).
 check: $(BUILD)/test/macho_uuid_test $(BUILD)/test/keymap_test
 	$(BUILD)/test/macho_uuid_test "$(OUT_APP)/minecraftpe" $(BUILD)/test/keymap_test
 	bash macos/tests/bundle_test.sh "$(OUT_APP)"
 	bash ios/tests/ipa_test.sh "$(GAME)"
+	bash tools/tests/setup_game_files_test.sh "$(GAME)"
 	bash macos/tests/smoke.sh "$(OUT_APP)"
 
 # ---------------------------------------------------------------- host tests (no game files)
@@ -130,6 +138,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/config_example_test.sh
 	bash tools/tests/makefile_deps_test.sh
 	bash tools/tests/no_game_files_test.sh
+	bash tools/tests/setup_game_files_test.sh
 
 clean:
 	rm -rf $(BUILD)
