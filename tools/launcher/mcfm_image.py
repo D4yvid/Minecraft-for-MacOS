@@ -8,6 +8,7 @@ Exit 2 when the input is unsuitable.
 """
 import os
 import re
+import struct
 import subprocess
 import sys
 
@@ -113,11 +114,97 @@ def cmd_stubs(tsv, outdir):
             fh.write("\n".join(out) + "\n")
 
 
+MH_MAGIC_64, CPU_TYPE_ARM64 = 0xFEEDFACF, 0x0100000C
+MH_EXECUTE, MH_DYLIB, MH_PIE = 2, 6, 0x200000
+LC_SEGMENT_64, LC_LOAD_DYLIB, LC_ID_DYLIB, LC_LOAD_DYLINKER = 0x19, 0xC, 0xD, 0xE
+LC_LOAD_WEAK_DYLIB, LC_MAIN, LC_BUILD_VERSION = 0x80000018, 0x80000028, 0x32
+LC_ENCRYPTION_INFO, LC_ENCRYPTION_INFO_64 = 0x21, 0x2C
+LC_VERSION_MIN = (0x24, 0x25, 0x2F, 0x30)  # macOS, iOS, tvOS, watchOS
+PLATFORM_MACOS, MACOS_11 = 1, 0x000B0000
+PAD_SIZE = 0x4000
+IMAGE_ID = "@rpath/libminecraftpe.dylib"
+
+
+def dylib_command(cmd, name):
+    raw = name.encode() + b"\0"
+    size = (24 + len(raw) + 7) & ~7
+    return struct.pack("<IIIIII", cmd, size, 24, 2, 0x10000, 0x10000) + raw.ljust(size - 24, b"\0")
+
+
+def segment_name(cmd_bytes):
+    return cmd_bytes[8:24].rstrip(b"\0").decode()
+
+
+def cmd_dylib(src, dst):
+    try:
+        data = bytearray(open(src, "rb").read())
+    except OSError as e:
+        fail("cannot read %s: %s" % (src, e))
+    if len(data) < 32:
+        fail("not a thin arm64 Mach-O: " + src)
+    magic, cpu, sub, ftype, ncmds, sizeofcmds, flags, res = struct.unpack_from("<IiiIIIII", data, 0)
+    if magic != MH_MAGIC_64 or cpu != CPU_TYPE_ARM64:
+        fail("not a thin arm64 Mach-O (lipo -thin arm64 first): " + src)
+    if ftype != MH_EXECUTE:
+        fail("not an executable (already converted?): " + src)
+
+    cmds, off = [], 32
+    for _ in range(ncmds):
+        cmd, size = struct.unpack_from("<II", data, off)
+        cmds.append(bytes(data[off:off + size]))
+        off += size
+    text_vmaddr = next(struct.unpack_from("<Q", c, 24)[0] for c in cmds
+                       if struct.unpack_from("<I", c)[0] == LC_SEGMENT_64 and segment_name(c) == "__TEXT")
+
+    first_data, out = len(data), [dylib_command(LC_ID_DYLIB, IMAGE_ID)]
+    for c in cmds:
+        cmd = struct.unpack_from("<I", c)[0]
+        if cmd in (LC_MAIN, LC_LOAD_DYLINKER, LC_ENCRYPTION_INFO, LC_ENCRYPTION_INFO_64):
+            continue
+        if cmd in LC_VERSION_MIN or cmd == LC_BUILD_VERSION:
+            out.append(struct.pack("<IIIIII", LC_BUILD_VERSION, 24, PLATFORM_MACOS, MACOS_11, MACOS_11, 0))
+            continue
+        if cmd in (LC_LOAD_DYLIB, LC_LOAD_WEAK_DYLIB):
+            name_off = struct.unpack_from("<I", c, 8)[0]
+            name = c[name_off:].split(b"\0")[0].decode()
+            lib = short_name(name)
+            out.append(c if lib in HOST_LIBS else dylib_command(cmd, "@rpath/mcfm_stub_%s.dylib" % lib))
+            continue
+        if cmd == LC_SEGMENT_64:
+            c = bytearray(c)
+            if segment_name(c) == "__PAGEZERO":
+                # Keep the slot: fixup opcodes address segments by index.
+                c[8:24] = b"__MCFM_PAD".ljust(16, b"\0")
+                struct.pack_into("<QQ", c, 24, text_vmaddr - PAD_SIZE, PAD_SIZE)
+            nsects = struct.unpack_from("<I", c, 64)[0]
+            for k in range(nsects):
+                s = 72 + 80 * k
+                if c[s:s + 7] == b"__objc_":  # hide ObjC metadata from the system libobjc
+                    c[s + 2:s + 3] = b"x"
+                sect_off, sect_size = struct.unpack_from("<I", c, s + 48)[0], struct.unpack_from("<Q", c, s + 40)[0]
+                if sect_off and sect_size:
+                    first_data = min(first_data, sect_off)
+            c = bytes(c)
+        out.append(c)
+
+    blob = b"".join(out)
+    if 32 + len(blob) > first_data:
+        fail("not enough header padding (%d bytes of load commands, %d available): %s"
+             % (len(blob), first_data - 32, src))
+    data[32:32 + max(sizeofcmds, len(blob))] = b"\0" * max(sizeofcmds, len(blob))
+    data[32:32 + len(blob)] = blob
+    struct.pack_into("<IiiIIIII", data, 0, magic, cpu, sub, MH_DYLIB, len(out), len(blob), flags & ~MH_PIE, res)
+    with open(dst, "wb") as fh:
+        fh.write(data)
+
+
 def main(argv):
     if len(argv) == 3 and argv[1] == "imports":
         return cmd_imports(argv[2])
     if len(argv) == 4 and argv[1] == "stubs":
         return cmd_stubs(argv[2], argv[3])
+    if len(argv) == 4 and argv[1] == "dylib":
+        return cmd_dylib(argv[2], argv[3])
     fail(__doc__.strip())
 
 
