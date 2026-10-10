@@ -24,7 +24,8 @@ by modding the shipped engine — never redistributing it. Next goals set by the
 
 | Area | State | Verified how |
 |---|---|---|
-| macOS app | Win10 UI, keyboard+mouse with pointer capture, resizable window that the engine follows, auto-hiding/fading title bar, App Store receipt prompt skipped | ✅ `make check` (bundle test + 15 s launch with log asserts); owner's screenshots (Win10 title screen, game filling the window). Hand checks M1–M7 below **not** all confirmed |
+| macOS launcher (default, `make app`) | iOS binary loaded by our own launcher: no Catalyst/UIKit, every framework stubbed; ANGLE/Metal window, keyboard, raw mouse look, text entry, sound, no Xbox prompt | ✅ `make test`; `make check` (120 frames); owner played a world 2026-10-10 |
+| macOS Catalyst (deprecated, `make catalyst`) | Win10 UI, keyboard+mouse with pointer capture, resizable window that the engine follows, auto-hiding/fading title bar, App Store receipt prompt skipped | ✅ `make check` (bundle test + 15 s launch with log asserts); owner's screenshots (Win10 title screen, game filling the window). Hand checks M1–M7 below **not** all confirmed |
 | iOS | Win10 UI + receipt skip dylib, `make ios-ipa` → unsigned IPA | ✅ compiles for iOS (`make ios-syntax`), IPA structure test with a stub dylib. ❓ never linked against the real iOS SDK (no Xcode here), never run on a device |
 | Android | Win10 UI via `librunet.so`, `make android-apk` | ✅ builds with NDK r10c, library + APK pipeline tests on stand-in APKs. ❓ never run on a device |
 | Shared core | `Platform` interface, `win10_ui`, `keyboard_mouse`, input logic | ✅ host tests (C++11), ASan/UBSan clean |
@@ -72,13 +73,13 @@ idalib. Re-creating the database: `make game-files IOS=<app> IDA=1` (~2 min).
 ### Daily commands
 ```bash
 make test        # all host tests, no game files (~1 min)
-make catalyst        # dist/minecraftpe.app from GAME; refuses while the game runs (alias: app)
-make catalyst-check  # bundle/IPA/UUID tests + 15 s launch — CLOSES a running game (alias: check)
-make catalyst-run    # (alias: run)
 make angle           # once: ANGLE from the pinned Electron release (~130 MB download)
-make launcher        # Mach-O launcher: dist/launcher (converted image + stubs + ANGLE + mcfm-launch)
-make launcher-run    # opens the game in a window (no input yet)
-make launcher-check  # renders 120 frames; stub census in build/launcher/census.txt
+make app             # = launcher: dist/launcher (converted image + stubs + ANGLE + mcfm-launch)
+make run             # = launcher-run: plays the game in a window (MCFM_LOOK_SCALE tunes turning)
+make check           # = launcher-check: renders 120 frames; census in build/launcher/census.txt
+make catalyst        # deprecated Catalyst build; refuses while that game runs
+make catalyst-check  # bundle/IPA/UUID tests + 15 s launch — CLOSES a running Catalyst game
+make catalyst-run
 # The Catalyst build is a deprecated build mode until the launcher replaces it (LAUNCHER.md).
 make android     # librunet.so + tests      make android-apk APK=…   make ios-ipa
 ```
@@ -157,8 +158,10 @@ acceptance, decisions). The Catalyst build is now a deprecated build mode (`make
 Stage 0 found the engine uses no Apple framework at all. Stage 1a is done: the game image
 loads in a plain macOS process with every framework and libobjc stubbed (`make launcher`,
 `make launcher-check`). Stage 1b is done: our AppPlatform, the engine boot and an ANGLE/Metal
-window render the Win10 Edition title screen (`make launcher-run`). Stage 1c (input, Xbox Live
-prompt/TCUI, audio) is next; findings in research/macho-launcher.md "Stage 1b findings".
+window render the Win10 Edition title screen. **Stage 1 landed (2026-10-10):** with 1c the
+launcher is playable (keyboard, raw mouse, text, sound, no Xbox prompt; the owner played a
+world) and `make app`/`run`/`check` use it. Next: Stage 2 (our own loader) per LAUNCHER.md;
+findings in research/macho-launcher.md (Stage 1b/1c sections).
 
 ### 6.1 Generic AppPlatform
 Goal: one shared, platform-neutral `AppPlatform` behaviour definition instead of ad-hoc slot

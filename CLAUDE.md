@@ -6,13 +6,12 @@ Reverse-engineering notes: docs/research/. Local game files and the IDA database
 
 ## Commands
 - `make test` — all host tests (no game files). Run before every commit.
-- `make catalyst` / `catalyst-check` / `catalyst-run` — the **deprecated** Mac Catalyst build
-  from `GAME` (aliases `app`/`check`/`run`); `catalyst-check` launches the game for 15 s
-  (`make catalyst` refuses while it runs — don't kill the user's game). Its replacement, the
-  Mach-O launcher, is planned in docs/LAUNCHER.md.
-- `make angle` (once, downloads ANGLE) / `make launcher` / `launcher-run` / `launcher-check` —
-  Mach-O launcher (docs/LAUNCHER.md): converted image + stubs + ANGLE in dist/launcher;
-  `launcher-check` renders 120 frames; stub census in build/launcher/census.txt.
+- `make app` / `check` / `run` (= `launcher` / `launcher-check` / `launcher-run`) — the macOS
+  build: the Mach-O launcher (docs/LAUNCHER.md); needs `make angle` once (downloads ANGLE).
+  `check` renders 120 frames; stub census in build/launcher/census.txt.
+- `make catalyst` / `catalyst-check` / `catalyst-run` — the **deprecated** Mac Catalyst build;
+  `catalyst-check` launches it for 15 s (`make catalyst` refuses while it runs — don't kill the
+  user's game).
 - Engine code in the launcher image is patched only at conversion (`mcfm_image.py dylib --hooks`,
   hooks in `shared/launcher/seams.cpp`); never write to its `__TEXT` at runtime.
 - `make android` — NDK r10c under Rosetta; `make android-apk APK=…`

@@ -27,26 +27,26 @@ the same desktop UI to iOS and Android. One shared C++ core, three thin platform
 ```sh
 cp config.example.mk config.mk     # then set GAME = /path/to/minecraftpe2.app
 make test                          # host tests, no game files needed
-make catalyst                      # builds dist/minecraftpe.app from your copy
-make catalyst-check                # verifies the bundle and launches it for 15 s
-make catalyst-run
+make angle                         # once: downloads ANGLE (OpenGL ES on Metal, ~130 MB)
+make app                           # builds dist/launcher from your copy
+make check                         # loads it and renders 120 frames
+make run
 ```
 
-The Mac Catalyst build is **deprecated**: it works and is how the game runs today, but a
-standalone launcher will replace it ([docs/LAUNCHER.md](docs/LAUNCHER.md)). `make app`,
-`make check` and `make run` are aliases for now.
+`make app` builds the **Mach-O launcher** ([docs/LAUNCHER.md](docs/LAUNCHER.md)): the iOS
+game runs in a plain macOS window with no Catalyst and no Apple framework inside the game.
+Turn speed: `MCFM_LOOK_SCALE=1.5 make run` (raw mouse, no acceleration). Launcher worlds live in
+`~/Library/Application Support/MinecraftPE-mcfm/`.
 
-**Launcher (in progress):** `make angle` (downloads ANGLE once, ~130 MB), `make launcher`,
-then `make launcher-run` boots the game to its title screen in a window, without Catalyst or
-any Apple framework in the game (everything is stubbed). No input or sound yet; see
-[docs/LAUNCHER.md](docs/LAUNCHER.md).
+The previous **Mac Catalyst** build is deprecated but kept: `make catalyst`,
+`make catalyst-check`, `make catalyst-run`.
 
 Controls: WASD move · mouse look · left click break/attack · right click place/use ·
 Space jump · Shift sneak · 1–9 / scroll hotbar · E inventory · Esc pause · T chat.
 Hover the top-left corner to reveal the title bar.
 
-Your worlds live in `~/Documents/games/com.mojang`, outside the app, so rebuilding keeps
-them. `make catalyst` refuses to run while the game is open.
+Catalyst worlds live in `~/Documents/games/com.mojang`, outside the app, so rebuilding keeps
+them. `make catalyst` refuses to run while the Catalyst game is open.
 
 ## Other platforms
 

@@ -15,10 +15,9 @@ SHARED_TESTS := keymap_test input_state_test features_test launcher_app_platform
 MACOS_TESTS  := titlebar_test input_policy_test resize_math_test mac_keymap_test mouse_math_test
 
 # ---------------------------------------------------------------- macOS (Mac Catalyst) — DEPRECATED
-# The Catalyst build is a deprecated build mode: it keeps working until the Mach-O launcher
-# (docs/LAUNCHER.md) replaces it. Targets: catalyst, catalyst-run, catalyst-check; the old
-# names app, run, check are aliases (they will move to the launcher).
-CATALYST_DEPRECATED = @echo "mcfm: note: the Mac Catalyst build is deprecated; it will be replaced by the Mach-O launcher (docs/LAUNCHER.md)" >&2
+# The Catalyst build is a deprecated build mode, kept working: catalyst, catalyst-run,
+# catalyst-check. make app/run/check build and run the Mach-O launcher (docs/LAUNCHER.md).
+CATALYST_DEPRECATED = @echo "mcfm: note: the Mac Catalyst build is deprecated; make app/run/check use the Mach-O launcher (docs/LAUNCHER.md)" >&2
 SDK      := $(shell xcrun --sdk macosx --show-sdk-path)
 IOSFW    := $(SDK)/System/iOSSupport/System/Library/Frameworks
 MAC_TARGET := arm64-apple-ios15.0-macabi
@@ -49,9 +48,6 @@ catalyst-run:
 	$(CATALYST_DEPRECATED)
 	open "$(OUT_APP)"
 
-app: catalyst
-run: catalyst-run
-check: catalyst-check
 
 # ---------------------------------------------------------------- iOS
 IOS_SDK    := $(shell xcrun --sdk iphoneos --show-sdk-path 2>/dev/null)
@@ -119,6 +115,11 @@ launcher-check:
 .PHONY: launcher-run
 launcher-run:
 	"$(LAUNCHER_OUT)/mcfm-launch"
+
+# The default macOS build is the launcher (Stage 1, docs/LAUNCHER.md).
+app: launcher
+run: launcher-run
+check: launcher-check
 
 # ---------------------------------------------------------------- Android
 # NDK r10c (x86_64 host build; runs under Rosetta on Apple Silicon).
@@ -244,7 +245,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	clang++ -std=c++11 -Wall android/tests/vtable_scan_test.cpp -o $(BUILD)/test/vtable_scan_test && $(BUILD)/test/vtable_scan_test
 	bash tools/tests/config_example_test.sh
 	bash tools/tests/makefile_deps_test.sh
-	bash tools/tests/catalyst_deprecated_test.sh
+	bash tools/tests/make_targets_test.sh
 	bash tools/tests/launcher_imports_test.sh
 	bash tools/tests/launcher_stubs_test.sh
 	bash tools/tests/launcher_image_test.sh

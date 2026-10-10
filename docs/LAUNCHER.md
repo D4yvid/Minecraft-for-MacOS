@@ -66,7 +66,7 @@ working until the launcher replaces it; `make app`/`run`/`check` are its aliases
 Done 2026-10-10: imports, where Apple APIs are used, seams, boot sequence, layout, unwinding,
 string ABI. Tool: `tools/ida/survey.py`. Results: [research/macho-launcher.md](research/macho-launcher.md).
 
-## Stage 1 — macOS launcher on Apple's loader ◐
+## Stage 1 — macOS launcher on Apple's loader ☑ (2026-10-10)
 Let dyld do the loading so we can focus on the platform layer, the boot and rendering.
 
 Stage 1 is split into three plans: **1a** load the image ☑
@@ -75,8 +75,10 @@ Stage 1 is split into three plans: **1a** load the image ☑
 libraries stubbed and all static initializers run), **1b** AppPlatform + boot + ANGLE window ☑
 ([plan](superpowers/plans/2026-10-10-launcher-stage1b-boot.md); `make angle`, `make launcher`,
 `make launcher-run`: the engine boots in an AppKit window on ANGLE/Metal and renders the Win10
-Edition title screen; `make launcher-check` renders 120 frames), **1c** input, the remaining
-seams (Xbox Live prompt, TCUI), audio, census-driven fixes.
+Edition title screen; `make launcher-check` renders 120 frames), **1c** playable ☑
+([plan](superpowers/plans/2026-10-10-launcher-stage1c-play.md): keyboard, raw mouse look,
+pointer capture, text entry, sound, no Xbox Live prompt; the owner played a world on
+2026-10-10). `make app`/`run`/`check` now build and run the launcher.
 
 1. ☑ **Image preparation** (`tools/` script, run at install time like `convert.sh`): copy the
    binary; `MH_EXECUTE` → `MH_DYLIB` with an `LC_ID_DYLIB`; drop `LC_MAIN`; retag the platform
@@ -105,24 +107,28 @@ seams (Xbox Live prompt, TCUI), audio, census-driven fixes.
    framebuffer → run main-thread jobs → `update()` → present. Window via AppKit +
    `CAMetalLayer` (ANGLE surface). As built (1b): `shared/launcher/engine.cpp`,
    `macos/launcher/main.mm` (60 Hz timer; `--frames N`, `--screenshot`).
-6. ◐ **Seams**: replace HTTP (#1) with our own client or a "no network" stub, store (#2) with
+6. ☑ **Seams**: replace HTTP (#1) with our own client or a "no network" stub, store (#2) with
    "no products", Xbox services (#3) and TCUI (#4) with "signed out". Hook on Stage 1's mapped
    image by patching the call sites or the target entry points. As built (1b): **hook table**
    (`mcfm_image.py dylib --hooks` patches each hooked entry to jump through a table at the end of
    `__DATA`; `mcfm-launch` fills it from a dyld add-image callback before any initializer).
    Hooked: #1 the telemetry upload (the engine's only HTTP use) → no-op; #2 `createStores` → one
-   null store (licensed, not a trial); #3 Xbox config singleton → zeroed object. Open: #4 TCUI,
-   the Xbox Live first-launch prompt.
-7. ☐ **Input**: reuse `shared/` keyboard/mouse (it writes the engine's `Keyboard`/`Mouse`
-   queues directly) and pointer capture.
-8. ☐ **Audio**: FMOD's output uses a RemoteIO AudioUnit and `AudioSession*`: our AudioToolbox
+   null store (licensed, not a trial); #3 Xbox config singleton → zeroed object; the Xbox Live
+   first-launch prompt push → no-op. #4 TCUI was never reached in play; hook it if it is.
+7. ☑ **Input**: reuse `shared/` keyboard/mouse (it writes the engine's `Keyboard`/`Mouse`
+   queues directly) and pointer capture. As built (1c): `LauncherPlatform` (shared) +
+   `macos/launcher/input.mm` (NSEvent keys/buttons/wheel, GCMouse raw look, CoreGraphics
+   capture, text entry through the engine's `Keyboard` text queue; `MCFM_LOOK_SCALE`).
+8. ☑ **Audio**: FMOD's output uses a RemoteIO AudioUnit and `AudioSession*`: our AudioToolbox
    wrappers implement the subset it calls (RemoteIO → CoreAudio default output; session calls
-   succeed) — the same wrapper API is reimplemented on AAudio for Android.
-9. ◐ **Runtime census**: play a session (menus, world creation, gameplay, chat, settings) and
+   succeed) — the same wrapper API is reimplemented on AAudio for Android. As built (1c):
+   `macos/launcher/audio_toolbox.cpp`, the `AudioToolbox` stub's provider.
+9. ☑ **Runtime census**: play a session (menus, world creation, gameplay, chat, settings) and
    collect every `mcfm: stub` line (`build/launcher/census.txt`) → the real shim list for
-   Stages 2–3. Booting to the title screen calls 5 stubs (autorelease pools, AudioToolbox).
+   Stages 2–3. A full play session calls 2 stubs (`objc_autoreleasePoolPush/Pop`); everything
+   else the game needs is provided (ANGLE, the audio provider) or hooked.
 
-Acceptance: `make launcher GAME=…` (CLI, no UI) builds `dist/MinecraftPE.app` (no Catalyst, no UIKit) that
+Acceptance (met 2026-10-10): `make app GAME=…` (CLI, no UI) builds `dist/launcher` (no Catalyst, no UIKit) that
 reaches the title screen and plays a world with keyboard, mouse, sound and resizing; `make
 test` covers the image prep, the stub tables and every AppPlatform slot.
 
@@ -195,5 +201,7 @@ Acceptance: an APK that installs on Android 6+ arm64, imports a user-supplied IP
 - 2026-10-10: CLI only; the IPA goes through `make` targets, no launcher UI for now.
 - 2026-10-10: Microsoft account, Xbox Live, TCUI and telemetry are dropped (see Patch policy).
 - 2026-10-10: the Mac Catalyst build stays as a deprecated build mode (`make catalyst`,
-  `catalyst-run`, `catalyst-check`; `app`/`run`/`check` alias them and print a notice). When
-  Stage 1 lands, `app`/`run`/`check` move to the launcher.
+  `catalyst-run`, `catalyst-check`, with a notice). Stage 1 landed the same day:
+  `make app`/`run`/`check` build and run the launcher.
+- 2026-10-10 (Stage 1c): camera look uses raw GameController (`GCMouse`) deltas, without the
+  system's pointer acceleration (owner request).
