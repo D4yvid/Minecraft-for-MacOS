@@ -100,8 +100,9 @@ bool make_gl_context(int width, int height) {
 }
 
 int usage(const char *message) {
-  std::fprintf(stderr, "mcfm-run: %s\nusage: mcfm-run <image> [--hook <addr>]... [--initializers-only] "
-               "[--call <sym>[=<int>]] [--int <sym>] [--weak <sym>]\n", message);
+  std::fprintf(stderr, "mcfm-run: %s\nusage: mcfm-run <image> [--hook <addr>]... [--gl] [--initializers-only] "
+               "[--call <sym>[=<int>]] [--int <sym>] [--weak <sym>]\n"
+               "       mcfm-run <image> --boot --data <dir> --home <dir> [--frames N] [--screenshot <ppm>]\n", message);
   return 2;
 }
 

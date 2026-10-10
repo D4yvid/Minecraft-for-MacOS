@@ -1,4 +1,5 @@
-// mcfm-run: loads libmcfm_launcher.so (next to it, or on LD_LIBRARY_PATH) and runs
+// mcfm-run: loads libmcfm_launcher.so (found through LD_LIBRARY_PATH: bionic does not search the
+// executable's directory; tools/android/adb_run.sh sets it) and runs
 // mcfm_run_main (run.cpp). A plain C program: the launcher library and its C++ runtime stay out of
 // the process's global symbol namespace, as they will be when an app loads them.
 #include <dlfcn.h>

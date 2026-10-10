@@ -45,7 +45,7 @@ expect "$OUTPUT" "fixture_thrower=41"
 expect "$OUTPUT" "fixture_answer=1005"
 expect "$OUTPUT" "fixture_init_answer=$((1000 + 1 + ${#ARGS[@]}))"  # the initializer got mcfm-run's argc
 expect "$OUTPUT" "weak _Znwm=runtime"
-# 4. GLES through the OpenGLES framework (Stage 3b): resolved to the system's GLES, OES entry
+# 3. GLES through the OpenGLES framework (Stage 3b): resolved to the system's GLES, OES entry
 #    points included, with a GL context from mcfm-run --gl; EAGL constants stay stubbed.
 bash "$ROOT/tools/tests/gl_fixture.sh" "$T/gl" >/dev/null || { echo "FAIL: gl fixture"; exit 1; }
 ANDROID_CC="$ANDROID_CC" bash "$ROOT/tools/launcher/build_stubs.sh" --target android "$T/gl/imports.tsv" "$T/gl/android" >/dev/null \
@@ -55,8 +55,16 @@ OUTPUT="$("${RUN[@]}" --push "$OUT/libmcfm_launcher.so" --push "$T/gl/libminecra
   @DIR@/libminecraftpe.dylib --gl --call gl_check 2>&1)" || { echo "FAIL: mcfm-run gl fixture exited $?"; fails=$((fails+1)); }
 expect "$OUTPUT" "gl_check=$((0x4080bf))"
 if grep -q "^mcfm: stub OpenGLES:_gl" <<<"$OUTPUT"; then echo "FAIL: a gl* call reached a stub:"; grep "stub OpenGLES" <<<"$OUTPUT"; fails=$((fails+1)); fi
+# A gl* function no GLES has: the load fails naming it (never a stub, never eglGetProcAddress).
+bash "$ROOT/tools/tests/gl_fixture.sh" "$T/glm" missing >/dev/null || { echo "FAIL: gl fixture (missing)"; exit 1; }
+ANDROID_CC="$ANDROID_CC" bash "$ROOT/tools/launcher/build_stubs.sh" --target android "$T/glm/imports.tsv" "$T/glm/android" >/dev/null \
+  || { echo "FAIL: gl stubs (missing)"; exit 1; }
+OUTPUT="$("${RUN[@]}" --push "$OUT/libmcfm_launcher.so" --push "$T/glm/libminecraftpe.dylib" \
+  --push "$T/glm/android/libmcfm_stubrt.so" --push "$T/glm/android/mcfm_stub_OpenGLES.so" "$OUT/mcfm-run" \
+  @DIR@/libminecraftpe.dylib --gl --call gl_check 2>&1)" && { echo "FAIL: an image calling a missing gl function loaded"; fails=$((fails+1)); }
+grep -q "missing symbol: mcfm_stub_OpenGLES: _glMcfmMissingOES" <<<"$OUTPUT" || { echo "FAIL: no missing-symbol error:"; sed 's/^/  | /' <<<"$OUTPUT"; fails=$((fails+1)); }
 
-# 3. The Darwin conformance fixture: the transcript on Android equals the one on the Mac.
+# 4. The Darwin conformance fixture: the transcript on Android equals the one on the Mac.
 clang++ -arch arm64 -std=c++17 -O1 -dynamiclib -mmacosx-version-min=11.0 -Wl,-no_fixup_chains \
   "$ROOT/tools/tests/darwin_conformance.cpp" -o "$T/conformance.dylib" || { echo "FAIL: build conformance"; exit 1; }
 clang -arch arm64 "$ROOT/tools/tests/conformance_host.c" -o "$T/conformance_host" || { echo "FAIL: build host"; exit 1; }

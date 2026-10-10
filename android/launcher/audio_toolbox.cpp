@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 namespace mcfm {
@@ -19,6 +20,7 @@ constexpr int32_t kParamErr = -50;
 constexpr int32_t kInvalidProperty = -10879;      // kAudioUnitErr_InvalidProperty
 constexpr int32_t kFormatNotSupported = -10868;   // kAudioUnitErr_FormatNotSupported
 constexpr int32_t kUninitialized = -10867;        // kAudioUnitErr_Uninitialized
+constexpr int32_t kInitialized = -10849;          // kAudioUnitErr_Initialized
 constexpr uint32_t kSampleTimeValid = 1;          // kAudioTimeStampSampleTimeValid
 
 constexpr uint32_t fourcc(const char (&s)[5]) {
@@ -47,6 +49,7 @@ struct Unit {
   bool initialized = false;
   AAudioStream *stream = nullptr;
   double sample_time = 0;
+  std::mutex lock;  // stream open/close (the app's thread, the error-recovery thread)
   std::vector<uint8_t> planes;  // non-interleaved: per-channel scratch, then interleaved after
   std::vector<uint8_t> list_storage;
 };
@@ -111,6 +114,22 @@ aaudio_data_callback_result_t on_audio(AAudioStream *, void *user, void *data, i
   return AAUDIO_CALLBACK_RESULT_CONTINUE;
 }
 
+bool open_stream(Unit *u);
+
+// AAudio stops a stream for good when its device goes away (headphones, route change); it
+// must be reopened from another thread (not from the error callback).
+void on_error(AAudioStream *stream, void *user, aaudio_result_t error) {
+  Unit *u = static_cast<Unit *>(user);
+  fprintf(stderr, "mcfm: audio: stream error %d (%s), reopening\n", error, AAudio_convertResultToText(error));
+  std::thread([u, stream] {
+    std::lock_guard<std::mutex> hold(u->lock);
+    if (u->stream != stream) return;  // stopped or reopened meanwhile
+    AAudioStream_close(stream);
+    u->stream = nullptr;
+    if (!open_stream(u)) fprintf(stderr, "mcfm: audio: cannot reopen the output stream\n");
+  }).detach();
+}
+
 void log_once(const char *message) {
   static std::mutex lock;
   static std::vector<const char *> seen;
@@ -143,15 +162,21 @@ int32_t AudioComponentInstanceNew(void *component, void **unit) {
 int32_t AudioComponentInstanceDispose(void *unit) {
   if (!unit) return kParamErr;
   AudioUnitUninitialize(unit);
-  delete static_cast<Unit *>(unit);
+  // Not freed: an error-recovery thread (on_error) may still be about to look at it. FMOD
+  // creates one output unit per run.
   return kNoErr;
 }
 
-int32_t AudioUnitSetProperty(void *unit, uint32_t id, uint32_t, uint32_t, const void *data, uint32_t size) {
+int32_t AudioUnitSetProperty(void *unit, uint32_t id, uint32_t scope, uint32_t element, const void *data, uint32_t size) {
   Unit *u = static_cast<Unit *>(unit);
   if (!u || !data) return kParamErr;
   if (id == kAudioUnitProperty_StreamFormat) {
     if (size < sizeof(AudioStreamBasicDescription)) return kParamErr;
+    // The render format is the input scope of element 0 (what the app gives the output unit);
+    // other scopes and elements (the hardware side, the input bus) are accepted and ignored.
+    if (scope != kAudioUnitScope_Input || element != 0) return kNoErr;
+    // Buffers are sized at Initialize and in use while running: fixed until Uninitialize.
+    if (u->initialized) return kInitialized;
     AudioStreamBasicDescription f;
     memcpy(&f, data, sizeof f);
     if (!supported(f)) {
@@ -163,6 +188,7 @@ int32_t AudioUnitSetProperty(void *unit, uint32_t id, uint32_t, uint32_t, const 
   }
   if (id == kAudioUnitProperty_SetRenderCallback) {
     if (size < sizeof(AURenderCallbackStruct)) return kParamErr;
+    if (u->stream) return kInitialized;  // the AAudio thread is calling it
     memcpy(&u->callback, data, sizeof u->callback);
     return kNoErr;
   }
@@ -171,6 +197,7 @@ int32_t AudioUnitSetProperty(void *unit, uint32_t id, uint32_t, uint32_t, const 
     uint32_t n;
     memcpy(&n, data, 4);
     if (n == 0 || n > 16384) return kParamErr;
+    if (u->initialized) return kInitialized;
     u->max_frames = n;
     return kNoErr;
   }
@@ -201,6 +228,7 @@ int32_t AudioUnitGetProperty(void *unit, uint32_t id, uint32_t scope, uint32_t e
 int32_t AudioUnitInitialize(void *unit) {
   Unit *u = static_cast<Unit *>(unit);
   if (!u) return kParamErr;
+  if (u->initialized) return kNoErr;  // never reallocate buffers a running stream uses
   u->planes.assign(size_t(u->max_frames) * u->format.mChannelsPerFrame * bytes_per_sample(u->format), 0);
   buffer_list(u, u->format.mChannelsPerFrame);  // allocate the list for the largest case now
   u->initialized = true;
@@ -215,40 +243,52 @@ int32_t AudioUnitUninitialize(void *unit) {
   return kNoErr;
 }
 
-int32_t AudioOutputUnitStart(void *unit) {
-  Unit *u = static_cast<Unit *>(unit);
-  if (!u) return kParamErr;
-  if (!u->initialized || !u->callback.inputProc) return kUninitialized;
-  if (u->stream) return kNoErr;
+namespace {
+
+// Opens and starts the AAudio stream in the unit's format; u->lock held.
+bool open_stream(Unit *u) {
   AAudioStreamBuilder *b = nullptr;
-  if (AAudio_createStreamBuilder(&b) != AAUDIO_OK) return kUnimplemented;
+  if (AAudio_createStreamBuilder(&b) != AAUDIO_OK) return false;
   bool is_float = (u->format.mFormatFlags & kAudioFormatFlagIsFloat) != 0;
   AAudioStreamBuilder_setFormat(b, is_float ? AAUDIO_FORMAT_PCM_FLOAT : AAUDIO_FORMAT_PCM_I16);
   AAudioStreamBuilder_setChannelCount(b, static_cast<int32_t>(u->format.mChannelsPerFrame));
   AAudioStreamBuilder_setSampleRate(b, static_cast<int32_t>(u->format.mSampleRate));
   AAudioStreamBuilder_setPerformanceMode(b, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
   AAudioStreamBuilder_setDataCallback(b, on_audio, u);
+  AAudioStreamBuilder_setErrorCallback(b, on_error, u);
   aaudio_result_t r = AAudioStreamBuilder_openStream(b, &u->stream);
   AAudioStreamBuilder_delete(b);
   if (r != AAUDIO_OK) {
     u->stream = nullptr;
     log_once("cannot open an AAudio stream");
-    return kUnimplemented;
+    return false;
   }
-  u->sample_time = 0;
   if (AAudioStream_requestStart(u->stream) != AAUDIO_OK) {
     AAudioStream_close(u->stream);
     u->stream = nullptr;
-    return kUnimplemented;
+    return false;
   }
   fprintf(stderr, "mcfm: audio: output started (%d Hz, %u channels, %s%s)\n", AAudioStream_getSampleRate(u->stream),
           u->format.mChannelsPerFrame, is_float ? "float32" : "int16", interleaved(u->format) ? "" : ", non-interleaved");
-  return kNoErr;
+  return true;
+}
+
+}  // namespace
+
+int32_t AudioOutputUnitStart(void *unit) {
+  Unit *u = static_cast<Unit *>(unit);
+  if (!u) return kParamErr;
+  if (!u->initialized || !u->callback.inputProc) return kUninitialized;
+  std::lock_guard<std::mutex> hold(u->lock);
+  if (u->stream) return kNoErr;
+  u->sample_time = 0;
+  return open_stream(u) ? kNoErr : kUnimplemented;
 }
 
 int32_t AudioOutputUnitStop(void *unit) {
   Unit *u = static_cast<Unit *>(unit);
   if (!u) return kParamErr;
+  std::lock_guard<std::mutex> hold(u->lock);
   if (u->stream) {
     AAudioStream_requestStop(u->stream);
     AAudioStream_close(u->stream);  // waits for the callback to return
@@ -269,6 +309,8 @@ int32_t AudioSessionGetProperty(uint32_t id, uint32_t *size, void *data) {
   if (id == fourcc("acat")) { uint32_t v = fourcc("ambi"); return put(&v, 4); }  // ambient: no recording
   return static_cast<int32_t>(fourcc("pty?"));
 }
+
+void render_for_test(void *unit, void *out, uint32_t frames) { on_audio(nullptr, unit, out, static_cast<int32_t>(frames)); }
 
 void *audio_symbol(const char *name) {
   struct Entry { const char *name; void *address; };

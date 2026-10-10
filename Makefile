@@ -228,7 +228,7 @@ LAUNCHER_SO_SRCS := android/launcher/run.cpp android/launcher/boot.cpp android/l
 $(LAUNCHER_SO): $(LAUNCHER_SO_SRCS) $(wildcard android/launcher/*.h shared/launcher/*.h shared/include/mcfm/*.h) android/launcher/launcher.map $(LOADER_HDRS) $(RT_LIB)
 	@mkdir -p $(dir $@)
 	$(ACXX) $(RT_CXXFLAGS) -fPIC -shared -Ishared/loader -Ishared/apple -Ishared/launcher -Ishared/include -Iandroid/launcher $(LAUNCHER_SO_SRCS) \
-	  $(RT_LDFLAGS) -Wl,--version-script,android/launcher/launcher.map -Wl,-soname,libmcfm_launcher.so -lEGL -lGLESv3 -laaudio -o $@
+	  $(RT_LDFLAGS) -Wl,--version-script,android/launcher/launcher.map -Wl,-soname,libmcfm_launcher.so -Wl,-z,defs -lEGL -lGLESv3 -laaudio -lc -lm -o $@
 MCFM_RUN := $(ALAUNCH_OUT)/mcfm-run
 $(MCFM_RUN): android/launcher/mcfm_run.c $(LAUNCHER_SO)
 	$(ACC) -Wall -O1 $(ANDROID_LDFLAGS) $< -ldl -o $@

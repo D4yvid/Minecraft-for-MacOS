@@ -46,6 +46,7 @@ grep '^mcfm: stub ' <<<"$OUTPUT" | sed 's/^/  /' | head -40
 grep -q '^mcfm: engine started (1280x720)$' <<<"$OUTPUT" || { echo "frames_check: FAIL (engine did not start)"; exit 1; }
 grep -q '^mcfm: 120 frames rendered$' <<<"$OUTPUT" || { echo "frames_check: FAIL (120 frames not rendered)"; exit 1; }
 grep -q '^mcfm: audio: output started' <<<"$OUTPUT" || { echo "frames_check: FAIL (FMOD's audio output did not start)"; exit 1; }
+grep -q '^mcfm: saved$' <<<"$OUTPUT" || { echo "frames_check: FAIL (no clean exit after the save)"; exit 1; }
 "$ADB" pull "$DIR/shot.ppm" "$OUT/android-shot.ppm" >/dev/null 2>&1 || { echo "frames_check: FAIL (no screenshot)"; exit 1; }
 sips -s format png "$OUT/android-shot.ppm" --out "$OUT/android-shot.png" >/dev/null 2>&1 || true
 python3 -I "$ROOT/tools/android/check_screenshot.py" "$OUT/android-shot.ppm" || { echo "frames_check: FAIL (screenshot)"; exit 1; }

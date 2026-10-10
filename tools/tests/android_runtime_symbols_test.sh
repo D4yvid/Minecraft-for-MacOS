@@ -22,6 +22,11 @@ sort -u "$TABLE" > "$T/have"
 MISSING="$(comm -23 "$T/need" "$T/have")"
 [ -z "$MISSING" ] || { echo "FAIL: the runtime does not define:"; sed 's/^/  /' <<<"$MISSING"; fails=$((fails+1)); }
 EXPORTS="$("$NM" -D --defined-only "$LAUNCHER" | awk '{print $3}')"
+# ... nor needs one from elsewhere (an undefined C++ symbol would bind to Android's libc++);
+# bionic's own __cxa_atexit/__cxa_finalize/__cxa_thread_atexit_impl are expected.
+UNDEF="$("$NM" -D -u "$LAUNCHER" | awk '{print $NF}' | sed 's/@.*//' | grep -E '^(_Z|__cxa_|_Unwind_|__gxx_)' \
+  | grep -v -x -e __cxa_atexit -e __cxa_finalize -e __cxa_thread_atexit_impl)"
+[ -z "$UNDEF" ] || { echo "FAIL: libmcfm_launcher.so needs C++ runtime symbols from elsewhere:"; head -5 <<<"$UNDEF" | sed 's/^/  /'; fails=$((fails+1)); }
 for bin in "$LAUNCHER" "$@"; do
   LEAKED="$("$NM" -D --defined-only "$bin" | awk '{print $3}' | grep -E '^(_Z|__cxa_|_Unwind_|__gxx_|__unw_)')"
   [ -z "$LEAKED" ] || { echo "FAIL: $(basename "$bin") exports C++ runtime symbols, e.g.:"; head -5 <<<"$LEAKED" | sed 's/^/  /'; fails=$((fails+1)); }

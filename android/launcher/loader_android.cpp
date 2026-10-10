@@ -67,24 +67,20 @@ constexpr const char kStubPrefix[] = "mcfm_stub_";
 
 bool is_stub(const std::string &name) { return name.compare(0, sizeof kStubPrefix - 1, kStubPrefix) == 0; }
 
-// The OpenGLES framework's gl* functions come from the system's GLES 3: the library's exports;
-// for an extension function that GLES 3 has in core (glBindRenderbufferOES, glGenVertexArraysOES,
-// glDiscardFramebufferEXT = glInvalidateFramebuffer), the core function; only then
-// eglGetProcAddress (it can return GLES 1 entry points for OES names, which crash under a GLES 3
-// context). An unresolved gl* name stays unresolved: a draw call must never go to a stub.
+// The OpenGLES framework's gl* functions come from the system's GLES 3: the library's exports,
+// and for an extension function that GLES 3 has in core (glBindRenderbufferOES,
+// glGenVertexArraysOES, glDiscardFramebufferEXT = glInvalidateFramebuffer) the core function.
+// Nothing else: eglGetProcAddress can return GLES 1 entry points (the emulator's crash under a
+// GLES 3 context) or forwarders for names no driver has, and an unresolved gl* name must fail
+// the load rather than reach a stub.
 void *gles_symbol(const std::string &name) {
   static void *gles = dlopen("libGLESv3.so", RTLD_NOW);
-  static void *egl = dlopen("libEGL.so", RTLD_NOW);
-  typedef void *(*GetProcAddress)(const char *);
-  static GetProcAddress get_proc = egl ? reinterpret_cast<GetProcAddress>(dlsym(egl, "eglGetProcAddress")) : nullptr;
   if (!gles) return nullptr;
   if (void *p = dlsym(gles, name.c_str())) return p;
   std::string core;
   if (name == "glDiscardFramebufferEXT") core = "glInvalidateFramebuffer";
   else if (name.size() > 3 && name.compare(name.size() - 3, 3, "OES") == 0) core = name.substr(0, name.size() - 3);
-  if (!core.empty())
-    if (void *p = dlsym(gles, core.c_str())) return p;
-  return get_proc ? get_proc(name.c_str()) : nullptr;
+  return core.empty() ? nullptr : dlsym(gles, core.c_str());
 }
 
 bool is_gl_function(const std::string &name) { return name.compare(0, 2, "gl") == 0; }
@@ -156,6 +152,9 @@ void *AndroidLoaderOS::symbol(void *library, const std::string &name) {
 void *AndroidLoaderOS::flat_symbol(const std::string &name) {
   if (void *p = mcfm_darwin_symbol(name.c_str())) return p;
   if (void *p = mcfm_runtime_symbol(name.c_str())) return p;
+  // Never a C++ name from elsewhere in the process: that would be Android's libc++ (same names,
+  // another ABI). C names (other images' exports) may come from anywhere.
+  if (name.compare(0, 2, "_Z") == 0) return nullptr;
   return dlsym(RTLD_DEFAULT, name.c_str());
 }
 

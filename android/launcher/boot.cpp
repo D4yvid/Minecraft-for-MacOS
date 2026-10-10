@@ -1,13 +1,15 @@
 // mcfm-run --boot (docs/LAUNCHER.md, Stage 3b): boots the engine of the loaded game image with
 // our AppPlatform (shared/launcher, the same code as the macOS launcher) in the current GLES 3
-// context, renders frames headless, drains the main dispatch queue between frames, suspends (the
-// game saves) and writes a screenshot of the last frame. A window comes with Stage 3c's APK.
+// context, renders frames headless, drains the main dispatch queue between frames, writes a
+// screenshot of the last frame, suspends (the game saves) and ends the process (_exit, as on
+// macOS). A window comes with Stage 3c's APK.
 #include "boot.h"
 
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <cstdio>
 #include <string>
@@ -62,7 +64,12 @@ int boot(uintptr_t slide, const BootOptions &o) {
   std::printf("mcfm: quitting: game saving (app suspended)\n");
   engine.suspend();
   mcfm_darwin_drain_main_queue();
-  return 0;
+  // As the macOS launcher: the engine's threads (FMOD's mixer, the AAudio callback, ...) are still
+  // running, so the game's static destructors (and ours) must not run: leave without exit().
+  std::printf("mcfm: saved\n");
+  std::fflush(stdout);
+  std::fflush(stderr);
+  _exit(0);
 }
 
 }  // namespace android

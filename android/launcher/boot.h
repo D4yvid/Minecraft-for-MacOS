@@ -14,7 +14,8 @@ struct BootOptions {
   int width = 1280, height = 720;  // the current GL surface's size
 };
 
-// Needs the game image loaded (with the launcher's hooks) and a current GLES 3 context.
+// Needs the game image loaded (with the launcher's hooks) and a current GLES 3 context. After the
+// last frame and the save it ends the process (_exit(0)); returns only on failure.
 int boot(uintptr_t slide, const BootOptions &options);
 
 }  // namespace android

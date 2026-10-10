@@ -67,6 +67,10 @@ int32_t AudioOutputUnitStart(void *unit);
 int32_t AudioOutputUnitStop(void *unit);
 int32_t AudioSessionGetProperty(uint32_t id, uint32_t *size, void *data);
 
+// Tests: renders `frames` frames of an initialized unit into `out` (interleaved), as the AAudio
+// callback does.
+void render_for_test(void *unit, void *out, uint32_t frames);
+
 // The provider for the image's AudioToolbox imports: the address of `name` (no Mach-O '_'), or
 // null when we do not provide it.
 void *audio_symbol(const char *name);
