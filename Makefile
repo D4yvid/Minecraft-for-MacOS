@@ -106,9 +106,10 @@ launcher: $(LAUNCHER_BIN)
 # Loads the image built by make launcher; the census lists every stub the game called.
 launcher-check:
 	@rm -f $(BUILD)/launcher/census.txt; mkdir -p $(BUILD)/launcher
-	@OUT="$$(MCFM_CENSUS="$(CURDIR)/$(BUILD)/launcher/census.txt" "$(LAUNCHER_OUT)/mcfm-launch" --frames 120 2>&1)"; \
+	@OUT="$$(MCFM_CENSUS="$(CURDIR)/$(BUILD)/launcher/census.txt" "$(LAUNCHER_OUT)/mcfm-launch" --frames 120 2>&1)"; RC=$$?; \
 	  echo "$$OUT" | grep -E "^mcfm: (game image|EGL|engine|[0-9]+ frames)" ; \
-	  { echo "$$OUT" | grep -q "game image loaded" && echo "$$OUT" | grep -q "120 frames rendered"; } || { echo "$$OUT" | tail -25; echo "launcher-check: FAILED"; exit 1; }
+	  { [ $$RC = 0 ] && echo "$$OUT" | grep -q "game image loaded" && echo "$$OUT" | grep -q "120 frames rendered"; } \
+	    || { echo "$$OUT" | tail -25; echo "launcher-check: FAILED (exit $$RC)"; exit 1; }
 	@grep -qxF "libobjc:_objc_autoreleasePoolPush" $(BUILD)/launcher/census.txt || { echo "launcher-check: initializers did not reach the stubs"; exit 1; }
 	@echo "launcher-check: passed ($$(wc -l < $(BUILD)/launcher/census.txt | tr -d ' ') stubs called, see $(BUILD)/launcher/census.txt)"
 

@@ -7,6 +7,7 @@
 #import <QuartzCore/CAMetalLayer.h>
 
 #include <dlfcn.h>
+#include <unistd.h>
 #include <mach-o/dyld.h>
 
 #include <cstdio>
@@ -90,6 +91,8 @@ bool load_egl(const std::string &dir, Egl *e) {
   SYM(gles, BindFramebuffer, "glBindFramebuffer");
   SYM(gles, Viewport, "glViewport");
   SYM(gles, ReadPixels, "glReadPixels");
+  SYM(gles, PixelStorei, "glPixelStorei");
+  SYM(gles, BindBuffer, "glBindBuffer");
 #undef SYM
   return true;
 }
@@ -181,7 +184,9 @@ HostInfo host_info(const std::string &game_data_dir) {
   NSSize px = [self pixelSize];
   if (!_engine.start(EngineAddresses::for_slide(g_slide), host_info(_dataDir), (int)px.width, (int)px.height)) exit(5);
   std::printf("mcfm: engine started (%dx%d)\n", (int)px.width, (int)px.height);
-  [NSTimer scheduledTimerWithTimeInterval:1.0 / 60 target:self selector:@selector(frame) userInfo:nil repeats:YES];
+  // Common modes: keep rendering during live resize and while a menu is open.
+  NSTimer *timer = [NSTimer timerWithTimeInterval:1.0 / 60 target:self selector:@selector(frame) userInfo:nil repeats:YES];
+  [[NSRunLoop currentRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
 }
 - (void)frame {
   NSSize px = [self pixelSize];
@@ -190,6 +195,12 @@ HostInfo host_info(const std::string &game_data_dir) {
   self.egl.Viewport(0, 0, (int)px.width, (int)px.height);
   _engine.frame();
   if (self.framesLeft == 1 && !_screenshot.empty()) {
+    // Read the default framebuffer with tightly packed rows into client memory, whatever
+    // state the engine left behind.
+    self.egl.BindFramebuffer(GL_FRAMEBUFFER, 0);
+    self.egl.BindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    self.egl.PixelStorei(GL_PACK_ALIGNMENT, 1);
+    self.egl.PixelStorei(GL_PACK_ROW_LENGTH, 0);
     std::vector<unsigned char> pixels(static_cast<size_t>(px.width) * static_cast<size_t>(px.height) * 4);
     self.egl.ReadPixels(0, 0, (int)px.width, (int)px.height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
     if (write_ppm(_screenshot.c_str(), (int)px.width, (int)px.height, pixels.data()))
@@ -200,16 +211,43 @@ HostInfo host_info(const std::string &game_data_dir) {
   if (self.framesLeft > 0 && --_framesLeft == 0) {
     std::printf("mcfm: %ld frames rendered\n", self.framesDone);
     std::fflush(stdout);
-    exit(0);
+    std::fflush(stderr);
+    // _exit: engine threads (REST, audio, ...) are still running; static destructors must not.
+    _exit(0);
   }
 }
-- (void)windowDidResize:(NSNotification *)n {
+- (void)updateSurfaceSize {
   NSSize px = [self pixelSize];
-  ((CAMetalLayer *)self.window.contentView.layer).drawableSize = CGSizeMake(px.width, px.height);
+  CAMetalLayer *layer = (CAMetalLayer *)self.window.contentView.layer;
+  layer.contentsScale = self.window.backingScaleFactor;
+  layer.drawableSize = CGSizeMake(px.width, px.height);
   _engine.resize((int)px.width, (int)px.height);
+}
+- (void)windowDidResize:(NSNotification *)n {
+  [self updateSurfaceSize];
+}
+// Moved between a Retina and a non-Retina display: new pixel size for the same window.
+- (void)windowDidChangeBackingProperties:(NSNotification *)n {
+  [self updateSurfaceSize];
 }
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)app { return YES; }
 @end
+
+namespace {
+
+int usage(const char *why) {
+  std::fprintf(stderr, "mcfm: %s\nusage: mcfm-launch [--print-hooks] [--frames N [--screenshot out.ppm]] [image]\n", why);
+  return 2;
+}
+
+// A positive whole number of frames, or -1.
+long parse_frames(const char *text) {
+  char *end = nullptr;
+  long n = std::strtol(text, &end, 10);
+  return (end && *end == '\0' && n > 0) ? n : -1;
+}
+
+}  // namespace
 
 int main(int argc, char **argv) {
   setvbuf(stdout, nullptr, _IOLBF, 0);  // keep progress lines if the engine crashes
@@ -222,20 +260,34 @@ int main(int argc, char **argv) {
       const Hook *h = hooks(&n);
       for (size_t k = 0; k < n; k++) std::printf("%s\t0x%lx\n", h[k].name, static_cast<unsigned long>(h[k].address));
       return 0;
-    } else if (a == "--frames" && i + 1 < argc) {
-      frames = std::atol(argv[++i]);
-    } else if (a == "--screenshot" && i + 1 < argc) {
+    } else if (a == "--frames") {
+      if (i + 1 >= argc || (frames = parse_frames(argv[++i])) < 0) return usage("--frames needs a positive number");
+    } else if (a == "--screenshot") {
+      if (i + 1 >= argc) return usage("--screenshot needs a file");
       screenshot = argv[++i];
+    } else if (a.compare(0, 2, "--") == 0 || !path.empty()) {
+      return usage(("unexpected argument " + a).c_str());
     } else {
       path = a;
     }
   }
+  if (!screenshot.empty() && frames < 0) return usage("--screenshot needs --frames (it captures the last frame)");
   if (path.empty()) path = executable_dir() + "/libminecraftpe.dylib";
   std::vector<char> header;
   if (!read_header(path, &header)) { std::fprintf(stderr, "mcfm: cannot load %s: unreadable\n", path.c_str()); return 2; }
   if (!mcfm::is_expected_game_image(header.data(), header.size())) {
     std::fprintf(stderr, "mcfm: %s is not Minecraft PE 0.15.10 (LC_UUID)\n", path.c_str());
     return 3;
+  }
+  // The game's data/ lives in the app the image came from: make_launcher.sh writes its path.
+  std::string data_dir;
+  std::ifstream df(executable_dir() + "/data_dir.txt");
+  std::getline(df, data_dir);
+  BOOL is_dir = NO;
+  if (data_dir.empty() || ![[NSFileManager defaultManager] fileExistsAtPath:@(data_dir.c_str()) isDirectory:&is_dir] || !is_dir) {
+    std::fprintf(stderr, "mcfm: game data not found (%s); rebuild with make launcher\n",
+                 data_dir.empty() ? "no data_dir.txt next to mcfm-launch" : data_dir.c_str());
+    return 2;
   }
   _dyld_register_func_for_add_image(on_add_image);
   if (!dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL)) { std::fprintf(stderr, "mcfm: cannot load %s: %s\n", path.c_str(), dlerror()); return 2; }
@@ -245,11 +297,6 @@ int main(int argc, char **argv) {
     return 2;
   }
   std::printf("mcfm: game image loaded (slide 0x%lx)\n", static_cast<unsigned long>(g_slide));
-  std::fflush(stdout);
-  // The game's data/ lives next to the image's source app: make_launcher.sh writes its path.
-  std::string data_dir;
-  std::ifstream df(executable_dir() + "/data_dir.txt");
-  std::getline(df, data_dir);
   @autoreleasepool {
     NSApplication *app = [NSApplication sharedApplication];
     app.activationPolicy = NSApplicationActivationPolicyRegular;

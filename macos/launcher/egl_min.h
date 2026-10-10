@@ -17,6 +17,7 @@ enum : EGLint {
 };
 constexpr unsigned GL_FRAMEBUFFER = 0x8D40;
 constexpr unsigned GL_RGBA = 0x1908, GL_UNSIGNED_BYTE = 0x1401;
+constexpr unsigned GL_PACK_ALIGNMENT = 0x0D05, GL_PACK_ROW_LENGTH = 0x0D02, GL_PIXEL_PACK_BUFFER = 0x88EB;
 
 struct Egl {
   EGLDisplay (*GetPlatformDisplay)(EGLenum, void *, const EGLAttrib *);
@@ -30,4 +31,6 @@ struct Egl {
   void (*BindFramebuffer)(unsigned, unsigned);
   void (*Viewport)(int, int, int, int);
   void (*ReadPixels)(int, int, int, int, unsigned, unsigned, void *);
+  void (*PixelStorei)(unsigned, int);
+  void (*BindBuffer)(unsigned, unsigned);
 };

@@ -23,4 +23,15 @@ OUT="$("$BIN" "$T/missing.dylib" 2>&1)"; rc=$?
 python3 -c "import struct,sys; open(sys.argv[1],'wb').write(struct.pack('<IiiIIIII',0xFEEDFACF,0x0100000C,0,6,1000,0x10000000,0,0)+struct.pack('<II',0x19,0x01000000)+bytes(100))" "$T/crafted.dylib"
 OUT="$("$BIN" "$T/crafted.dylib" 2>&1)"; rc=$?
 [ $rc = 3 ] || { echo "FAIL: crafted header: exit $rc, want 3: $OUT"; fails=$((fails+1)); }
+# Bad command lines are refused before anything is loaded (exit 2, usage).
+usage() {  # <description> <args...>
+  local what="$1"; shift
+  OUT="$("$BIN" "$@" 2>&1)"; rc=$?
+  { [ $rc = 2 ] && grep -q "usage:" <<<"$OUT"; } || { echo "FAIL: $what: exit $rc, want 2 with usage: $OUT"; fails=$((fails+1)); }
+}
+usage "--frames 0" --frames 0 "$T/libminecraftpe.dylib"
+usage "--frames abc" --frames abc "$T/libminecraftpe.dylib"
+usage "--frames without a value" "$T/libminecraftpe.dylib" --frames
+usage "--screenshot without --frames" --screenshot "$T/x.ppm" "$T/libminecraftpe.dylib"
+usage "unknown option" --bogus "$T/libminecraftpe.dylib"
 [ $fails = 0 ] && echo "mcfm_launch_test: passed" || { echo "$fails failure(s)"; exit 1; }
