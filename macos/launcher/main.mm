@@ -1,5 +1,5 @@
 // mcfm-launch: runs the converted game image (make launcher) in a macOS window.
-// usage: mcfm-launch [--print-hooks] [--frames N] [image]
+// usage: mcfm-launch [--print-hooks] [--frames N [--screenshot out.ppm]] [image]
 // The LC_UUID is checked on the file before dlopen, the hook table is filled from a dyld
 // add-image callback (before the game's initializers), then the engine boots in an ANGLE
 // (OpenGL ES 3 on Metal) context. docs/LAUNCHER.md, Stage 1b.
@@ -20,6 +20,7 @@
 #include "hook_table.h"
 #include "macho_uuid.h"
 #include "resize_math.h"
+#include "screenshot.h"
 #include "seams.h"
 
 using namespace mcfm::launcher;
@@ -76,6 +77,7 @@ bool load_egl(const std::string &dir, Egl *e) {
   SYM(egl, GetError, "eglGetError");
   SYM(gles, BindFramebuffer, "glBindFramebuffer");
   SYM(gles, Viewport, "glViewport");
+  SYM(gles, ReadPixels, "glReadPixels");
 #undef SYM
   return true;
 }
@@ -117,9 +119,10 @@ HostInfo host_info(const std::string &game_data_dir) {
 @implementation McfmApp {
   Engine _engine;
   std::string _dataDir;
+  std::string _screenshot;  // written from the last frame of --frames
 }
-- (instancetype)initWithDataDir:(const std::string &)dir frames:(long)frames {
-  if ((self = [super init])) { _dataDir = dir; _framesLeft = frames; }
+- (instancetype)initWithDataDir:(const std::string &)dir frames:(long)frames screenshot:(const std::string &)shot {
+  if ((self = [super init])) { _dataDir = dir; _framesLeft = frames; _screenshot = shot; }
   return self;
 }
 - (NSSize)pixelSize {
@@ -174,6 +177,12 @@ HostInfo host_info(const std::string &game_data_dir) {
   self.egl.BindFramebuffer(GL_FRAMEBUFFER, 0);
   self.egl.Viewport(0, 0, (int)px.width, (int)px.height);
   _engine.frame();
+  if (self.framesLeft == 1 && !_screenshot.empty()) {
+    std::vector<unsigned char> pixels(static_cast<size_t>(px.width) * static_cast<size_t>(px.height) * 4);
+    self.egl.ReadPixels(0, 0, (int)px.width, (int)px.height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+    if (write_ppm(_screenshot.c_str(), (int)px.width, (int)px.height, pixels.data()))
+      std::printf("mcfm: screenshot %s\n", _screenshot.c_str());
+  }
   self.egl.SwapBuffers(self.display, self.surface);
   self.framesDone++;
   if (self.framesLeft > 0 && --_framesLeft == 0) {
@@ -193,7 +202,7 @@ HostInfo host_info(const std::string &game_data_dir) {
 int main(int argc, char **argv) {
   setvbuf(stdout, nullptr, _IOLBF, 0);  // keep progress lines if the engine crashes
   long frames = -1;
-  std::string path;
+  std::string path, screenshot;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
     if (a == "--print-hooks") {
@@ -203,6 +212,8 @@ int main(int argc, char **argv) {
       return 0;
     } else if (a == "--frames" && i + 1 < argc) {
       frames = std::atol(argv[++i]);
+    } else if (a == "--screenshot" && i + 1 < argc) {
+      screenshot = argv[++i];
     } else {
       path = a;
     }
@@ -226,7 +237,7 @@ int main(int argc, char **argv) {
   @autoreleasepool {
     NSApplication *app = [NSApplication sharedApplication];
     app.activationPolicy = NSApplicationActivationPolicyRegular;
-    McfmApp *delegate = [[McfmApp alloc] initWithDataDir:data_dir frames:frames];
+    McfmApp *delegate = [[McfmApp alloc] initWithDataDir:data_dir frames:frames screenshot:screenshot];
     app.delegate = delegate;
     [app run];
   }

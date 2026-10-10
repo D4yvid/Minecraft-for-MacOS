@@ -16,6 +16,7 @@ enum : EGLint {
   EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE = 0x3489,
 };
 constexpr unsigned GL_FRAMEBUFFER = 0x8D40;
+constexpr unsigned GL_RGBA = 0x1908, GL_UNSIGNED_BYTE = 0x1401;
 
 struct Egl {
   EGLDisplay (*GetPlatformDisplay)(EGLenum, void *, const EGLAttrib *);
@@ -28,4 +29,5 @@ struct Egl {
   EGLint (*GetError)(void);
   void (*BindFramebuffer)(unsigned, unsigned);
   void (*Viewport)(int, int, int, int);
+  void (*ReadPixels)(int, int, int, int, unsigned, unsigned, void *);
 };

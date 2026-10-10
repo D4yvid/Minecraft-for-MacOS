@@ -181,6 +181,10 @@ $(BUILD)/test/resize_math_test: macos/tests/resize_math_test.cpp macos/launcher/
 	@mkdir -p $(dir $@)
 	clang++ -std=c++17 -Wall -O1 -Imacos/launcher macos/tests/resize_math_test.cpp -o $@
 
+$(BUILD)/test/screenshot_test: macos/tests/screenshot_test.cpp macos/launcher/screenshot.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++17 -Wall -O1 -Imacos/launcher macos/tests/screenshot_test.cpp -o $@
+
 $(BUILD)/test/titlebar_test: macos/tests/titlebar_test.cpp macos/src/titlebar_zone.h
 	@mkdir -p $(dir $@)
 	clang++ -std=c++17 -Wall -O1 macos/tests/titlebar_test.cpp -o $@
@@ -208,6 +212,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/launcher_hooks_test.sh
 	bash tools/tests/launcher_provider_test.sh
 	bash tools/tests/fetch_angle_test.sh
+	$(MAKE) --no-print-directory $(BUILD)/test/screenshot_test && $(BUILD)/test/screenshot_test "$$(mktemp -d)/shot.ppm"
 	bash tools/tests/no_game_files_test.sh
 	bash tools/tests/setup_game_files_test.sh
 
