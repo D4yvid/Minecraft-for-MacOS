@@ -7,7 +7,7 @@
 
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
-// Called with `lock` held.
+// Called with `lock` held. `selector` NULL: a plain symbol line.
 static void record(const char *lib, const char *symbol, const char *selector) {
   char line[512];
   if (selector)
@@ -26,27 +26,47 @@ static void record(const char *lib, const char *symbol, const char *selector) {
 }
 
 void mcfm_stub_hit(int *seen, const char *lib, const char *symbol) {
+  if (__atomic_load_n(seen, __ATOMIC_ACQUIRE)) return;  // logged already: no lock on hot paths
   pthread_mutex_lock(&lock);
   if (!*seen) {
-    *seen = 1;
     record(lib, symbol, 0);
+    __atomic_store_n(seen, 1, __ATOMIC_RELEASE);
   }
   pthread_mutex_unlock(&lock);
 }
 
 // Selectors already logged, keyed by pointer (each selector name is one string in the image).
+// At most SEL_LOG_MAX are logged, so the open-addressing table never gets more than half full
+// and a lookup stays short however many selectors the game sends.
 #define SEL_SLOTS 8192
+#define SEL_LOG_MAX (SEL_SLOTS / 2)
 static const char *logged_sels[SEL_SLOTS];
+static int logged_count;
+static int logged_null;
 
 void mcfm_stub_msgsend(const char *lib, const char *symbol, const char *selector) {
   pthread_mutex_lock(&lock);
-  unsigned h = (unsigned)(((uintptr_t)selector >> 3) % SEL_SLOTS);
-  for (unsigned i = 0; i < SEL_SLOTS; i++, h = (h + 1) % SEL_SLOTS) {
-    if (logged_sels[h] == selector) break;
-    if (!logged_sels[h]) {
-      logged_sels[h] = selector;
-      record(lib, symbol, selector ? selector : "(null)");
-      break;
+  if (logged_count < SEL_LOG_MAX) {
+    if (!selector) {
+      if (!logged_null) {
+        logged_null = 1;
+        logged_count++;
+        record(lib, symbol, "(null)");
+      }
+    } else {
+      unsigned h = (unsigned)(((uintptr_t)selector >> 3) % SEL_SLOTS);
+      while (logged_sels[h] && logged_sels[h] != selector) h = (h + 1) % SEL_SLOTS;
+      if (!logged_sels[h]) {
+        logged_sels[h] = selector;
+        logged_count++;
+        record(lib, symbol, selector);
+      }
+    }
+    if (logged_count == SEL_LOG_MAX) {
+      char note[64];
+      snprintf(note, sizeof note, "selector log full (%d), further selectors not logged", SEL_LOG_MAX);
+      record(lib, "", note);
+      logged_count++;  // past the limit: stop looking
     }
   }
   pthread_mutex_unlock(&lock);

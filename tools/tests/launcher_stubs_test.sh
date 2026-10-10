@@ -31,6 +31,11 @@ int main(void) {
   for (int i = 0; i < 256; i++) if (kFakeKitValue[i]) { puts("data not zero"); return 1; }
   if (fakekit_hello() != 0) { puts("fn not 0"); return 1; }
   if (objc_msgSend(0, "poke") || objc_msgSend(0, "poke") || objc_msgSend(0, "other")) { puts("msgSend not 0"); return 1; }
+  if (objc_msgSend(0, 0) || objc_msgSend(0, 0)) { puts("msgSend(nil sel) not 0"); return 1; }
+  // Many distinct selectors: the log is bounded (4096 + one "full" line), calls stay cheap.
+  static char names[6000][16];
+  for (int i = 0; i < 6000; i++) { snprintf(names[i], sizeof names[i], "sel%d", i); objc_msgSend(0, names[i]); }
+  for (int r = 0; r < 100; r++) for (int i = 0; i < 6000; i++) if (objc_msgSend(0, names[i])) return 1;
   dirty(); double d = ((double (*)(void))fakekit_hello)();
   if (d != 0.0) { printf("double return not 0: %g\n", d); return 1; }
   dirty(); rect4 r = ((rect4 (*)(void))fakekit_hello)();
@@ -49,7 +54,11 @@ count() { grep -cxF "$1" <<<"$ERR"; }
 [ "$(count 'mcfm: stub FakeKit:_fakekit_hello')" = 1 ] || { echo "FAIL: fakekit_hello not logged exactly once"; fails=$((fails+1)); }
 [ "$(count 'mcfm: stub libobjc:_objc_msgSend poke')" = 1 ] || { echo "FAIL: poke not logged once"; fails=$((fails+1)); }
 [ "$(count 'mcfm: stub libobjc:_objc_msgSend other')" = 1 ] || { echo "FAIL: other not logged once"; fails=$((fails+1)); }
+[ "$(count 'mcfm: stub libobjc:_objc_msgSend (null)')" = 1 ] || { echo "FAIL: nil selector not logged once"; fails=$((fails+1)); }
+SELS="$(grep -c '^mcfm: stub libobjc:_objc_msgSend sel' <<<"$ERR")"
+[ "$SELS" = 4093 ] || { echo "FAIL: $SELS selector lines, want 4093 (4096 minus poke, other, (null))"; fails=$((fails+1)); }
+[ "$(count 'mcfm: stub libobjc: selector log full (4096), further selectors not logged')" = 1 ] || { echo "FAIL: no single log-full line"; fails=$((fails+1)); }
 CENSUS="$(cat "$T/census.txt" 2>/dev/null)"
-[ "$(wc -l <<<"$CENSUS" | tr -d ' ')" = 4 ] || { echo "FAIL: census should have 4 lines: $CENSUS"; fails=$((fails+1)); }
+[ "$(grep -vc ' sel[0-9]' <<<"$CENSUS")" = 5 ] || { echo "FAIL: census should have 5 non-sel lines (bounds comes after the log is full)"; fails=$((fails+1)); }
 grep -qxF 'FakeKit:_fakekit_hello' <<<"$CENSUS" || { echo "FAIL: census missing fakekit_hello"; fails=$((fails+1)); }
 [ $fails = 0 ] && echo "launcher_stubs_test: passed" || { echo "$fails failure(s)"; exit 1; }

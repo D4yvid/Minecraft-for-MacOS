@@ -7,7 +7,7 @@ extern "C" {
 #endif
 void mcfm_stub_hit(int *seen, const char *lib, const char *symbol);
 // objc_msgSend stubs: the selector is a C string (the image's selector refs are never
-// registered with a runtime); logged once per selector.
+// registered with a runtime); logged once per selector, the first 4096 selectors only.
 void mcfm_stub_msgsend(const char *lib, const char *symbol, const char *selector);
 #ifdef __cplusplus
 }
