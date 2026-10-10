@@ -20,3 +20,7 @@ Payload/
 lib*.so
 android/Application/
 *.keystore
+
+# local reverse-engineering workspace (game binaries, IDA databases): never committed
+.research/
+.DS_Store

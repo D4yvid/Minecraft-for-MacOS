@@ -69,6 +69,11 @@ same check to inputs at build time.
 
 ## Finding addresses (iOS)
 
+Named slot maps: [research/appplatform-vtable.md](research/appplatform-vtable.md),
+[research/minecraftclient-vtable.md](research/minecraftclient-vtable.md); renderer notes:
+[research/renderer.md](research/renderer.md).
+
+
 `tools/ida/` has the idalib scripts used to locate everything (see its README). The
 Android library keeps symbols, which makes it the easiest place to identify a function
 before looking for it in the stripped iOS binary.

@@ -54,7 +54,8 @@ android/  JNI / injection + APK packaging            tools/    injector, game ch
 docs/     ARCHITECTURE.md and design history
 ```
 
-Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) to add features.
+Start with [docs/HANDOFF.md](docs/HANDOFF.md) (state, roadmap) and
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); reverse-engineering notes are in [docs/research/](docs/research/).
 
 ## License
 

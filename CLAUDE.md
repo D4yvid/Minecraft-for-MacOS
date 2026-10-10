@@ -1,7 +1,8 @@
 # Minecraft for macOS — notes for Claude
 
 Mods for Minecraft PE 0.15.10 on macOS (Catalyst), iOS and Android from one C++11 core.
-Read docs/ARCHITECTURE.md first.
+Read docs/HANDOFF.md (state, knowledge base, roadmap, pitfalls) and docs/ARCHITECTURE.md first.
+Reverse-engineering notes: docs/research/. Local game binaries and the IDA database: .research/ (git-ignored).
 
 ## Commands
 - `make test` — all host tests (no game files). Run before every commit.
@@ -22,3 +23,4 @@ Read docs/ARCHITECTURE.md first.
   statics in entry points.
 - Features are plain `install()` functions for now; a module system is planned.
 - Logs are prefixed `mcfm:`.
+- `make check` closes a running game (smoke test); check `pgrep -x minecraftpe` first.
