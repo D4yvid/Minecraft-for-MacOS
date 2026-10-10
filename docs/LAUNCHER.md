@@ -72,46 +72,57 @@ Let dyld do the loading so we can focus on the platform layer, the boot and rend
 Stage 1 is split into three plans: **1a** load the image ☑
 ([plan](superpowers/plans/2026-10-10-launcher-stage1a-load.md); `make launcher` /
 `make launcher-check`: the real game image loads in a plain macOS process with all 18 non-host
-libraries stubbed and all static initializers run), **1b** AppPlatform + boot + ANGLE window +
-input, **1c** seams, audio, census-driven fixes.
+libraries stubbed and all static initializers run), **1b** AppPlatform + boot + ANGLE window ☑
+([plan](superpowers/plans/2026-10-10-launcher-stage1b-boot.md); `make angle`, `make launcher`,
+`make launcher-run`: the engine boots in an AppKit window on ANGLE/Metal and renders the Win10
+Edition title screen; `make launcher-check` renders 120 frames), **1c** input, the remaining
+seams (Xbox Live prompt, TCUI), audio, census-driven fixes.
 
 1. ☑ **Image preparation** (`tools/` script, run at install time like `convert.sh`): copy the
    binary; `MH_EXECUTE` → `MH_DYLIB` with an `LC_ID_DYLIB`; drop `LC_MAIN`; retag the platform
    to macOS (`LC_BUILD_VERSION`); point each framework's `LC_LOAD_DYLIB` at our stub library;
    ad hoc sign. Test with a small arm64 iOS executable we compile ourselves (no game files).
 2. ☑ **Stub libraries**, generated from the import list (Apple API names only, safe to
-   commit): functions log `mcfm: unimplemented <lib>:<symbol>` once and return 0/NULL; data
-   symbols are zeroed; ObjC classes the image subclasses (`UIViewController`, `UIView`, …) are
-   empty `NSObject` subclasses. Test: every import of the reference list resolves.
+   commit): functions log `mcfm: stub <lib>:<symbol>` once and return like a message to nil
+   (x0, x1, d0–d3 zero); data symbols are 256 zero bytes. Test: every import resolves.
    **Decided 2026-10-10**: stub every framework, including those macOS also has, and libobjc;
    only libSystem, libc++ and libz bind to the host. Stage 1 thereby proves the binary runs
    without Apple frameworks. As built (1a): stubs log `mcfm: stub <lib>:<symbol>` once (and
    `objc_msgSend` once per selector); ObjC classes are plain data stubs because the image's
    ObjC metadata is hidden from the runtime (below).
-3. ☐ **GL**: bind the 84 engine `gl*` imports to ANGLE (GLES 3 on Metal). **Decided**: prebuilt
+3. ☑ **GL**: bind the 84 engine `gl*` imports to ANGLE (GLES 3 on Metal). **Decided**: prebuilt
    ANGLE binaries, fetched by a script into a git-ignored folder (pinned version + checksum).
-   Shaders ship as GLSL ES in the game data.
-4. ☐ **Our AppPlatform**: call the base ctor `0x10045F678` on a 360+ byte object, then set the
+   Shaders ship as GLSL ES in the game data. As built (1b): the `OpenGLES` stub re-exports
+   ANGLE's `libGLESv2` (`build_stubs.sh --provider`), so only symbols ANGLE lacks are stubbed.
+4. ☑ **Our AppPlatform**: call the base ctor `0x10045F678` on a 360+ byte object, then set the
    vptr to our own vtable: a copy of the base vtable `0x100E649C0` with our overrides (Win10
    edition, UI scaling rules, input mode, pointer show/hide, keyboard, paths, …). This is
    step 4 of the generic AppPlatform plan in [HANDOFF.md §6.1](HANDOFF.md#61-generic-appplatform).
-   Every slot gets a FakePlatform host test.
-5. ☐ **Boot and frame loop**: `MinecraftClient` ctor `0x10006E2DC`, `AppContext`, `App::init`
+   Every slot gets a FakePlatform host test. As built (1b): `shared/launcher/app_platform.cpp`
+   (the 19 pure slots, paths, Win10 policy; pointer and keyboard slots come with input in 1c).
+5. ☑ **Boot and frame loop**: `MinecraftClient` ctor `0x10006E2DC`, `AppContext`, `App::init`
    `0x1000555BC`, `setRenderingSize` / `setUISizeAndScale`, then per frame: bind the default
    framebuffer → run main-thread jobs → `update()` → present. Window via AppKit +
-   `CAMetalLayer` (ANGLE surface).
-6. ☐ **Seams**: replace HTTP (#1) with our own client or a "no network" stub, store (#2) with
+   `CAMetalLayer` (ANGLE surface). As built (1b): `shared/launcher/engine.cpp`,
+   `macos/launcher/main.mm` (60 Hz timer; `--frames N`, `--screenshot`).
+6. ◐ **Seams**: replace HTTP (#1) with our own client or a "no network" stub, store (#2) with
    "no products", Xbox services (#3) and TCUI (#4) with "signed out". Hook on Stage 1's mapped
-   image by patching the call sites or the target entry points.
+   image by patching the call sites or the target entry points. As built (1b): **hook table**
+   (`mcfm_image.py dylib --hooks` patches each hooked entry to jump through a table at the end of
+   `__DATA`; `mcfm-launch` fills it from a dyld add-image callback before any initializer).
+   Hooked: #1 the telemetry upload (the engine's only HTTP use) → no-op; #2 `createStores` → one
+   null store (licensed, not a trial); #3 Xbox config singleton → zeroed object. Open: #4 TCUI,
+   the Xbox Live first-launch prompt.
 7. ☐ **Input**: reuse `shared/` keyboard/mouse (it writes the engine's `Keyboard`/`Mouse`
    queues directly) and pointer capture.
 8. ☐ **Audio**: FMOD's output uses a RemoteIO AudioUnit and `AudioSession*`: our AudioToolbox
    wrappers implement the subset it calls (RemoteIO → CoreAudio default output; session calls
    succeed) — the same wrapper API is reimplemented on AAudio for Android.
 9. ◐ **Runtime census**: play a session (menus, world creation, gameplay, chat, settings) and
-   collect every `unimplemented` log line → the real shim list for Stages 2–3.
+   collect every `mcfm: stub` line (`build/launcher/census.txt`) → the real shim list for
+   Stages 2–3. Booting to the title screen calls 5 stubs (autorelease pools, AudioToolbox).
 
-Acceptance: `make launcher IPA=…` (CLI, no UI) builds `dist/MinecraftPE.app` (no Catalyst, no UIKit) that
+Acceptance: `make launcher GAME=…` (CLI, no UI) builds `dist/MinecraftPE.app` (no Catalyst, no UIKit) that
 reaches the title screen and plays a world with keyboard, mouse, sound and resizing; `make
 test` covers the image prep, the stub tables and every AppPlatform slot.
 
@@ -173,7 +184,14 @@ Acceptance: an APK that installs on Android 6+ arm64, imports a user-supplied IP
   renamed `__xbjc_*`, so the system libobjc never reads the game's ObjC metadata (it crashed in
   `readClass` on the stub superclasses). `__PAGEZERO` becomes a 16 KB no-access `__MCFM_PAD`
   segment instead of being removed, because fixup opcodes address segments by index.
-- 2026-10-10: ANGLE from prebuilt binaries, fetched into a git-ignored folder.
+- 2026-10-10: ANGLE from prebuilt binaries, fetched into a git-ignored folder. Pinned to the
+  official Electron v41.0.3 macOS arm64 release (later releases link ANGLE into the framework
+  and no longer ship `libEGL`/`libGLESv2`); install names rewritten to `@rpath`, re-signed ad hoc.
+- 2026-10-10 (Stage 1b): engine code is patched only at conversion time (Apple Silicon kills a
+  process that executes modified signed pages); runtime writes go only to the hook table.
+- 2026-10-10 (Stage 1b): launcher storage is `~/Library/Application Support/MinecraftPE-mcfm/`,
+  separate from the Catalyst build's worlds in `~/Documents/games/com.mojang` (sharing them is a
+  later decision).
 - 2026-10-10: CLI only; the IPA goes through `make` targets, no launcher UI for now.
 - 2026-10-10: Microsoft account, Xbox Live, TCUI and telemetry are dropped (see Patch policy).
 - 2026-10-10: the Mac Catalyst build stays as a deprecated build mode (`make catalyst`,

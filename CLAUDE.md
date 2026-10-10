@@ -10,8 +10,11 @@ Reverse-engineering notes: docs/research/. Local game files and the IDA database
   from `GAME` (aliases `app`/`check`/`run`); `catalyst-check` launches the game for 15 s
   (`make catalyst` refuses while it runs — don't kill the user's game). Its replacement, the
   Mach-O launcher, is planned in docs/LAUNCHER.md.
-- `make launcher` / `launcher-check` — Mach-O launcher (docs/LAUNCHER.md): converted image +
-  stubs in dist/launcher; stub census in build/launcher/census.txt.
+- `make angle` (once, downloads ANGLE) / `make launcher` / `launcher-run` / `launcher-check` —
+  Mach-O launcher (docs/LAUNCHER.md): converted image + stubs + ANGLE in dist/launcher;
+  `launcher-check` renders 120 frames; stub census in build/launcher/census.txt.
+- Engine code in the launcher image is patched only at conversion (`mcfm_image.py dylib --hooks`,
+  hooks in `shared/launcher/seams.cpp`); never write to its `__TEXT` at runtime.
 - `make android` — NDK r10c under Rosetta; `make android-apk APK=…`
 - `make ios` needs Xcode; without it `make ios-syntax` (part of `make test`) compiles iOS code.
 

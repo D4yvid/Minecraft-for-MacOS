@@ -156,3 +156,34 @@ main-thread jobs → `update()` → present".
   backend must provide.
 - ❓ Which of the 3,972 static initializers touch the glue (the survey shows only
   `objc_autoreleasePoolPush/Pop` in about 19 of them).
+
+## Stage 1b findings ✅ (launcher boot, `make launcher-run`)
+
+- **Boot works with the base `AppPlatform` + our vtable.** During boot the engine calls slots
+  36, 35, 37 (in the `MinecraftClient` ctor), then 29, 53, 54, 75, 20, 2, 3, 69, 92, 100, 80, 81,
+  34, 4, 33, 5 (`App::init`). Only the 19 pure slots need implementing to get this far
+  (`shared/launcher/app_platform.cpp`). ✅ (spike with a logging thunk per slot)
+- `getSystemRegion` (20) must be `language_REGION` (`en_US`): `MinecraftClient::init` looks it up
+  in the loaded language list and dereferences the result. ✅ (crash with `US`)
+- The base `getAssetFileFullPath` (53) returns the relative path unchanged; the iOS override
+  prefixes `<bundle>/data/`, and the base `readAssetFile` (54) then `fopen`s it. ✅ (IDA)
+- The graphics getters (21–24) are engine functions around `glGetString`; our vtable points at
+  them directly (`0x10003A850`, `0x10003A8AC`, `0x10003A680`, `0x10003A908`). ✅ (IDA)
+- **Seams hit while booting**, each now hooked (`shared/launcher/seams.cpp`):
+  - #3 Xbox services config singleton `0x100798B34` (reads `xboxservices.config` through
+    NSBundle) → a zeroed object; `MinecraftClient::init` only stores strings into it.
+  - #2 `StoreFactory::createStores` (iOS) `0x100711774` → one null store; the `Store`
+    interface has 16 slots (order from Android `_ZTV12AndroidStore`), `isTrial` false,
+    `isGameLicensed` true; the store calls `StoreListener` slot 2 (`onStoreInitialized`).
+  - #1 the engine's only use of the iOS HTTP glue is the telemetry event-batch upload
+    `0x1003B42A8` (REST thread) → no-op. The glue's entry points `0x10070D78C/790` are 4-byte
+    thunks (too short to hook).
+- **Hooks are applied at conversion**: Apple Silicon kills a process executing a modified
+  signed page, so `mcfm_image.py dylib --hooks` rewrites each hooked entry to `adrp x16 / ldr
+  x16 / br x16` through a table at the 16-byte aligned end of `__DATA`'s last section (the game
+  has 0x2450 bytes there, room for 1,162 hooks); the launcher fills the table from a
+  `_dyld_register_func_for_add_image` callback, which dyld runs before the image's initializers.
+- With ANGLE (Electron v41.0.3, Metal backend, EGL 1.5) the engine compiles its shaders and
+  renders the Win10 Edition title screen with the Xbox Live first-launch prompt on top. Booting
+  calls only 5 stubs: `objc_autoreleasePoolPush/Pop` and FMOD's `AudioSessionGetProperty`,
+  `AudioComponentFindNext`, `AudioOutputUnitStop` (FMOD then runs with no output).

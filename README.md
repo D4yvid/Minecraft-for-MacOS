@@ -36,8 +36,9 @@ The Mac Catalyst build is **deprecated**: it works and is how the game runs toda
 standalone launcher will replace it ([docs/LAUNCHER.md](docs/LAUNCHER.md)). `make app`,
 `make check` and `make run` are aliases for now.
 
-**Launcher (in progress):** `make launcher` then `make launcher-check` load the game without
-Catalyst or any Apple framework (everything is stubbed). Nothing is playable yet; see
+**Launcher (in progress):** `make angle` (downloads ANGLE once, ~130 MB), `make launcher`,
+then `make launcher-run` boots the game to its title screen in a window, without Catalyst or
+any Apple framework in the game (everything is stubbed). No input or sound yet; see
 [docs/LAUNCHER.md](docs/LAUNCHER.md).
 
 Controls: WASD move · mouse look · left click break/attack · right click place/use ·

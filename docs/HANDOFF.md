@@ -75,8 +75,10 @@ make test        # all host tests, no game files (~1 min)
 make catalyst        # dist/minecraftpe.app from GAME; refuses while the game runs (alias: app)
 make catalyst-check  # bundle/IPA/UUID tests + 15 s launch — CLOSES a running game (alias: check)
 make catalyst-run    # (alias: run)
-make launcher        # Mach-O launcher: dist/launcher (converted image + stubs + mcfm-launch)
-make launcher-check  # loads it; stub census in build/launcher/census.txt
+make angle           # once: ANGLE from the pinned Electron release (~130 MB download)
+make launcher        # Mach-O launcher: dist/launcher (converted image + stubs + ANGLE + mcfm-launch)
+make launcher-run    # opens the game in a window (no input yet)
+make launcher-check  # renders 120 frames; stub census in build/launcher/census.txt
 # The Catalyst build is a deprecated build mode until the launcher replaces it (LAUNCHER.md).
 make android     # librunet.so + tests      make android-apk APK=…   make ios-ipa
 ```
@@ -154,7 +156,9 @@ The owner's main direction since 2026-10-10. See [LAUNCHER.md](LAUNCHER.md) (sta
 acceptance, decisions). The Catalyst build is now a deprecated build mode (`make catalyst`).
 Stage 0 found the engine uses no Apple framework at all. Stage 1a is done: the game image
 loads in a plain macOS process with every framework and libobjc stubbed (`make launcher`,
-`make launcher-check`). Stage 1b (AppPlatform, boot, ANGLE window, input) is next.
+`make launcher-check`). Stage 1b is done: our AppPlatform, the engine boot and an ANGLE/Metal
+window render the Win10 Edition title screen (`make launcher-run`). Stage 1c (input, Xbox Live
+prompt/TCUI, audio) is next; findings in research/macho-launcher.md "Stage 1b findings".
 
 ### 6.1 Generic AppPlatform
 Goal: one shared, platform-neutral `AppPlatform` behaviour definition instead of ad-hoc slot
