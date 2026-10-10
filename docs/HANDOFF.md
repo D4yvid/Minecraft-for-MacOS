@@ -10,6 +10,10 @@ Turn Minecraft: Pocket Edition **0.15.10** (one game build, three platforms) int
 first-class desktop game on Apple Silicon Macs, and share the work with iOS and Android,
 by modding the shipped engine — never redistributing it. Next goals set by the owner:
 
+0. **Mach-O launcher** — load the iOS binary ourselves, never run its iOS glue, and drive the
+   engine from our own launcher on macOS, then Android (SDK 28) and other arm64 hosts. Plan and
+   status: [LAUNCHER.md](LAUNCHER.md); Stage 0 survey done
+   ([research/macho-launcher.md](research/macho-launcher.md)). Goals 1–2 below become parts of it.
 1. **Generic AppPlatform** — our own platform layer instead of patching the iOS/Android ones
    slot by slot ([§6.1](#61-generic-appplatform)).
 2. **Our own renderer** — replace or wrap the OpenGL ES backend ([§6.2](#62-renderer)).
@@ -141,6 +145,11 @@ make android     # librunet.so + tests      make android-apk APK=…   make ios-
 - Logs: `mcfm:` prefix (NSLog / `adb logcat -s mcfm`).
 
 ## 6. Roadmap
+
+### 6.0 Mach-O launcher
+The owner's main direction since 2026-10-10. See [LAUNCHER.md](LAUNCHER.md) (stages, tasks,
+acceptance, open decisions). Stage 0 found the engine uses no Apple framework at all; Stage 1
+(macOS launcher on dyld with stub frameworks) is next.
 
 ### 6.1 Generic AppPlatform
 Goal: one shared, platform-neutral `AppPlatform` behaviour definition instead of ad-hoc slot

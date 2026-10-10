@@ -14,6 +14,8 @@ python3 -m venv .venv && .venv/bin/pip install "$IDA"/idalib/python/idapro-*.whl
 - `recon.py <db>` — decompiles the touch/controller entry points and string users
 - `platcalls2.py <db>` — every AppPlatform virtual call by vtable offset
 - `slots.py <db>`, `vt.py <db> <fn>` — read AppPlatform vtable slots
+- `survey.py <db> <out.json>` — Mach-O launcher survey: imports and their users (iOS glue vs
+  rest), engine → Apple seams, static initializers ([docs/research/macho-launcher.md](../../docs/research/macho-launcher.md))
 - `funcs_range.py <db> <lo> <hi>` — list functions in an address range
 
 Run them with `python -I`. Results feed `shared/apple/addresses_0_15_10.h`.
