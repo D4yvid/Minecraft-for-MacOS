@@ -89,7 +89,7 @@ LAUNCHER_CXXFLAGS := -arch arm64 -mmacosx-version-min=11.0 -std=c++17 -fobjc-arc
 
 $(LAUNCHER_BIN): $(LAUNCHER_SRCS) $(wildcard shared/launcher/*.h macos/launcher/*.h) shared/apple/hook_table.h shared/apple/macho_uuid.h shared/apple/addresses_0_15_10.h
 	@mkdir -p $(dir $@)
-	clang++ $(LAUNCHER_CXXFLAGS) $(LAUNCHER_SRCS) -framework AppKit -framework QuartzCore \
+	clang++ $(LAUNCHER_CXXFLAGS) $(LAUNCHER_SRCS) -framework AppKit -framework QuartzCore -framework GameController \
 	  -Wl,-rpath,@executable_path -o $@
 
 LAUNCHER_OUT ?= $(CURDIR)/dist/launcher

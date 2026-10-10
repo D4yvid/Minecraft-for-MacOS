@@ -11,6 +11,9 @@ class LookConverter {
  public:
   explicit LookConverter(double scale) : scale_(scale) {}
   void set_scale(double scale) { scale_ = scale; }
+  // Raw device deltas (GameController GCMouse: unaccelerated counts, y up).
+  void feed_raw(double dx_counts, double dy_up_counts, int *dx, int *dy) { feed(dx_counts, -dy_up_counts, dx, dy); }
+  // AppKit deltas (points, y down, with the system's pointer acceleration).
   void feed(double dx_pt, double dy_pt, int *dx, int *dy) {
     rx_ += dx_pt * scale_;
     ry_ += dy_pt * scale_;
@@ -24,6 +27,17 @@ class LookConverter {
   // Whole part, tolerating float drift (ten steps of 0.6 must make 6, not 5.999...).
   static int whole(double v) { return static_cast<int>(std::trunc(v + std::copysign(1e-9, v))); }
   double scale_, rx_ = 0, ry_ = 0;
+};
+
+// Which deltas drive the camera: raw GameController deltas once a raw mouse has reported
+// (no pointer acceleration), AppKit's until then (e.g. no GameController device yet).
+class LookSource {
+ public:
+  void raw_seen() { raw_ = true; }
+  bool use_appkit_delta() const { return !raw_; }
+
+ private:
+  bool raw_ = false;
 };
 
 // Hotbar steps. A mouse wheel click is one step, as on Windows. Trackpad (precise) scrolling

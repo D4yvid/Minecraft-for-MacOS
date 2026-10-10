@@ -12,6 +12,15 @@ int main() {
   EXPECT(total_x == 6 && total_y == -6);
   look.feed(10.0, 0.0, &dx, &dy);
   EXPECT(dx == 20 && dy == 0);
+  // Raw (GameController) deltas: device counts, y up -> engine y down, no point scaling.
+  LookConverter raw(1.0);
+  raw.feed_raw(3.0, 2.0, &dx, &dy);
+  EXPECT(dx == 3 && dy == -2);
+  // Once a raw mouse has reported, AppKit's accelerated deltas are not used for look.
+  LookSource src;
+  EXPECT(src.use_appkit_delta());
+  src.raw_seen();
+  EXPECT(!src.use_appkit_delta());
   // Mouse wheel: one hotbar step per click, however fast, sign gives the direction.
   HotbarScroll s;
   int steps = 0;

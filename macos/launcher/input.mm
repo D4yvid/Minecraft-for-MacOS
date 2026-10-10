@@ -4,6 +4,7 @@
 #include <mcfm/input/keymap.h>
 #include <mcfm/keyboard_mouse.h>
 
+#import <GameController/GameController.h>
 #import <QuartzCore/QuartzCore.h>
 #include <ApplicationServices/ApplicationServices.h>
 
@@ -25,7 +26,10 @@ uintptr_t g_text_queue = 0;
 bool g_text_mode = false, g_capture_wanted = false, g_captured = false;
 mcfm::HeldSet g_keys, g_buttons;
 HotbarScroll g_scroll;
-LookConverter g_look(1.0);  // scale set in install()
+LookConverter g_look(1.0);      // AppKit deltas; scale set in install()
+LookConverter g_raw_look(1.0);  // GCMouse deltas (raw, unaccelerated)
+LookSource g_look_source;
+NSHashTable *g_mice = nil;      // GCMouse devices with a handler installed
 int g_x = 0, g_y = 0;
 
 void apply_capture() {
@@ -73,6 +77,20 @@ void type_text(NSEvent *e) {  // text mode: characters go to the engine's text q
   }
 }
 
+// Raw look motion: GameController reports the mouse's own counts, without the system's
+// pointer acceleration (fast flicks must not turn further than slow ones of the same length).
+void attach_mouse(GCMouse *mouse) {
+  if (!mouse || [g_mice containsObject:mouse]) return;
+  [g_mice addObject:mouse];
+  mouse.mouseInput.mouseMovedHandler = ^(GCMouseInput *, float dx, float dy) {
+    g_look_source.raw_seen();
+    if (!g_captured) return;
+    int ox = 0, oy = 0;
+    g_raw_look.feed_raw(dx, dy, &ox, &oy);
+    if (ox || oy) kbm::mouse_move_rel(ox, oy);
+  };
+}
+
 }  // namespace
 
 void install(NSView *view, void **vtable, const InputAddresses &a) {
@@ -82,6 +100,12 @@ void install(NSView *view, void **vtable, const InputAddresses &a) {
   const char *scale = getenv("MCFM_LOOK_SCALE");
   double factor = scale ? atof(scale) : 1.0;
   g_look.set_scale(view.window.backingScaleFactor * (factor > 0 ? factor : 1.0));
+  g_raw_look.set_scale(factor > 0 ? factor : 1.0);
+  g_mice = [NSHashTable weakObjectsHashTable];
+  for (GCMouse *m in GCMouse.mice) attach_mouse(m);
+  [NSNotificationCenter.defaultCenter addObserverForName:GCMouseDidConnectNotification object:nil
+                                                   queue:NSOperationQueue.mainQueue
+                                              usingBlock:^(NSNotification *n) { attach_mouse(n.object); }];
   g_platform = new LauncherPlatform(vtable, a);
   kbm::PointerCallbacks pc = {[] { g_capture_wanted = true; apply_capture(); },
                               [] { g_capture_wanted = false; apply_capture(); }};
@@ -118,9 +142,13 @@ void flags_changed(NSEvent *e) {
 void mouse_event(NSEvent *e) {
   if (g_captured && (e.type == NSEventTypeMouseMoved || e.type == NSEventTypeLeftMouseDragged ||
                      e.type == NSEventTypeRightMouseDragged || e.type == NSEventTypeOtherMouseDragged)) {
-    int dx = 0, dy = 0;
-    g_look.feed(e.deltaX, e.deltaY, &dx, &dy);
-    if (dx || dy) kbm::mouse_move_rel(dx, dy);
+    // Captured: look motion. Raw from GCMouse once it reports (no pointer acceleration);
+    // AppKit's accelerated deltas only until then.
+    if (g_look_source.use_appkit_delta()) {
+      int dx = 0, dy = 0;
+      g_look.feed(e.deltaX, e.deltaY, &dx, &dy);
+      if (dx || dy) kbm::mouse_move_rel(dx, dy);
+    }
   } else {
     update_position(e);
     kbm::mouse_move_abs(g_x, g_y);
