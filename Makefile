@@ -116,6 +116,16 @@ launcher-check:
 	@grep -qxF "libobjc:_objc_autoreleasePoolPush" $(BUILD)/launcher/census.txt || { echo "launcher-check: initializers did not reach the stubs"; exit 1; }
 	@echo "launcher-check: passed ($$(wc -l < $(BUILD)/launcher/census.txt | tr -d ' ') stubs called, see $(BUILD)/launcher/census.txt)"
 
+# Our loader vs dyld on the game image built by make app: every fixup location must match.
+LOADER_CHECK := $(BUILD)/launcher/loader-check
+$(LOADER_CHECK): macos/tools/loader_check.cpp macos/launcher/loader_macos.cpp macos/launcher/loader_macos.h $(LOADER_SRCS) $(wildcard shared/loader/*.h)
+	@mkdir -p $(dir $@)
+	clang++ -arch arm64 -std=c++17 -Wall -O1 -Ishared/loader -Ishared/apple -Imacos/launcher macos/tools/loader_check.cpp \
+	  macos/launcher/loader_macos.cpp $(LOADER_SRCS) -Wl,-rpath,"$(LAUNCHER_OUT)" -o $@
+.PHONY: loader-check
+loader-check: $(LOADER_CHECK)
+	"$(LOADER_CHECK)" "$(LAUNCHER_OUT)/libminecraftpe.dylib"
+
 .PHONY: launcher-run
 launcher-run:
 	$(LAUNCHER_NOT_RUNNING)
