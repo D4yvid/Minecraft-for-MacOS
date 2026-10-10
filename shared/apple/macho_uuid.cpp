@@ -21,18 +21,27 @@ uint32_t u32(const uint8_t *p) {
 
 }  // namespace
 
-bool is_expected_game_image(const void *header) {
+bool is_expected_game_image(const void *header, size_t size) {
   const uint8_t *h = static_cast<const uint8_t *>(header);
-  if (!h || u32(h) != kMagic64) return false;
-  uint32_t ncmds = u32(h + 16), sizeofcmds = u32(h + 20);
-  uint32_t off = kHeaderSize, end = kHeaderSize + sizeofcmds;
+  if (!h || size < kHeaderSize || u32(h) != kMagic64) return false;
+  uint64_t end = kHeaderSize + static_cast<uint64_t>(u32(h + 20));  // header + sizeofcmds
+  if (end > size) end = size;
+  uint32_t ncmds = u32(h + 16);
+  uint64_t off = kHeaderSize;
   for (uint32_t i = 0; i < ncmds && off + 8 <= end; i++) {
     uint32_t cmd = u32(h + off), cmdsize = u32(h + off + 4);
-    if (cmdsize < 8) return false;
-    if (cmd == kLcUuid && cmdsize >= 24) return std::memcmp(h + off + 8, kGameUuid, 16) == 0;
+    if (cmdsize < 8 || off + cmdsize > end) return false;
+    if (cmd == kLcUuid) return cmdsize >= 24 && std::memcmp(h + off + 8, kGameUuid, 16) == 0;
     off += cmdsize;
   }
   return false;
+}
+
+// A loaded image: its header and load commands are mapped in full.
+bool is_expected_game_image(const void *header) {
+  const uint8_t *h = static_cast<const uint8_t *>(header);
+  if (!h || u32(h) != kMagic64) return false;
+  return is_expected_game_image(header, kHeaderSize + static_cast<size_t>(u32(h + 20)));
 }
 
 }  // namespace mcfm

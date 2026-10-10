@@ -40,7 +40,8 @@ bool read_header(const std::string &path, std::vector<char> *out) {
   if (!f) return false;
   out->assign(64 * 1024, 0);
   f.read(out->data(), out->size());
-  return f.gcount() >= 32;
+  out->resize(static_cast<size_t>(f.gcount()));
+  return out->size() >= 32;
 }
 
 uintptr_t g_slide = 0;
@@ -232,7 +233,7 @@ int main(int argc, char **argv) {
   if (path.empty()) path = executable_dir() + "/libminecraftpe.dylib";
   std::vector<char> header;
   if (!read_header(path, &header)) { std::fprintf(stderr, "mcfm: cannot load %s: unreadable\n", path.c_str()); return 2; }
-  if (!mcfm::is_expected_game_image(header.data())) {
+  if (!mcfm::is_expected_game_image(header.data(), header.size())) {
     std::fprintf(stderr, "mcfm: %s is not Minecraft PE 0.15.10 (LC_UUID)\n", path.c_str());
     return 3;
   }

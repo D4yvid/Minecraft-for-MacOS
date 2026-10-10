@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 
 namespace mcfm {
 
@@ -6,5 +7,8 @@ namespace mcfm {
 // minecraftpe2 0.15.10 build this mod was reverse-engineered from. Reads only the
 // header and load commands, so it is safe on any loaded image.
 bool is_expected_game_image(const void *header);
+
+// Same check on a buffer of `size` bytes (a file read into memory): never reads past it.
+bool is_expected_game_image(const void *header, size_t size);
 
 }  // namespace mcfm

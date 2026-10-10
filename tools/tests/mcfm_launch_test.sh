@@ -19,4 +19,8 @@ grep -q "is not Minecraft PE 0.15.10" <<<"$OUT" || { echo "FAIL: no UUID message
 [ -e "$T/census.txt" ] && { echo "FAIL: fixture initializers ran before the UUID check"; fails=$((fails+1)); }
 OUT="$("$BIN" "$T/missing.dylib" 2>&1)"; rc=$?
 { [ $rc = 2 ] && grep -q "cannot load" <<<"$OUT"; } || { echo "FAIL: missing file: exit $rc: $OUT"; fails=$((fails+1)); }
+# A crafted header claiming huge load commands: refused (exit 3), not a crash.
+python3 -c "import struct,sys; open(sys.argv[1],'wb').write(struct.pack('<IiiIIIII',0xFEEDFACF,0x0100000C,0,6,1000,0x10000000,0,0)+struct.pack('<II',0x19,0x01000000)+bytes(100))" "$T/crafted.dylib"
+OUT="$("$BIN" "$T/crafted.dylib" 2>&1)"; rc=$?
+[ $rc = 3 ] || { echo "FAIL: crafted header: exit $rc, want 3: $OUT"; fails=$((fails+1)); }
 [ $fails = 0 ] && echo "mcfm_launch_test: passed" || { echo "$fails failure(s)"; exit 1; }

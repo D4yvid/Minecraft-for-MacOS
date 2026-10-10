@@ -11,7 +11,7 @@ OUT_APP ?= $(CURDIR)/dist/minecraftpe.app
 SHARED_INC   := -Ishared/include -Ishared/apple
 SHARED_CORE  := shared/src/platform.cpp shared/src/win10_ui.cpp shared/src/keyboard_mouse.cpp
 SHARED_HEADERS := $(wildcard shared/include/mcfm/*.h shared/include/mcfm/*/*.h shared/apple/*.h)
-SHARED_TESTS := keymap_test input_state_test features_test launcher_app_platform_test launcher_engine_test hook_table_test
+SHARED_TESTS := keymap_test input_state_test features_test launcher_app_platform_test launcher_engine_test hook_table_test macho_uuid_bounds_test
 MACOS_TESTS  := titlebar_test input_policy_test resize_math_test
 
 # ---------------------------------------------------------------- macOS (Mac Catalyst) — DEPRECATED
@@ -188,6 +188,10 @@ $(BUILD)/test/screenshot_test: macos/tests/screenshot_test.cpp macos/launcher/sc
 $(BUILD)/test/hook_table_test: shared/tests/hook_table_test.cpp shared/apple/hook_table.cpp shared/apple/hook_table.h
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -Wextra -O1 -Ishared/apple shared/tests/hook_table_test.cpp shared/apple/hook_table.cpp -o $@
+
+$(BUILD)/test/macho_uuid_bounds_test: shared/tests/macho_uuid_bounds_test.cpp shared/apple/macho_uuid.cpp shared/apple/macho_uuid.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -O1 -g -fsanitize=address -Ishared/apple shared/tests/macho_uuid_bounds_test.cpp shared/apple/macho_uuid.cpp -o $@
 
 $(BUILD)/test/titlebar_test: macos/tests/titlebar_test.cpp macos/src/titlebar_zone.h
 	@mkdir -p $(dir $@)
