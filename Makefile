@@ -175,7 +175,13 @@ ANDROID_LDFLAGS := -Wl,-z,max-page-size=16384
 LLVM_RUNTIMES ?= $(CURDIR)/$(BUILD)/llvm-runtimes
 API ?= 37
 
-.PHONY: android-sdk llvm-runtimes android-emulator android-emulator-stop
+.PHONY: android-sdk llvm-runtimes android-emulator android-emulator-stop darwin-abi
+# Regenerates the Darwin ABI tables from the macOS SDK (committed; darwin_abi_test checks them).
+darwin-abi:
+	@mkdir -p $(BUILD)/tools
+	clang -arch arm64 -Wall -Werror tools/android/darwin_abi_gen.c -o $(BUILD)/tools/darwin_abi_gen
+	$(BUILD)/tools/darwin_abi_gen header > android/launcher/darwin/darwin_abi.h
+	$(BUILD)/tools/darwin_abi_gen ctype > android/launcher/darwin/darwin_ctype.inc
 android-sdk:
 	bash tools/android/fetch_sdk.sh "$(ANDROID_SDK)"
 llvm-runtimes:
@@ -184,6 +190,21 @@ android-emulator:
 	ANDROID_SDK="$(ANDROID_SDK)" bash tools/android/emulator.sh start $(API)
 android-emulator-stop:
 	ANDROID_SDK="$(ANDROID_SDK)" bash tools/android/emulator.sh stop
+
+ALAUNCH_OUT := $(BUILD)/android-launcher
+DARWIN_HDRS := $(wildcard android/launcher/darwin/*.h android/launcher/darwin/*.inc)
+DARWIN_CXXFLAGS := -std=c++11 -Wall -Wextra -O1 -g -fsigned-char -Iandroid/launcher/darwin
+DARWIN_PTHREAD_SRCS := android/launcher/darwin/pthread.cpp android/launcher/darwin/errno.cpp
+$(ALAUNCH_OUT)/tests/pthread_test: android/launcher/tests/pthread_test.cpp $(DARWIN_PTHREAD_SRCS) $(DARWIN_HDRS)
+	@test -x "$(ACXX)" || { echo "NDK r27d not found at $(NDK64) (make android-sdk)"; exit 1; }
+	@mkdir -p $(dir $@)
+	$(ACXX) $(DARWIN_CXXFLAGS) $(ANDROID_LDFLAGS) -static-libstdc++ $< $(DARWIN_PTHREAD_SRCS) -o $@
+
+ANDROID_TESTS := pthread_test
+.PHONY: android-test
+# Needs a running emulator or device (make android-emulator).
+android-test: $(addprefix $(ALAUNCH_OUT)/tests/,$(ANDROID_TESTS))
+	@for t in $(ANDROID_TESTS); do bash tools/android/adb_run.sh $(ALAUNCH_OUT)/tests/$$t || exit 1; done
 
 # ---------------------------------------------------------------- local game files
 # make game-files IOS=<minecraftpe2.ipa|.app> [APK_IN=<0.15.10 .apk>] [IDA=1]
@@ -322,6 +343,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/launcher_provider_test.sh
 	bash tools/tests/fetch_angle_test.sh
 	bash tools/tests/fetch_sdk_test.sh
+	bash tools/tests/darwin_abi_test.sh
 	$(MAKE) --no-print-directory $(BUILD)/test/screenshot_test && $(BUILD)/test/screenshot_test "$$(mktemp -d)/shot.ppm"
 	bash tools/tests/no_game_files_test.sh
 	bash tools/tests/setup_game_files_test.sh
