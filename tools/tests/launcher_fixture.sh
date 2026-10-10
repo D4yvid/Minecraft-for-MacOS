@@ -27,6 +27,8 @@ int (*const fixture_callbacks[])(void) = {fakekit_callback};
 @end
 // Long enough (>= 12 bytes at -O0) to carry a hook; called by the initializer below.
 __attribute__((noinline)) int fixture_answer(int x) { return x * 3 + 41; }
+// Too short to carry a hook (just `ret`): the converter must refuse to hook it.
+__attribute__((noinline, used)) void fixture_tiny(void) {}
 __attribute__((constructor)) static void fixture_init(void) {
   fakekit_hello();
   volatile char first = kFakeKitValue[0];  // a real read, so the data import exists

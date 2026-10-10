@@ -128,6 +128,8 @@ MH_EXECUTE, MH_DYLIB, MH_PIE = 2, 6, 0x200000
 LC_SEGMENT_64, LC_LOAD_DYLIB, LC_ID_DYLIB, LC_LOAD_DYLINKER = 0x19, 0xC, 0xD, 0xE
 LC_LOAD_WEAK_DYLIB, LC_MAIN, LC_BUILD_VERSION = 0x80000018, 0x80000028, 0x32
 LC_ENCRYPTION_INFO, LC_ENCRYPTION_INFO_64 = 0x21, 0x2C
+LC_REEXPORT_DYLIB, LC_LAZY_LOAD_DYLIB, LC_LOAD_UPWARD_DYLIB = 0x8000001F, 0x20, 0x80000023
+DYLIB_LOADS = (LC_LOAD_DYLIB, LC_LOAD_WEAK_DYLIB, LC_REEXPORT_DYLIB, LC_LAZY_LOAD_DYLIB, LC_LOAD_UPWARD_DYLIB)
 LC_VERSION_MIN = (0x24, 0x25, 0x2F, 0x30)  # macOS, iOS, tvOS, watchOS
 PLATFORM_MACOS, MACOS_11 = 1, 0x000B0000
 PAD_SIZE = 0x4000
@@ -163,6 +165,27 @@ def segment_info(cmds, name):
     return None
 
 
+def is_return_or_branch(word):
+    """RET Xn, BR Xn or B: the function ends (or leaves) at this instruction."""
+    return (word & 0xFFFFFC1F) in (0xD65F0000, 0xD61F0000) or (word & 0xFC000000) == 0x14000000
+
+
+def check_hooks(data, hooks, tvm, tsize, tfileoff):
+    """Every hook needs 12 bytes of its own: aligned, inside __TEXT, not overlapping another hook,
+    and not a function that returns or branches away within its first two instructions."""
+    by_addr = sorted(hooks, key=lambda h: h[1])
+    for (name, addr), nxt in zip(by_addr, by_addr[1:] + [None]):
+        if addr % 4:
+            fail("hook %s at 0x%x is not 4-byte aligned" % (name, addr))
+        if not (tvm <= addr and addr + 12 <= tvm + tsize):
+            fail("hook %s at 0x%x is not in __TEXT" % (name, addr))
+        if nxt and nxt[1] < addr + 12:
+            fail("hooks %s and %s overlap (0x%x, 0x%x)" % (name, nxt[0], addr, nxt[1]))
+        first, second = struct.unpack_from("<II", data, addr - tvm + tfileoff)
+        if is_return_or_branch(first) or is_return_or_branch(second):
+            fail("hook %s at 0x%x: function is shorter than 12 bytes" % (name, addr))
+
+
 def patch_hooks(data, cmds, hooks):
     """Replace each hooked function's first 12 bytes with adrp x16 / ldr x16 / br x16 through
     the hook table (end of __DATA; same rule as shared/apple/hook_table.cpp)."""
@@ -174,9 +197,8 @@ def patch_hooks(data, cmds, hooks):
     if len(hooks) > (dvm + dsize - table) // 8:
         fail("hook table full: %d hooks, room for %d" % (len(hooks), (dvm + dsize - table) // 8))
     tvm, tsize, tfileoff, _ = text
+    check_hooks(data, hooks, tvm, tsize, tfileoff)
     for i, (name, addr) in enumerate(hooks):
-        if not (tvm <= addr and addr + 12 <= tvm + tsize):
-            fail("hook %s at 0x%x is not in __TEXT" % (name, addr))
         slot = table + 8 * i
         pages = (slot >> 12) - (addr >> 12)
         adrp = 0x90000000 | ((pages & 3) << 29) | (((pages >> 2) & 0x7FFFF) << 5) | 16
@@ -208,23 +230,39 @@ def cmd_dylib(src, dst, hooks=()):
     if ftype != MH_EXECUTE:
         fail("not an executable (already converted?): " + src)
 
+    end = 32 + sizeofcmds
+    if end > len(data):
+        fail("malformed load commands (sizeofcmds past the end of the file): " + src)
     cmds, off = [], 32
     for _ in range(ncmds):
+        if off + 8 > end:
+            fail("malformed load commands (more commands than sizeofcmds holds): " + src)
         cmd, size = struct.unpack_from("<II", data, off)
+        if size < 8 or off + size > end:
+            fail("malformed load commands (bad cmdsize %d at offset %d): %s" % (size, off, src))
+        if cmd == LC_SEGMENT_64 and (size < 72 or 72 + 80 * struct.unpack_from("<I", data, off + 64)[0] > size):
+            fail("malformed load commands (segment sections past cmdsize): " + src)
         cmds.append(bytes(data[off:off + size]))
         off += size
-    text_vmaddr = next(struct.unpack_from("<Q", c, 24)[0] for c in cmds
-                       if struct.unpack_from("<I", c)[0] == LC_SEGMENT_64 and segment_name(c) == "__TEXT")
+    text = segment_info(cmds, "__TEXT")
+    if not text:
+        fail("no __TEXT segment: " + src)
+    text_vmaddr = text[0]
 
     first_data, out = len(data), [dylib_command(LC_ID_DYLIB, IMAGE_ID)]
+    tagged = False
     for c in cmds:
         cmd = struct.unpack_from("<I", c)[0]
+        if cmd in (LC_ENCRYPTION_INFO, LC_ENCRYPTION_INFO_64) and len(c) >= 20 and struct.unpack_from("<I", c, 16)[0]:
+            fail("encrypted (cryptid %d): decrypt the game first: %s" % (struct.unpack_from("<I", c, 16)[0], src))
         if cmd in (LC_MAIN, LC_LOAD_DYLINKER, LC_ENCRYPTION_INFO, LC_ENCRYPTION_INFO_64):
             continue
         if cmd in LC_VERSION_MIN or cmd == LC_BUILD_VERSION:
-            out.append(struct.pack("<IIIIII", LC_BUILD_VERSION, 24, PLATFORM_MACOS, MACOS_11, MACOS_11, 0))
+            if not tagged:  # one macOS tag, however many platform commands the input has
+                out.append(struct.pack("<IIIIII", LC_BUILD_VERSION, 24, PLATFORM_MACOS, MACOS_11, MACOS_11, 0))
+                tagged = True
             continue
-        if cmd in (LC_LOAD_DYLIB, LC_LOAD_WEAK_DYLIB):
+        if cmd in DYLIB_LOADS:
             name_off = struct.unpack_from("<I", c, 8)[0]
             name = c[name_off:].split(b"\0")[0].decode()
             lib = short_name(name)
@@ -284,4 +322,7 @@ def main(argv):
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    try:
+        main(sys.argv)
+    except struct.error as e:  # truncated or inconsistent Mach-O the checks above did not name
+        fail("malformed Mach-O: %s" % e)

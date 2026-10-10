@@ -214,6 +214,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/launcher_image_test.sh
 	bash tools/tests/mcfm_launch_test.sh
 	bash tools/tests/launcher_hooks_test.sh
+	bash tools/tests/launcher_converter_edges_test.sh
 	bash tools/tests/launcher_provider_test.sh
 	bash tools/tests/fetch_angle_test.sh
 	$(MAKE) --no-print-directory $(BUILD)/test/screenshot_test && $(BUILD)/test/screenshot_test "$$(mktemp -d)/shot.ppm"
