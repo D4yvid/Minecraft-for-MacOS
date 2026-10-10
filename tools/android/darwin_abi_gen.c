@@ -50,6 +50,7 @@
 #define FIELD(tag, type, f)                                                                          \
   printf("constexpr long kOffsetof_%s_%s = %zuL;\nconstexpr long kSizeof_%s_%s = %zuL;\n", tag, #f, \
          offsetof(type, f), tag, #f, sizeof(((type *)0)->f))
+#define CK(name) printf("constexpr long %s = %lldL;\n", #name, (long long)(name))  // names already k-prefixed
 #define X(name) printf(" X(%s, %lld)", #name, (long long)(name))
 
 static void header(void) {
@@ -115,7 +116,7 @@ static void header(void) {
   C(KERN_SUCCESS); C(KERN_INVALID_ARGUMENT); C(HOST_VM_INFO); C(HOST_VM_INFO_COUNT);
   C(SYNC_POLICY_FIFO); C(KERN_OPERATION_TIMED_OUT); C(CLOCKS_PER_SEC);
   // CommonCrypto
-  C(kCCHmacAlgSHA1); C(kCCHmacAlgSHA256); C(CC_SHA256_DIGEST_LENGTH);
+  CK(kCCHmacAlgSHA1); CK(kCCHmacAlgSHA256); C(CC_SHA256_DIGEST_LENGTH);
   printf("\n");
 
   SZ("stat", struct stat);

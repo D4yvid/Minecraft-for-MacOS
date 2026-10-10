@@ -369,6 +369,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/fetch_angle_test.sh
 	bash tools/tests/fetch_sdk_test.sh
 	bash tools/tests/darwin_abi_test.sh
+	bash tools/tests/android_symbols_test.sh
 	$(MAKE) --no-print-directory $(BUILD)/test/screenshot_test && $(BUILD)/test/screenshot_test "$$(mktemp -d)/shot.ppm"
 	bash tools/tests/no_game_files_test.sh
 	bash tools/tests/setup_game_files_test.sh

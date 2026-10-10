@@ -241,8 +241,8 @@ constexpr long kHOST_VM_INFO_COUNT = 15L;
 constexpr long kSYNC_POLICY_FIFO = 0L;
 constexpr long kKERN_OPERATION_TIMED_OUT = 49L;
 constexpr long kCLOCKS_PER_SEC = 1000000L;
-constexpr long kkCCHmacAlgSHA1 = 0L;
-constexpr long kkCCHmacAlgSHA256 = 2L;
+constexpr long kCCHmacAlgSHA1 = 0L;
+constexpr long kCCHmacAlgSHA256 = 2L;
 constexpr long kCC_SHA256_DIGEST_LENGTH = 32L;
 
 constexpr long kSizeof_stat = 144L;

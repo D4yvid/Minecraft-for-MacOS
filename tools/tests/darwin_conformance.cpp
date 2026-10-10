@@ -3,7 +3,12 @@
 // (real Darwin) the transcript is the reference; on Android, loaded by mcfm-run with the Darwin
 // layer and the Apple-ABI runtime, it must be identical (tools/tests/android_launcher_test.sh).
 // No addresses, pids, times or paths in the output. Works in the current directory.
+#include <CommonCrypto/CommonDigest.h>
+#include <CommonCrypto/CommonHMAC.h>
 #include <arpa/inet.h>
+#include <ctype.h>
+#include <locale.h>
+#include <xlocale.h>
 #include <dirent.h>
 #include <ifaddrs.h>
 #include <net/if.h>
@@ -515,6 +520,72 @@ void part4_network() {
   LINE("getifaddrs loopback 127.0.0.1 %d", loopback);
 }
 
+std::string hex(const unsigned char *p, size_t n) {
+  std::string s;
+  char b[3];
+  for (size_t i = 0; i < n; i++) {
+    snprintf(b, sizeof b, "%02x", p[i]);
+    s += b;
+  }
+  return s;
+}
+
+void part5_locale_ctype_crypto() {
+  LINE("== 5 locale, ctype, CommonCrypto");
+  // Darwin's ctype macros read _DefaultRuneLocale for ASCII and call __maskrune above it.
+  std::string classes;
+  for (int c = 0; c < 256; c++) {
+    int bits = (isalpha(c) ? 1 : 0) | (isdigit(c) ? 2 : 0) | (isspace(c) ? 4 : 0) | (ispunct(c) ? 8 : 0) |
+               (isupper(c) ? 16 : 0) | (isprint(c) ? 32 : 0) | (iscntrl(c) ? 64 : 0) | (isxdigit(c) ? 128 : 0);
+    char b[4];
+    snprintf(b, sizeof b, "%02x", bits);
+    classes += b;
+  }
+  LINE("ctype %s", classes.c_str());
+  std::string mapped;
+  for (int c = 32; c < 128; c++) {
+    mapped += static_cast<char>(toupper(c));
+    mapped += static_cast<char>(tolower(c));
+  }
+  LINE("toupper/tolower %s", mapped.c_str());
+  LINE("toupper 0xe9 %d tolower 0xc9 %d", toupper(0xe9), tolower(0xc9));
+  LINE("setlocale query %s", setlocale(LC_ALL, nullptr));
+  LINE("setlocale C %s", setlocale(LC_ALL, "C") ? "ok" : "null");
+  LINE("setlocale numeric %s", setlocale(LC_NUMERIC, nullptr));
+  locale_t c_locale = newlocale(LC_ALL_MASK, "C", nullptr);
+  LINE("newlocale %d", c_locale != nullptr);
+  locale_t previous = uselocale(c_locale);
+  LINE("uselocale previous global %d", previous == LC_GLOBAL_LOCALE);
+  uselocale(previous);
+  freelocale(c_locale);
+  LINE("newlocale numeric %d", newlocale(LC_NUMERIC_MASK, "C", nullptr) != nullptr);
+
+  unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+  CC_SHA256_CTX sha;
+  CC_SHA256_Init(&sha);
+  CC_SHA256_Update(&sha, "abc", 3);
+  CC_SHA256_Final(digest, &sha);
+  LINE("sha256 abc %s", hex(digest, sizeof digest).c_str());
+  std::string million(1000000, 'a');
+  CC_SHA256_Init(&sha);
+  for (size_t off = 0; off < million.size(); off += 777)
+    CC_SHA256_Update(&sha, million.data() + off, static_cast<CC_LONG>(std::min<size_t>(777, million.size() - off)));
+  CC_SHA256_Final(digest, &sha);
+  LINE("sha256 million a %s", hex(digest, sizeof digest).c_str());
+  CCHmacContext hmac;
+  const char *data = "what do ya want for nothing?";
+  CCHmacInit(&hmac, kCCHmacAlgSHA256, "Jefe", 4);
+  CCHmacUpdate(&hmac, data, strlen(data));
+  CCHmacFinal(&hmac, digest);
+  LINE("hmac-sha256 rfc4231-2 %s", hex(digest, sizeof digest).c_str());
+  std::string long_key(131, '\xaa');
+  const char *big = "Test Using Larger Than Block-Size Key - Hash Key First";
+  CCHmacInit(&hmac, kCCHmacAlgSHA256, long_key.data(), long_key.size());
+  CCHmacUpdate(&hmac, big, strlen(big));
+  CCHmacFinal(&hmac, digest);
+  LINE("hmac-sha256 rfc4231-6 %s", hex(digest, sizeof digest).c_str());
+}
+
 }  // namespace
 
 // part 0: all parts. Returns 0.
@@ -523,6 +594,7 @@ extern "C" int conformance_main(int part) {
   if (part == 0 || part == 2) part2_files_system_signals();
   if (part == 0 || part == 3) part3_mach_blocks_dispatch();
   if (part == 0 || part == 4) part4_network();
+  if (part == 0 || part == 5) part5_locale_ctype_crypto();
   fflush(stdout);
   return 0;
 }

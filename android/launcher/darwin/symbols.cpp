@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <__config_site>
+
 #include "darwin.h"
 
 // Shims defined in the other files of this directory.
@@ -84,6 +86,11 @@ void mcfm_darwin_getsockopt(void); void mcfm_darwin_inet_ntop(void); void mcfm_d
 void mcfm_darwin_poll(void); void mcfm_darwin_recv(void); void mcfm_darwin_recvfrom(void); void mcfm_darwin_recvmsg(void);
 void mcfm_darwin_send(void); void mcfm_darwin_sendmsg(void); void mcfm_darwin_sendto(void);
 void mcfm_darwin_setsockopt(void); void mcfm_darwin_socket(void); void mcfm_darwin_write(void);
+// crypto.cpp, locale.cpp
+void mcfm_darwin_CCCrypt(void); void mcfm_darwin_CCHmacFinal(void); void mcfm_darwin_CCHmacInit(void);
+void mcfm_darwin_CCHmacUpdate(void); void mcfm_darwin_CC_SHA256_Final(void); void mcfm_darwin_CC_SHA256_Init(void);
+void mcfm_darwin_CC_SHA256_Update(void); void mcfm_darwin___maskrune(void); void mcfm_darwin___tolower(void);
+void mcfm_darwin___toupper(void); void mcfm_darwin_setlocale(void); void mcfm_darwin_newlocale(void);
 extern uintptr_t mcfm_darwin_stack_chk_guard;
 }
 
@@ -96,16 +103,24 @@ struct Export {
   void *address;  // SHIM only
 };
 
-#define S(name, fn) {name, SHIM, reinterpret_cast<void *>(fn)},
+#define S(name, fn) {name, SHIM, (void *)(fn)},  // C cast: functions, data, const data alike
 #define B(name) {name, BIONIC, nullptr},
 #define R(name) {name, RUNTIME, nullptr},
 
 const Export kExports[] = {
+    S("CCCrypt", mcfm_darwin_CCCrypt)
+    S("CCHmacFinal", mcfm_darwin_CCHmacFinal)
+    S("CCHmacInit", mcfm_darwin_CCHmacInit)
+    S("CCHmacUpdate", mcfm_darwin_CCHmacUpdate)
+    S("CC_SHA256_Final", mcfm_darwin_CC_SHA256_Final)
+    S("CC_SHA256_Init", mcfm_darwin_CC_SHA256_Init)
+    S("CC_SHA256_Update", mcfm_darwin_CC_SHA256_Update)
     S("OSMemoryBarrier", mcfm_darwin_OSMemoryBarrier)
     S("_Block_copy", mcfm_darwin_Block_copy)
     S("_Block_object_assign", mcfm_darwin__Block_object_assign)
     S("_Block_object_dispose", mcfm_darwin__Block_object_dispose)
     S("_Block_release", mcfm_darwin_Block_release)
+    S("_DefaultRuneLocale", &mcfm_darwin_DefaultRuneLocale)
     S("_NSConcreteGlobalBlock", &mcfm_darwin_NSConcreteGlobalBlock)
     S("_NSConcreteMallocBlock", &mcfm_darwin_NSConcreteMallocBlock)
     S("_NSConcreteStackBlock", &mcfm_darwin_NSConcreteStackBlock)
@@ -114,6 +129,7 @@ const Export kExports[] = {
     B("__cxa_atexit")
     S("__darwin_check_fd_set_overflow", mcfm_darwin___darwin_check_fd_set_overflow)
     S("__error", mcfm_darwin___error)
+    S("__maskrune", mcfm_darwin___maskrune)
     B("__memcpy_chk")
     B("__memmove_chk")
     B("__memset_chk")
@@ -127,6 +143,8 @@ const Export kExports[] = {
     S("__stdinp", &mcfm_darwin_stdinp)
     S("__stdoutp", &mcfm_darwin_stdoutp)
     B("__strcat_chk")
+    S("__tolower", mcfm_darwin___tolower)
+    S("__toupper", mcfm_darwin___toupper)
     S("_dispatch_main_q", &mcfm_darwin_dispatch_main_q)
     S("_dyld_register_func_for_add_image", mcfm_darwin__dyld_register_func_for_add_image)
     B("abort")
@@ -183,6 +201,7 @@ const Export kExports[] = {
     S("freeaddrinfo", mcfm_darwin_freeaddrinfo)
     S("freehostent", mcfm_darwin_freehostent)
     S("freeifaddrs", mcfm_darwin_freeifaddrs)
+    B("freelocale")
     B("frexp")
     S("fscanf", mcfm_darwin_fscanf)
     B("fseek")
@@ -251,6 +270,7 @@ const Export kExports[] = {
     B("mktime")
     S("mmap", mcfm_darwin_mmap)
     B("munmap")
+    S("newlocale", mcfm_darwin_newlocale)
     S("open", mcfm_darwin_open)
     S("opendir", mcfm_darwin_opendir)
     S("perror", mcfm_darwin_perror)
@@ -316,6 +336,7 @@ const Export kExports[] = {
     S("send", mcfm_darwin_send)
     S("sendmsg", mcfm_darwin_sendmsg)
     S("sendto", mcfm_darwin_sendto)
+    S("setlocale", mcfm_darwin_setlocale)
     S("setsockopt", mcfm_darwin_setsockopt)
     B("shutdown")
     S("sigaction", mcfm_darwin_sigaction)
@@ -365,6 +386,7 @@ const Export kExports[] = {
     B("umask")
     S("uname", mcfm_darwin_uname)
     B("unlink")
+    B("uselocale")
     B("usleep")
     S("vfprintf", mcfm_darwin_vfprintf)
     S("vsnprintf", mcfm_darwin_vsnprintf)

@@ -19,6 +19,9 @@
 
 #include "darwin.h"
 
+extern "C" int mcfm_darwin_CCCrypt(int, int, int, const void *, size_t, const void *, const void *, size_t, void *,
+                                   size_t, size_t *);
+
 static int fails = 0;
 #define EXPECT(c) do { if (!(c)) { printf("FAIL %s:%d %s\n", __FILE__, __LINE__, #c); fails++; } } while (0)
 
@@ -134,6 +137,11 @@ int main() {
     if (!mcfm_darwin_symbol(names[i])) { printf("unresolved libSystem entry: %s\n", names[i]); fails++; }
     if (i > 0 && strcmp(names[i - 1], names[i]) >= 0) { printf("table not sorted at %s\n", names[i]); fails++; }
   }
+
+  // 8. CCCrypt (Xbox Live only) reports kCCUnimplemented and moves nothing.
+  size_t moved = 99;
+  char out[16];
+  EXPECT(mcfm_darwin_CCCrypt(0, 0, 0, "k", 1, nullptr, "in", 2, out, sizeof out, &moved) == -4305 && moved == 0);
 
   if (fails) { printf("%d failure(s)\n", fails); return 1; }
   printf("runtime_test: all passed\n");
