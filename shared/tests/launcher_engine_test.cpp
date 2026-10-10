@@ -127,6 +127,11 @@ int main() {
   for (size_t i = 0; i < n; i++) if (std::strcmp(h[i].name, "telemetry_upload") == 0) upload = &h[i];
   EXPECT(upload && upload->address == 0x1003B42A8);
   if (upload) reinterpret_cast<void (*)(void *, void *)>(upload->replacement)(nullptr, nullptr);
+  // Xbox Live is dropped: MinecraftClient::init must not push the first-launch prompt screen.
+  const Hook *prompt = nullptr;
+  for (size_t i = 0; i < n; i++) if (std::strcmp(h[i].name, "xbl_first_launch_screen") == 0) prompt = &h[i];
+  EXPECT(prompt && prompt->address == 0x100158624);
+  if (prompt) reinterpret_cast<void (*)(void *)>(prompt->replacement)(nullptr);  // no-op
   if (fails) { std::printf("%d failure(s)\n", fails); return 1; }
   std::printf("launcher_engine_test: all passed\n");
   return 0;

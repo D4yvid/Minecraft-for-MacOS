@@ -187,3 +187,21 @@ main-thread jobs → `update()` → present".
   renders the Win10 Edition title screen with the Xbox Live first-launch prompt on top. Booting
   calls only 5 stubs: `objc_autoreleasePoolPush/Pop` and FMOD's `AudioSessionGetProperty`,
   `AudioComponentFindNext`, `AudioOutputUnitStop` (FMOD then runs with no output).
+
+## Stage 1c findings ✅ (input, text, sound, Xbox prompt)
+
+- **Text entry** follows iOS's `ShowKeyboardView`: the engine's `Keyboard` text queue
+  (`0x100F5A010`, `std::vector<{std::string; bool}>`, 32-byte elements) gets one element per
+  typed character, `"\b"` per deleted character and `{"\n", true}` for return; AppPlatform slots
+  9 `showKeyboard` / 10 `hideKeyboard` open and close text boxes (base implementations keep the
+  `isKeyboardVisible` flag at `+9`). ✅ (IDA: `-[ShowKeyboardView textDidChange:]`)
+- **Sound**: the 511 FSB5 banks are FADPCM (478) and PCM16 (33), decoded by FMOD itself. FMOD's
+  iOS output (`0x100AD34EC`) asks `AudioSessionGetProperty('choc')`, then opens RemoteIO
+  (`'auou'/'rioc'/'appl'`), sets the stream format (property 8) and render callback (23),
+  initializes and starts it; the record path (`0x100AD3B44`) only runs for the play-and-record
+  session category. On macOS RemoteIO maps to the default output unit. ✅ (IDA, lldb: FMOD reaches
+  `AudioOutputUnitStart` on a real component)
+- **Xbox Live first-launch prompt**: `data/ui/xbl_first_launch.json`; the screen is created and
+  pushed only by `0x100158624`, which `MinecraftClient::init` calls after pushing the start screen
+  (`0x100154730`) while two Options flags (`0x1002B42D4`, `0x1002B42E4`) are unset. Hooked to a
+  no-op. ✅ (screenshot: start screen without the prompt)

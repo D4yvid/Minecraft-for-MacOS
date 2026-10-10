@@ -90,10 +90,16 @@ StoreVectorOut create_stores(void * /*client*/, void *listener) {
 // from the REST thread. Telemetry is dropped: the upload does nothing.
 void telemetry_upload(void * /*self*/, void * /*body*/) {}
 
+// The Xbox Live first-launch prompt (data/ui/xbl_first_launch.json): MinecraftClient::init
+// pushes it on top of the start screen until the player has signed in once. Xbox Live is
+// dropped, so pushing it does nothing and the start screen stays.
+void push_xbl_first_launch(void * /*screen_chooser*/) {}
+
 const Hook kHooks[] = {
     {"xbl_app_config", addr::kFnXblAppConfig, reinterpret_cast<void *>(&xbl_app_config)},
     {"create_stores", addr::kFnCreateStores, reinterpret_cast<void *>(&create_stores)},
     {"telemetry_upload", addr::kFnTelemetryUpload, reinterpret_cast<void *>(&telemetry_upload)},
+    {"xbl_first_launch_screen", addr::kFnPushXblFirstLaunch, reinterpret_cast<void *>(&push_xbl_first_launch)},
 };
 
 }  // namespace
