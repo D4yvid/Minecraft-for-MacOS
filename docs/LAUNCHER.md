@@ -164,10 +164,14 @@ entry-point variants and `dyld_stub_binder` accepted explicitly); the owner play
 our loader; fixture tests cover fixups, imports, initializers, exceptions and hooks.
 
 ## Stage 3 — Android ☐
-1. ☐ **Target SDK 28** (decided 2026-10-10: 29+ is too restrictive for us and for runet-style
-   injection). Distribution is sideload-only (Play requires newer target SDKs). The loader
-   still maps the image into anonymous memory and `mprotect`s it to RX, which also works on
-   API 29+.
+1. ☐ **Target the latest Android: SDK 37 (Android 17), 16 KB pages**; minimum API 28 (the
+   oldest image we test). Prebuilt APKs, not on Google Play (its policy forbids running code
+   that did not come from Play, i.e. the user's IPA). From target SDK 29 an app may not map its
+   own files executable, so the loader copies each segment into anonymous memory and
+   `mprotect`s it (verified on the API 28 emulator); our `.so` files are 16 KB aligned.
+   Split: **3a** load the game and run its initializers on Android (loader, libc translation,
+   Apple-ABI libc++, stubs; command-line test over adb); **3b** engine boot, EGL/GLES, audio;
+   **3c** APK, `NativeActivity`, input, text, IPA import.
 2. ☐ **libc translation layer** (Darwin ABI → bionic), the large item:
    - struct layouts: `stat`/`fstat`/`lstat`, `dirent`/`readdir`, `pthread_*_t` sizes and
      static initializers (`PTHREAD_MUTEX_INITIALIZER` signatures), `locale_t`;
@@ -188,7 +192,8 @@ our loader; fixture tests cover fixups, imports, initializers, exceptions and ho
 5. ☐ Android platform layer: `NativeActivity`-style launcher, input, text input, file paths,
    IPA import screen.
 
-Acceptance: an APK that installs on Android 6+ arm64, imports a user-supplied IPA and plays.
+Acceptance: an APK (target SDK 37) that installs on Android 9+ arm64, including 16 KB-page
+devices, imports a user-supplied IPA and plays.
 
 ## Later
 - Linux arm64 / Windows on ARM launchers (Stage 2 loader + Stage 3 translation, different host).
@@ -196,7 +201,9 @@ Acceptance: an APK that installs on Android 6+ arm64, imports a user-supplied IP
 - Module system on top of the launcher's platform layer (HANDOFF §6.3).
 
 ## Decisions
-- 2026-10-10: Android targets SDK 28 (sideload only).
+- 2026-10-10: Android targets the latest SDK (37, 16 KB pages), minimum API 28; prebuilt APKs
+  outside Google Play (replaces the earlier SDK 28 decision). Toolchain: NDK r27d (LLVM 18),
+  libc++/libc++abi/libunwind from LLVM 18.1.8 built with Apple's arm64 ABI settings.
 - 2026-10-10: Stage 1 stubs every framework and libobjc (host: libSystem, libc++, libz only).
 - 2026-10-10 (Stage 1a spike): libobjc is stubbed too and the image's `__objc_*` sections are
   renamed `__xbjc_*`, so the system libobjc never reads the game's ObjC metadata (it crashed in
