@@ -79,6 +79,7 @@ ios-syntax:
 
 # ---------------------------------------------------------------- Mach-O launcher (docs/LAUNCHER.md)
 LAUNCHER_BIN := $(BUILD)/launcher/mcfm-launch
+AUDIO_PROVIDER := $(BUILD)/launcher/libmcfm_audiotoolbox.dylib
 LAUNCHER_SRCS := macos/launcher/main.mm shared/apple/macho_uuid.cpp shared/apple/hook_table.cpp \
                  shared/launcher/app_platform.cpp shared/launcher/engine.cpp shared/launcher/seams.cpp shared/launcher/text_input.cpp \
                  shared/launcher/launcher_platform.cpp macos/launcher/input.mm macos/launcher/mac_keymap.cpp \
@@ -100,10 +101,10 @@ angle:
 	bash tools/launcher/fetch_angle.sh "$(ANGLE_DIR)"
 
 .PHONY: launcher launcher-check
-launcher: $(LAUNCHER_BIN)
+launcher: $(LAUNCHER_BIN) $(AUDIO_PROVIDER)
 	@test -n "$(GAME)" || { echo "Set GAME=<your decrypted minecraftpe2.app> (or put it in config.mk)"; exit 1; }
 	@test -f "$(ANGLE_DIR)/libGLESv2.dylib" -a -f "$(ANGLE_DIR)/libEGL.dylib" || { echo "Run make angle first (downloads ANGLE)"; exit 1; }
-	bash macos/tools/make_launcher.sh "$(GAME)" "$(LAUNCHER_OUT)" "$(LAUNCHER_BIN)" "$(ANGLE_DIR)"
+	bash macos/tools/make_launcher.sh "$(GAME)" "$(LAUNCHER_OUT)" "$(LAUNCHER_BIN)" "$(ANGLE_DIR)" "$(AUDIO_PROVIDER)"
 
 # Loads the image built by make launcher; the census lists every stub the game called.
 launcher-check:
@@ -212,6 +213,14 @@ $(BUILD)/test/mac_keymap_test: macos/tests/mac_keymap_test.cpp macos/launcher/ma
 	@mkdir -p $(dir $@)
 	clang++ -std=c++17 -Wall -O1 -Imacos/launcher macos/tests/mac_keymap_test.cpp macos/launcher/mac_keymap.cpp -o $@
 
+$(AUDIO_PROVIDER): macos/launcher/audio_toolbox.cpp
+	@mkdir -p $(dir $@)
+	clang++ -arch arm64 -mmacosx-version-min=11.0 -std=c++17 -O2 -Wall -Wextra -dynamiclib macos/launcher/audio_toolbox.cpp \
+	  -install_name @rpath/libmcfm_audiotoolbox.dylib -o $@
+$(BUILD)/test/audio_toolbox_test: macos/tests/audio_toolbox_test.cpp
+	@mkdir -p $(dir $@)
+	clang++ -std=c++17 -Wall -O1 macos/tests/audio_toolbox_test.cpp -o $@
+
 $(BUILD)/test/titlebar_test: macos/tests/titlebar_test.cpp macos/src/titlebar_zone.h
 	@mkdir -p $(dir $@)
 	clang++ -std=c++17 -Wall -O1 macos/tests/titlebar_test.cpp -o $@
@@ -239,6 +248,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/launcher_hooks_test.sh
 	bash tools/tests/launcher_converter_edges_test.sh
 	bash tools/tests/thin_arm64_test.sh
+	$(MAKE) --no-print-directory $(AUDIO_PROVIDER) $(BUILD)/test/audio_toolbox_test && $(BUILD)/test/audio_toolbox_test $(AUDIO_PROVIDER) && MCFM_AUDIO_DISABLE=1 $(BUILD)/test/audio_toolbox_test $(AUDIO_PROVIDER)
 	bash tools/tests/launcher_provider_test.sh
 	bash tools/tests/fetch_angle_test.sh
 	$(MAKE) --no-print-directory $(BUILD)/test/screenshot_test && $(BUILD)/test/screenshot_test "$$(mktemp -d)/shot.ppm"
