@@ -6,7 +6,7 @@ cd "$ROOT"
 fails=0
 make -s macos >/dev/null || { echo "FAIL: cannot build"; exit 1; }
 DYLIB=build/macos/libmcfm.dylib
-HEADERS="$(git ls-files 'shared/*.h' 'macos/src/*.h' | grep -v -e '^shared/tests/' -e '^shared/launcher/')"  # launcher headers are not in the Catalyst dylib
+HEADERS="$(git ls-files 'shared/*.h' 'macos/src/*.h' | grep -v -e '^shared/tests/' -e '^shared/launcher/' -e '^shared/loader/')"  # launcher/loader headers are not in the Catalyst dylib
 # Explicit timestamps (make 3.81 compares whole seconds): every header older than the
 # dylib, then one header at a time newer.
 setmtime() { python3 -I -c 'import os,sys; t=float(sys.argv[1]); [os.utime(f,(t,t)) for f in sys.argv[2:]]' "$@"; }

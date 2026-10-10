@@ -11,7 +11,7 @@ OUT_APP ?= $(CURDIR)/dist/minecraftpe.app
 SHARED_INC   := -Ishared/include -Ishared/apple
 SHARED_CORE  := shared/src/platform.cpp shared/src/win10_ui.cpp shared/src/keyboard_mouse.cpp
 SHARED_HEADERS := $(wildcard shared/include/mcfm/*.h shared/include/mcfm/*/*.h shared/apple/*.h)
-SHARED_TESTS := keymap_test input_state_test features_test launcher_app_platform_test launcher_engine_test hook_table_test macho_uuid_bounds_test launcher_uuid_race_test launcher_platform_test launcher_text_test macho_file_test
+SHARED_TESTS := keymap_test input_state_test features_test launcher_app_platform_test launcher_engine_test hook_table_test macho_uuid_bounds_test launcher_uuid_race_test launcher_platform_test launcher_text_test macho_file_test macho_fixups_test
 MACOS_TESTS  := titlebar_test input_policy_test resize_math_test mac_keymap_test mouse_math_test
 
 # ---------------------------------------------------------------- macOS (Mac Catalyst) — DEPRECATED
@@ -232,10 +232,18 @@ $(BUILD)/test/mouse_math_test: macos/tests/mouse_math_test.cpp macos/launcher/mo
 	@mkdir -p $(dir $@)
 	clang++ -std=c++17 -Wall -O1 -Imacos/launcher macos/tests/mouse_math_test.cpp -o $@
 
-LOADER_SRCS := shared/loader/macho_file.cpp
+LOADER_SRCS := shared/loader/macho_file.cpp shared/loader/fixups.cpp
 $(BUILD)/test/macho_file_test: shared/tests/macho_file_test.cpp $(LOADER_SRCS) $(wildcard shared/loader/*.h)
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=address -Ishared/loader shared/tests/macho_file_test.cpp $(LOADER_SRCS) -o $@
+
+$(BUILD)/test/macho_fixups_test: shared/tests/macho_fixups_test.cpp $(LOADER_SRCS) $(wildcard shared/loader/*.h)
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=address -Ishared/loader shared/tests/macho_fixups_test.cpp $(LOADER_SRCS) -o $@
+
+$(BUILD)/test/fixups_dump: tools/loader/fixups_dump.cpp $(LOADER_SRCS) $(wildcard shared/loader/*.h)
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -O1 -Ishared/loader tools/loader/fixups_dump.cpp $(LOADER_SRCS) -o $@
 
 $(BUILD)/test/titlebar_test: macos/tests/titlebar_test.cpp macos/src/titlebar_zone.h
 	@mkdir -p $(dir $@)
@@ -264,6 +272,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/launcher_hooks_test.sh
 	bash tools/tests/launcher_converter_edges_test.sh
 	bash tools/tests/thin_arm64_test.sh
+	bash tools/tests/loader_test.sh
 	$(MAKE) --no-print-directory $(AUDIO_PROVIDER) $(BUILD)/test/audio_toolbox_test && $(BUILD)/test/audio_toolbox_test $(AUDIO_PROVIDER) && MCFM_AUDIO_DISABLE=1 $(BUILD)/test/audio_toolbox_test $(AUDIO_PROVIDER)
 	bash tools/tests/launcher_provider_test.sh
 	bash tools/tests/fetch_angle_test.sh
