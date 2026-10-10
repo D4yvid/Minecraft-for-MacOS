@@ -15,7 +15,9 @@ python3 -I "$ROOT/tools/launcher/mcfm_image.py" imports "$TMP/game" > "$OUT/impo
 cp "$ANGLE/libEGL.dylib" "$ANGLE/libGLESv2.dylib" "$OUT/"
 bash "$ROOT/tools/launcher/build_stubs.sh" "$OUT/imports.tsv" "$OUT" --provider "OpenGLES=$OUT/libGLESv2.dylib"
 rm -rf "$OUT/src"
-python3 -I "$ROOT/tools/launcher/mcfm_image.py" dylib "$TMP/game" "$OUT/libminecraftpe.dylib"
+"$BIN" --print-hooks > "$OUT/hooks.tsv"
+python3 -I "$ROOT/tools/launcher/mcfm_image.py" dylib "$TMP/game" "$OUT/libminecraftpe.dylib" --hooks "$OUT/hooks.tsv"
+printf '%s/data/\n' "$(cd "$APP" && pwd)" > "$OUT/data_dir.txt"
 cp "$BIN" "$OUT/mcfm-launch"
 for f in "$OUT"/*.dylib "$OUT/mcfm-launch"; do codesign -f -s - "$f" 2>/dev/null; done
 echo "make_launcher: $OUT ready ($(ls "$OUT"/mcfm_stub_*.dylib | wc -l | tr -d ' ') stub libraries)"

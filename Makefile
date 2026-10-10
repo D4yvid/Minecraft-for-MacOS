@@ -12,7 +12,7 @@ SHARED_INC   := -Ishared/include -Ishared/apple
 SHARED_CORE  := shared/src/platform.cpp shared/src/win10_ui.cpp shared/src/keyboard_mouse.cpp
 SHARED_HEADERS := $(wildcard shared/include/mcfm/*.h shared/include/mcfm/*/*.h shared/apple/*.h)
 SHARED_TESTS := keymap_test input_state_test features_test launcher_app_platform_test launcher_engine_test
-MACOS_TESTS  := titlebar_test input_policy_test
+MACOS_TESTS  := titlebar_test input_policy_test resize_math_test
 
 # ---------------------------------------------------------------- macOS (Mac Catalyst) — DEPRECATED
 # The Catalyst build is a deprecated build mode: it keeps working until the Mach-O launcher
@@ -79,11 +79,14 @@ ios-syntax:
 
 # ---------------------------------------------------------------- Mach-O launcher (docs/LAUNCHER.md)
 LAUNCHER_BIN := $(BUILD)/launcher/mcfm-launch
-LAUNCHER_CXXFLAGS := -arch arm64 -mmacosx-version-min=11.0 -std=c++17 -O2 -Wall -Wextra -Ishared/apple
+LAUNCHER_SRCS := macos/launcher/main.mm shared/apple/macho_uuid.cpp shared/apple/hook_table.cpp \
+                 shared/launcher/app_platform.cpp shared/launcher/engine.cpp shared/launcher/seams.cpp
+LAUNCHER_CXXFLAGS := -arch arm64 -mmacosx-version-min=11.0 -std=c++17 -fobjc-arc -O2 -Wall -Wextra \
+                     -Wno-unused-parameter -Ishared/apple -Ishared/launcher -Imacos/launcher
 
-$(LAUNCHER_BIN): macos/launcher/main.cpp shared/apple/macho_uuid.cpp shared/apple/macho_uuid.h
+$(LAUNCHER_BIN): $(LAUNCHER_SRCS) $(wildcard shared/launcher/*.h macos/launcher/*.h) shared/apple/hook_table.h shared/apple/macho_uuid.h shared/apple/addresses_0_15_10.h
 	@mkdir -p $(dir $@)
-	clang++ $(LAUNCHER_CXXFLAGS) macos/launcher/main.cpp shared/apple/macho_uuid.cpp \
+	clang++ $(LAUNCHER_CXXFLAGS) $(LAUNCHER_SRCS) -framework AppKit -framework QuartzCore \
 	  -Wl,-rpath,@executable_path -o $@
 
 LAUNCHER_OUT ?= $(CURDIR)/dist/launcher
@@ -102,12 +105,16 @@ launcher: $(LAUNCHER_BIN)
 
 # Loads the image built by make launcher; the census lists every stub the game called.
 launcher-check:
-	@rm -f $(BUILD)/launcher/census.txt
-	@OUT="$$(MCFM_CENSUS="$(CURDIR)/$(BUILD)/launcher/census.txt" "$(LAUNCHER_OUT)/mcfm-launch" 2>&1)"; \
-	  echo "$$OUT" | grep "^mcfm: game image" ; \
-	  echo "$$OUT" | grep -q "game image loaded" || { echo "$$OUT" | tail -20; echo "launcher-check: FAILED"; exit 1; }
+	@rm -f $(BUILD)/launcher/census.txt; mkdir -p $(BUILD)/launcher
+	@OUT="$$(MCFM_CENSUS="$(CURDIR)/$(BUILD)/launcher/census.txt" "$(LAUNCHER_OUT)/mcfm-launch" --frames 120 2>&1)"; \
+	  echo "$$OUT" | grep -E "^mcfm: (game image|EGL|engine|[0-9]+ frames)" ; \
+	  { echo "$$OUT" | grep -q "game image loaded" && echo "$$OUT" | grep -q "120 frames rendered"; } || { echo "$$OUT" | tail -25; echo "launcher-check: FAILED"; exit 1; }
 	@grep -qxF "libobjc:_objc_autoreleasePoolPush" $(BUILD)/launcher/census.txt || { echo "launcher-check: initializers did not reach the stubs"; exit 1; }
 	@echo "launcher-check: passed ($$(wc -l < $(BUILD)/launcher/census.txt | tr -d ' ') stubs called, see $(BUILD)/launcher/census.txt)"
+
+.PHONY: launcher-run
+launcher-run:
+	"$(LAUNCHER_OUT)/mcfm-launch"
 
 # ---------------------------------------------------------------- Android
 # NDK r10c (x86_64 host build; runs under Rosetta on Apple Silicon).
@@ -169,6 +176,10 @@ $(BUILD)/test/launcher_app_platform_test: shared/tests/launcher_app_platform_tes
 $(BUILD)/test/launcher_engine_test: shared/tests/launcher_engine_test.cpp shared/launcher/engine.cpp shared/launcher/engine.h shared/launcher/seams.cpp shared/launcher/seams.h shared/launcher/app_platform.cpp shared/apple/addresses_0_15_10.h
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -Wextra -O1 $(LAUNCHER_SHARED_INC) shared/tests/launcher_engine_test.cpp shared/launcher/engine.cpp shared/launcher/seams.cpp shared/launcher/app_platform.cpp -o $@
+
+$(BUILD)/test/resize_math_test: macos/tests/resize_math_test.cpp macos/launcher/resize_math.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++17 -Wall -O1 -Imacos/launcher macos/tests/resize_math_test.cpp -o $@
 
 $(BUILD)/test/titlebar_test: macos/tests/titlebar_test.cpp macos/src/titlebar_zone.h
 	@mkdir -p $(dir $@)
