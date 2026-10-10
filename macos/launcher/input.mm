@@ -9,6 +9,7 @@
 
 #include "app_platform.h"
 #include "mac_keymap.h"
+#include "mouse_math.h"
 #include "resize_math.h"
 #include "text_input.h"
 
@@ -23,7 +24,8 @@ LauncherPlatform *g_platform = nullptr;
 uintptr_t g_text_queue = 0;
 bool g_text_mode = false, g_capture_wanted = false, g_captured = false;
 mcfm::HeldSet g_keys, g_buttons;
-mcfm::ScrollAccumulator g_scroll{1.0f};
+HotbarScroll g_scroll;
+LookConverter g_look(1.0);  // scale set in install()
 int g_x = 0, g_y = 0;
 
 void apply_capture() {
@@ -76,6 +78,10 @@ void type_text(NSEvent *e) {  // text mode: characters go to the engine's text q
 void install(NSView *view, void **vtable, const InputAddresses &a) {
   g_view = view;
   g_text_queue = a.keyboard_text;
+  // Look speed: AppKit points -> pixels; MCFM_LOOK_SCALE multiplies it (default 1).
+  const char *scale = getenv("MCFM_LOOK_SCALE");
+  double factor = scale ? atof(scale) : 1.0;
+  g_look.set_scale(view.window.backingScaleFactor * (factor > 0 ? factor : 1.0));
   g_platform = new LauncherPlatform(vtable, a);
   kbm::PointerCallbacks pc = {[] { g_capture_wanted = true; apply_capture(); },
                               [] { g_capture_wanted = false; apply_capture(); }};
@@ -112,7 +118,9 @@ void flags_changed(NSEvent *e) {
 void mouse_event(NSEvent *e) {
   if (g_captured && (e.type == NSEventTypeMouseMoved || e.type == NSEventTypeLeftMouseDragged ||
                      e.type == NSEventTypeRightMouseDragged || e.type == NSEventTypeOtherMouseDragged)) {
-    kbm::mouse_move_rel(static_cast<int>(e.deltaX), static_cast<int>(e.deltaY));
+    int dx = 0, dy = 0;
+    g_look.feed(e.deltaX, e.deltaY, &dx, &dy);
+    if (dx || dy) kbm::mouse_move_rel(dx, dy);
   } else {
     update_position(e);
     kbm::mouse_move_abs(g_x, g_y);
@@ -129,8 +137,7 @@ void mouse_event(NSEvent *e) {
 }
 
 void scroll_event(NSEvent *e) {
-  int notches = g_scroll.feed(static_cast<float>(e.hasPreciseScrollingDeltas ? e.scrollingDeltaY / 10.0 : e.scrollingDeltaY),
-                              CACurrentMediaTime());
+  int notches = g_scroll.feed(e.scrollingDeltaY, e.hasPreciseScrollingDeltas, CACurrentMediaTime());
   if (notches) kbm::mouse_wheel(notches, g_x, g_y);
 }
 

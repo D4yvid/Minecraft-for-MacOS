@@ -146,6 +146,7 @@ HostInfo host_info(const std::string &game_data_dir) {
 @property(nonatomic, strong) NSWindow *window;
 @property(nonatomic) long framesLeft;  // < 0: run forever
 @property(nonatomic) long framesDone;
+@property(nonatomic, strong) NSTimer *timer;
 @end
 
 @implementation McfmApp {
@@ -168,6 +169,7 @@ HostInfo host_info(const std::string &game_data_dir) {
                                                       NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable
                                               backing:NSBackingStoreBuffered defer:NO];
   self.window.title = @"Minecraft PE";
+  self.window.releasedWhenClosed = NO;  // ARC owns it; AppKit must not release it on close too
   self.window.delegate = self;
   McfmView *view = [[McfmView alloc] initWithFrame:self.window.contentView.bounds];
   view.wantsLayer = YES;
@@ -205,8 +207,8 @@ HostInfo host_info(const std::string &game_data_dir) {
   self.window.acceptsMouseMovedEvents = YES;
   [self.window makeFirstResponder:self.window.contentView];
   // Common modes: keep rendering during live resize and while a menu is open.
-  NSTimer *timer = [NSTimer timerWithTimeInterval:1.0 / 60 target:self selector:@selector(frame) userInfo:nil repeats:YES];
-  [[NSRunLoop currentRunLoop] addTimer:timer forMode:NSRunLoopCommonModes];
+  self.timer = [NSTimer timerWithTimeInterval:1.0 / 60 target:self selector:@selector(frame) userInfo:nil repeats:YES];
+  [[NSRunLoop currentRunLoop] addTimer:self.timer forMode:NSRunLoopCommonModes];
 }
 - (void)frame {
   NSSize px = [self pixelSize];
@@ -249,6 +251,17 @@ HostInfo host_info(const std::string &game_data_dir) {
 // Moved between a Retina and a non-Retina display: new pixel size for the same window.
 - (void)windowDidChangeBackingProperties:(NSNotification *)n {
   [self updateSurfaceSize];
+}
+- (void)windowWillClose:(NSNotification *)n {
+  [self.timer invalidate];  // no frame after the window is gone
+  self.timer = nil;
+}
+// Quit: the engine's threads (REST, audio, ...) are still running, so the game's static
+// destructors must not run; leave like --frames does.
+- (void)applicationWillTerminate:(NSNotification *)n {
+  std::fflush(stdout);
+  std::fflush(stderr);
+  _exit(0);
 }
 - (void)windowDidResignKey:(NSNotification *)n {
   mcfm::launcher::input::focus_lost();

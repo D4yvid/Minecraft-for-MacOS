@@ -12,7 +12,7 @@ SHARED_INC   := -Ishared/include -Ishared/apple
 SHARED_CORE  := shared/src/platform.cpp shared/src/win10_ui.cpp shared/src/keyboard_mouse.cpp
 SHARED_HEADERS := $(wildcard shared/include/mcfm/*.h shared/include/mcfm/*/*.h shared/apple/*.h)
 SHARED_TESTS := keymap_test input_state_test features_test launcher_app_platform_test launcher_engine_test hook_table_test macho_uuid_bounds_test launcher_uuid_race_test launcher_platform_test launcher_text_test
-MACOS_TESTS  := titlebar_test input_policy_test resize_math_test mac_keymap_test
+MACOS_TESTS  := titlebar_test input_policy_test resize_math_test mac_keymap_test mouse_math_test
 
 # ---------------------------------------------------------------- macOS (Mac Catalyst) — DEPRECATED
 # The Catalyst build is a deprecated build mode: it keeps working until the Mach-O launcher
@@ -220,6 +220,10 @@ $(AUDIO_PROVIDER): macos/launcher/audio_toolbox.cpp
 $(BUILD)/test/audio_toolbox_test: macos/tests/audio_toolbox_test.cpp
 	@mkdir -p $(dir $@)
 	clang++ -std=c++17 -Wall -O1 macos/tests/audio_toolbox_test.cpp -o $@
+
+$(BUILD)/test/mouse_math_test: macos/tests/mouse_math_test.cpp macos/launcher/mouse_math.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++17 -Wall -O1 -Imacos/launcher macos/tests/mouse_math_test.cpp -o $@
 
 $(BUILD)/test/titlebar_test: macos/tests/titlebar_test.cpp macos/src/titlebar_zone.h
 	@mkdir -p $(dir $@)
