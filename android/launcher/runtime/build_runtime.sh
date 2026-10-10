@@ -38,7 +38,8 @@ LIBCXX=(algorithm any bind call_once charconv chrono error_category exception fi
 LIBCXXABI=(cxa_aux_runtime cxa_default_handlers cxa_demangle cxa_exception_storage cxa_guard cxa_handlers
   cxa_vector cxa_virtual stdlib_exception stdlib_stdexcept stdlib_typeinfo abort_message fallback_malloc
   private_typeinfo stdlib_new_delete cxa_exception cxa_personality cxa_thread_atexit)
-DARWIN=(pthread errno ctype symbols)
+DARWIN=(pthread errno ctype symbols files misc)
+DARWIN_C=(stdio)
 
 jobs=()
 compile() {  # compile <object> <compiler and flags...>
@@ -70,6 +71,9 @@ done
 for f in "${DARWIN[@]}"; do
   compile "$OBJ/darwin/$f.o" "$CXX" "${COMMON[@]}" "${CXXINC[@]}" -std=c++17 -Wall -Wextra \
     "$ROOT/android/launcher/darwin/$f.cpp"
+done
+for f in "${DARWIN_C[@]}"; do
+  compile "$OBJ/darwin/$f.o" "$CC" "${COMMON[@]}" -std=c11 -Wall -Wextra "$ROOT/android/launcher/darwin/$f.c"
 done
 fail=0
 for j in "${jobs[@]}"; do wait "$j" || fail=1; done

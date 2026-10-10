@@ -3,6 +3,7 @@
 // EOPNOTSUPP/ENOTSUP, EDEADLK/EDEADLOCK) take the listed name.
 #include <errno.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <atomic>
 
@@ -42,4 +43,47 @@ extern "C" void mcfm_darwin_log_once(const char *message) {
     }
   }
   fprintf(stderr, "mcfm: %s\n", message);
+}
+
+// The game reads and writes errno through ___error(). Darwin's value lives in a thread-local;
+// bionic's errno, set by every failing bionic call (and by our shims, in bionic numbers), is
+// moved into it, translated, whenever the game asks. bionic's is then cleared, so a later
+// failure is seen as new even if it has the same number, and a value the game wrote (errno = 0
+// before strtol) stays until something fails again.
+namespace {
+__thread int t_darwin_errno;
+}
+
+extern "C" int *mcfm_darwin___error(void) {
+  if (errno != 0) {
+    t_darwin_errno = mcfm_darwin_errno(errno);
+    errno = 0;
+  }
+  return &t_darwin_errno;
+}
+
+#include "darwin_strerror.inc"
+
+// Darwin's texts (the game may show or compare them); numbers Darwin does not know get bionic's.
+extern "C" char *mcfm_darwin_strerror(int darwin_errno) {
+  if (darwin_errno >= 0 && darwin_errno < static_cast<int>(sizeof kDarwin_strerror / sizeof kDarwin_strerror[0]))
+    return const_cast<char *>(kDarwin_strerror[darwin_errno]);
+  return strerror(mcfm_bionic_errno(darwin_errno));
+}
+
+// Darwin's strerror_r is POSIX's: 0, or ERANGE when the message does not fit (truncated).
+extern "C" int mcfm_darwin_strerror_r(int darwin_errno, char *buf, size_t n) {
+  if (n == 0) return darwin::kERANGE;
+  const char *message = mcfm_darwin_strerror(darwin_errno);
+  size_t length = strlen(message);
+  size_t copied = length < n - 1 ? length : n - 1;
+  memcpy(buf, message, copied);
+  buf[copied] = 0;
+  return copied == length ? 0 : static_cast<int>(darwin::kERANGE);
+}
+
+extern "C" void mcfm_darwin_perror(const char *s) {
+  const char *message = mcfm_darwin_strerror(*mcfm_darwin___error());
+  if (s && *s) fprintf(stderr, "%s: %s\n", s, message);
+  else fprintf(stderr, "%s\n", message);
 }

@@ -126,6 +126,15 @@ int main() {
   EXPECT(sizeof(mbstate_t) == 128);
   EXPECT(sizeof(std::streampos) == 136);
 
+  // 7. Every libSystem table entry resolves on this device (bionic names included), sorted.
+  const char *names[1024];
+  size_t count = mcfm_darwin_symbol_names(names, 1024);
+  EXPECT(count <= 1024);
+  for (size_t i = 0; i < count && i < 1024; i++) {
+    if (!mcfm_darwin_symbol(names[i])) { printf("unresolved libSystem entry: %s\n", names[i]); fails++; }
+    if (i > 0 && strcmp(names[i - 1], names[i]) >= 0) { printf("table not sorted at %s\n", names[i]); fails++; }
+  }
+
   if (fails) { printf("%d failure(s)\n", fails); return 1; }
   printf("runtime_test: all passed\n");
   return 0;

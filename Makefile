@@ -182,6 +182,7 @@ darwin-abi:
 	clang -arch arm64 -Wall -Werror tools/android/darwin_abi_gen.c -o $(BUILD)/tools/darwin_abi_gen
 	$(BUILD)/tools/darwin_abi_gen header > android/launcher/darwin/darwin_abi.h
 	$(BUILD)/tools/darwin_abi_gen ctype > android/launcher/darwin/darwin_ctype.inc
+	$(BUILD)/tools/darwin_abi_gen strerror > android/launcher/darwin/darwin_strerror.inc
 android-sdk:
 	bash tools/android/fetch_sdk.sh "$(ANDROID_SDK)"
 llvm-runtimes:
