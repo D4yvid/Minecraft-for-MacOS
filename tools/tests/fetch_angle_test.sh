@@ -26,4 +26,12 @@ codesign -v "$T/out/libEGL.dylib" 2>/dev/null || { echo "FAIL: libEGL not validl
 ANGLE_URL="$URL" ANGLE_SHA256="0000" bash "$ROOT/tools/launcher/fetch_angle.sh" "$T/bad" >/dev/null 2>&1 \
   && { echo "FAIL: wrong checksum accepted"; fails=$((fails+1)); }
 ls "$T/bad"/*.dylib >/dev/null 2>&1 && { echo "FAIL: files left after checksum failure"; fails=$((fails+1)); }
+# An archive without the two libraries: refused with a message, nothing left behind.
+mkdir -p "$T/empty/Electron.app"; echo x > "$T/empty/Electron.app/README"
+(cd "$T/empty" && zip -qry "$T/empty.zip" Electron.app)
+ESUM="$(shasum -a 256 "$T/empty.zip" | awk '{print $1}')"
+ANGLE_URL="file://${T// /%20}/empty.zip" ANGLE_SHA256="$ESUM" bash "$ROOT/tools/launcher/fetch_angle.sh" "$T/none" 2>"$T/err" >/dev/null \
+  && { echo "FAIL: archive without libraries accepted"; fails=$((fails+1)); }
+grep -q "has no" "$T/err" || { echo "FAIL: no message for missing libraries: $(cat "$T/err")"; fails=$((fails+1)); }
+[ -e "$T/none" ] && { echo "FAIL: output directory created for a bad archive"; fails=$((fails+1)); }
 [ $fails = 0 ] && echo "fetch_angle_test: passed" || { echo "$fails failure(s)"; exit 1; }

@@ -11,7 +11,7 @@ bash tools/tests/launcher_fixture.sh "$T" >/dev/null || { echo "FAIL: fixture"; 
 python3 -I tools/launcher/mcfm_image.py imports "$T/fixture" > "$T/imports.tsv"
 bash tools/launcher/build_stubs.sh "$T/imports.tsv" "$T" >/dev/null
 python3 -I tools/launcher/mcfm_image.py dylib "$T/fixture" "$T/libminecraftpe.dylib"
-codesign -f -s - "$T/libminecraftpe.dylib" 2>/dev/null
+codesign -f -s - "$T/libminecraftpe.dylib" 2>/dev/null || { echo "FAIL: codesign"; exit 1; }
 fails=0
 OUT="$(MCFM_CENSUS="$T/census.txt" "$BIN" "$T/libminecraftpe.dylib" 2>&1)"; rc=$?
 [ $rc = 3 ] || { echo "FAIL: fixture image: exit $rc, want 3: $OUT"; fails=$((fails+1)); }

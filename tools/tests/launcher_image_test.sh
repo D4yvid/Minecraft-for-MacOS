@@ -11,7 +11,7 @@ fails=0
 "${TOOL[@]}" imports "$T/fixture" > "$T/imports.tsv" || { echo "FAIL: imports"; exit 1; }
 bash "$ROOT/tools/launcher/build_stubs.sh" "$T/imports.tsv" "$T" || { echo "FAIL: stubs"; exit 1; }
 "${TOOL[@]}" dylib "$T/fixture" "$T/libminecraftpe.dylib" || { echo "FAIL: dylib exited $?"; exit 1; }
-codesign -f -s - "$T/libminecraftpe.dylib" 2>/dev/null
+codesign -f -s - "$T/libminecraftpe.dylib" 2>/dev/null || { echo "FAIL: codesign"; exit 1; }
 HDR="$(otool -hv "$T/libminecraftpe.dylib")"; CMDS="$(otool -l "$T/libminecraftpe.dylib")"; LIBS="$(otool -L "$T/libminecraftpe.dylib")"
 grep -q " DYLIB " <<<"$HDR" || { echo "FAIL: not MH_DYLIB"; fails=$((fails+1)); }
 grep -q " PIE" <<<"$HDR" && { echo "FAIL: PIE flag kept"; fails=$((fails+1)); }

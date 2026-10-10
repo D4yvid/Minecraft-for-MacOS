@@ -13,7 +13,7 @@ printf 'fixture_answer\t%s\n' "$ADDR" > "$T/hooks.tsv"
 "${TOOL[@]}" imports "$T/fixture" > "$T/imports.tsv"
 bash "$ROOT/tools/launcher/build_stubs.sh" "$T/imports.tsv" "$T" >/dev/null
 "${TOOL[@]}" dylib "$T/fixture" "$T/libminecraftpe.dylib" --hooks "$T/hooks.tsv" || { echo "FAIL: dylib --hooks exited $?"; exit 1; }
-codesign -f -s - "$T/libminecraftpe.dylib" 2>/dev/null
+codesign -f -s - "$T/libminecraftpe.dylib" 2>/dev/null || { echo "FAIL: codesign"; exit 1; }
 cat > "$T/host.cpp" <<'EOF'
 #include "hook_table.h"
 #include <dlfcn.h>

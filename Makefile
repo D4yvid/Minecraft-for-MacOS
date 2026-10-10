@@ -100,7 +100,7 @@ angle:
 .PHONY: launcher launcher-check
 launcher: $(LAUNCHER_BIN)
 	@test -n "$(GAME)" || { echo "Set GAME=<your decrypted minecraftpe2.app> (or put it in config.mk)"; exit 1; }
-	@test -f "$(ANGLE_DIR)/libGLESv2.dylib" || { echo "Run make angle first (downloads ANGLE)"; exit 1; }
+	@test -f "$(ANGLE_DIR)/libGLESv2.dylib" -a -f "$(ANGLE_DIR)/libEGL.dylib" || { echo "Run make angle first (downloads ANGLE)"; exit 1; }
 	bash macos/tools/make_launcher.sh "$(GAME)" "$(LAUNCHER_OUT)" "$(LAUNCHER_BIN)" "$(ANGLE_DIR)"
 
 # Loads the image built by make launcher; the census lists every stub the game called.
@@ -219,6 +219,7 @@ test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
 	bash tools/tests/mcfm_launch_test.sh
 	bash tools/tests/launcher_hooks_test.sh
 	bash tools/tests/launcher_converter_edges_test.sh
+	bash tools/tests/thin_arm64_test.sh
 	bash tools/tests/launcher_provider_test.sh
 	bash tools/tests/fetch_angle_test.sh
 	$(MAKE) --no-print-directory $(BUILD)/test/screenshot_test && $(BUILD)/test/screenshot_test "$$(mktemp -d)/shot.ppm"
