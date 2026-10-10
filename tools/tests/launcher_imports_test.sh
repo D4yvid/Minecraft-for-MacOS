@@ -9,6 +9,7 @@ fails=0
 expect() { grep -qxF "$1" <<<"$OUT" || { echo "FAIL: missing line: $1"; fails=$((fails+1)); }; }
 expect $'FakeKit\t_fakekit_hello\tfn'
 expect $'FakeKit\t_kFakeKitValue\tdata'
+expect $'FakeKit\t_fakekit_callback\tfn'   # function pointer stored in data
 expect $'libobjc\t_objc_msgSend\tfn'
 expect $'libobjc\t_OBJC_CLASS_$_NSObject\tdata'
 expect $'libobjc\t_OBJC_METACLASS_$_NSObject\tdata'

@@ -8,6 +8,7 @@ OUT="$1"; mkdir -p "$OUT"
 CC=(clang -arch arm64 -mmacosx-version-min=11.0)
 cat > "$OUT/fakekit.c" <<'EOF'
 int fakekit_hello(void) { return 1; }
+int fakekit_callback(void) { return 2; }
 char kFakeKitValue[16] = "real";
 EOF
 "${CC[@]}" -dynamiclib "$OUT/fakekit.c" \
@@ -16,6 +17,9 @@ cat > "$OUT/fixture.m" <<'EOF'
 #import <objc/NSObject.h>
 int fakekit_hello(void);
 extern char kFakeKitValue[16];
+int fakekit_callback(void);
+// Reached only through a data pointer (like a callback table): bound in __const, not lazily.
+int (*const fixture_callbacks[])(void) = {fakekit_callback};
 @interface MCFMFixture : NSObject
 @end
 @implementation MCFMFixture

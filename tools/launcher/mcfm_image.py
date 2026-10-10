@@ -15,9 +15,11 @@ import sys
 # Libraries the image binds to the host system; everything else gets a generated stub.
 HOST_LIBS = ("libSystem", "libc++", "libz")
 
-# Non-lazy imports that are data, not functions (constants, ObjC classes, globals).
+# Names of imports that are data, not functions (constants, ObjC classes, globals). A
+# non-lazy import is data only if its name matches or it is bound in ObjC/CFString metadata;
+# anything else is a function (a function stub is safe to read, a data stub crashes if called).
 DATA_NAME = re.compile(
-    r"^_(k[A-Z]\w*|OBJC_\w+|_objc_empty_cache|__CFConstantStringClassReference"
+    r"^_(k[A-Z]\w*|OBJC_\w+|_objc_empty_\w+|__CFConstantStringClassReference"
     r"|NS\w*(Key|Domain|Notification|Mode)|UI\w*(Notification|Key|Invalid|Image)"
     r"|GC\w*Notification|AVAudioSessionCategory\w*|CGRectZero|_NSConcrete\w+)$")
 
@@ -51,7 +53,8 @@ def list_imports(path):
             continue
         key = (lib, sym)
         lazy = f[3] == "lazy-bind"
-        data = not lazy and (f[1] != "__got" or DATA_NAME.match(sym) is not None)
+        metadata = f[1].startswith("__objc_") or f[1] == "__cfstring"
+        data = not lazy and (metadata or DATA_NAME.match(sym) is not None)
         if lazy or kinds.get(key) == "fn":
             kinds[key] = "fn"
         else:
