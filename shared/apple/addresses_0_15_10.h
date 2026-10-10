@@ -49,5 +49,7 @@ constexpr uintptr_t kFnGraphicsExtensions = 0x10003A908;
 constexpr int kAppSlotUpdate = 19;                         // App::update()
 // Seams (hooked by the launcher)
 constexpr uintptr_t kFnXblAppConfig = 0x100798B34;         // Xbox services config singleton (seam #3)
+constexpr uintptr_t kFnCreateStores = 0x100711774;         // StoreFactory::createStores, iOS (seam #2)
+constexpr uintptr_t kFnTelemetryUpload = 0x1003B42A8;      // posts a telemetry event batch via the iOS HTTP glue (seam #1)
 
 }  // namespace addr

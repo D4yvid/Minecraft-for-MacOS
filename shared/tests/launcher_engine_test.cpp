@@ -71,6 +71,38 @@ int main() {
   SharedPtrOut c1 = reinterpret_cast<SharedPtrOut (*)()>(h[0].replacement)();
   SharedPtrOut c2 = reinterpret_cast<SharedPtrOut (*)()>(h[0].replacement)();
   EXPECT(c1.ptr != nullptr && c1.ctrl == nullptr && c1.ptr == c2.ptr);
+  // Seam #2: StoreFactory::createStores returns one null store (no Objective-C, licensed).
+  const Hook *store_hook = nullptr;
+  for (size_t i = 0; i < n; i++) if (std::strcmp(h[i].name, "create_stores") == 0) store_hook = &h[i];
+  EXPECT(store_hook && store_hook->address == 0x100711774);
+  if (store_hook) {
+    struct StoreVectorOut { void **begin, **end, **cap; ~StoreVectorOut() {} };  // std::vector ABI
+    static bool initialized_called = false, initialized_value = true;
+    struct Listener { static void on_initialized(void *, bool ok) { initialized_called = true; initialized_value = ok; } };
+    void *listener_vtable[3] = {nullptr, nullptr, reinterpret_cast<void *>(&Listener::on_initialized)};
+    void *listener = listener_vtable;
+    void *listener_obj = &listener;
+    StoreVectorOut v = reinterpret_cast<StoreVectorOut (*)(void *, void *)>(store_hook->replacement)(nullptr, listener_obj);
+    EXPECT(v.end - v.begin == 1);
+    EXPECT(initialized_called && !initialized_value);
+    void *store = v.begin[0];
+    void **svt = *static_cast<void ***>(store);
+    EXPECT(!reinterpret_cast<bool (*)(void *)>(svt[10])(store));   // isTrial
+    EXPECT(reinterpret_cast<bool (*)(void *)>(svt[12])(store));    // isGameLicensed
+    EXPECT(!reinterpret_cast<bool (*)(void *)>(svt[2])(store));    // requiresRestorePurchasesButton
+    EXPECT(reinterpret_cast<std::string (*)(void *)>(svt[4])(store) == "mcfm-null");  // getStoreId
+    EXPECT(reinterpret_cast<std::string (*)(void *)>(svt[13])(store).empty());       // getAppReceipt
+    std::vector<std::string> ids(1, "x");
+    reinterpret_cast<void (*)(void *, const void *)>(svt[5])(store, &ids);           // queryProducts: no-op
+    reinterpret_cast<void (*)(void *)>(svt[1])(store);                               // deleting destructor
+    ::operator delete(v.begin);
+  }
+  // Seam #1: the only engine use of the iOS HTTP glue is the telemetry event-batch upload,
+  // which is dropped: the hook is a no-op.
+  const Hook *upload = nullptr;
+  for (size_t i = 0; i < n; i++) if (std::strcmp(h[i].name, "telemetry_upload") == 0) upload = &h[i];
+  EXPECT(upload && upload->address == 0x1003B42A8);
+  if (upload) reinterpret_cast<void (*)(void *, void *)>(upload->replacement)(nullptr, nullptr);
   if (fails) { std::printf("%d failure(s)\n", fails); return 1; }
   std::printf("launcher_engine_test: all passed\n");
   return 0;
