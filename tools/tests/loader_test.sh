@@ -17,4 +17,7 @@ DYLD_NO_WEAK="$(head -n $(( $(wc -l <<<"$DYLD") - WEAK )) <<<"$DYLD")"
 [ "$(grep -v '^weak-bind ' <<<"$OURS" | sort)" = "$(sort <<<"$DYLD_NO_WEAK")" ] \
   || { echo "FAIL: rebases/binds differ from dyld_info"; diff <(grep -v '^weak-bind ' <<<"$OURS" | sort) <(sort <<<"$DYLD_NO_WEAK") | head; fails=$((fails+1)); }
 grep -q '^weak-bind .*/__Znwm$' <<<"$OURS" || { echo "FAIL: weak bind of operator new missing"; fails=$((fails+1)); }
+# 2. load_image with a fake OS: every fixup slot, weak binds, hooks, unwind, errors.
+make -s build/test/loader_core_test >/dev/null || { echo "FAIL: build loader_core_test"; exit 1; }
+build/test/loader_core_test "$T/libminecraftpe.dylib" "$T/symbols.txt" || fails=$((fails+1))
 [ $fails = 0 ] && echo "loader_test: passed" || { echo "$fails failure(s)"; exit 1; }

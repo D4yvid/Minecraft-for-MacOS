@@ -232,18 +232,22 @@ $(BUILD)/test/mouse_math_test: macos/tests/mouse_math_test.cpp macos/launcher/mo
 	@mkdir -p $(dir $@)
 	clang++ -std=c++17 -Wall -O1 -Imacos/launcher macos/tests/mouse_math_test.cpp -o $@
 
-LOADER_SRCS := shared/loader/macho_file.cpp shared/loader/fixups.cpp
+LOADER_SRCS := shared/loader/macho_file.cpp shared/loader/fixups.cpp shared/loader/loader.cpp shared/apple/hook_table.cpp
 $(BUILD)/test/macho_file_test: shared/tests/macho_file_test.cpp $(LOADER_SRCS) $(wildcard shared/loader/*.h)
 	@mkdir -p $(dir $@)
-	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=address -Ishared/loader shared/tests/macho_file_test.cpp $(LOADER_SRCS) -o $@
+	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=address -Ishared/loader -Ishared/apple shared/tests/macho_file_test.cpp $(LOADER_SRCS) -o $@
 
 $(BUILD)/test/macho_fixups_test: shared/tests/macho_fixups_test.cpp $(LOADER_SRCS) $(wildcard shared/loader/*.h)
 	@mkdir -p $(dir $@)
-	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=address -Ishared/loader shared/tests/macho_fixups_test.cpp $(LOADER_SRCS) -o $@
+	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=address -Ishared/loader -Ishared/apple shared/tests/macho_fixups_test.cpp $(LOADER_SRCS) -o $@
 
 $(BUILD)/test/fixups_dump: tools/loader/fixups_dump.cpp $(LOADER_SRCS) $(wildcard shared/loader/*.h)
 	@mkdir -p $(dir $@)
-	clang++ -std=c++11 -Wall -O1 -Ishared/loader tools/loader/fixups_dump.cpp $(LOADER_SRCS) -o $@
+	clang++ -std=c++11 -Wall -O1 -Ishared/loader -Ishared/apple tools/loader/fixups_dump.cpp $(LOADER_SRCS) -o $@
+
+$(BUILD)/test/loader_core_test: shared/tests/loader_core_test.cpp shared/tests/macho_builder.h $(LOADER_SRCS) $(wildcard shared/loader/*.h)
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=address -Ishared/loader -Ishared/apple shared/tests/loader_core_test.cpp $(LOADER_SRCS) -o $@
 
 $(BUILD)/test/titlebar_test: macos/tests/titlebar_test.cpp macos/src/titlebar_zone.h
 	@mkdir -p $(dir $@)
