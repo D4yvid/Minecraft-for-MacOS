@@ -226,3 +226,26 @@ main-thread jobs → `update()` → present".
 - **`dyld_stub_binder`** is no longer exported by macOS's libSystem; with every lazy pointer bound
   at load, nothing calls it (bound to 0). ✅
 - `make loader-check`: 95,676 fixup locations (91,698 rebases, 5,003 binds), 0 differences. ✅
+
+## Skins: the image picker (`pickImage`, AppPlatform slot 25)
+
+- The skin screen's "Choose New Skin" calls slot 25 `pickImage(callback)`; iOS
+  (`-[minecraftpeViewController pickSkinImage:]`) shows a photo picker, writes the picture as PNG
+  to `tmp/newSkin.png` and answers the `ImagePickingCallback` on the main queue (slot 2 with the
+  path, slot 3 when cancelled). `shared/launcher/app_platform.cpp` keeps the callback and calls
+  the host's picker (`set_image_picker`); the host answers with `image_picked` /
+  `image_pick_cancelled` on the engine's thread.
+- The launcher's engine thread is the main thread (the frame timer), and `pickImage` runs inside
+  a frame, so the picker cannot be modal there: a modal panel spins the run loop and the timer
+  (common modes) would run a frame inside the frame. `pickImage` only flags the request; after
+  `_engine.frame()` returns, an `NSOpenPanel` (`UTTypeImage`, any format ImageIO reads) opens as
+  a sheet on the game window, so the game keeps drawing behind it.
+- The chosen file is decoded with ImageIO (`CGImageSource`), not `NSImage`: `NSImage` sizes a
+  144-dpi picture in points and would halve a 64x32 skin. `NSBitmapImageRep` re-encodes it as PNG
+  (alpha kept) to `<temp dir>/newSkin.png` (`~/Library/Application Support/MinecraftPE-mcfm/tmp/`)
+  on a background queue; the answer goes to a mailbox (`PickMailbox`) and the next frame hands it
+  to the engine before `frame()`. A file that is not a picture answers "cancelled".
+  Host-tested: `macos/tests/image_pick_test.mm` (144-dpi TIFF and PNG keep their pixels and
+  transparency, a non-picture fails without leaving a file, the mailbox across threads).
+  `make check` passes; picking and cancelling in the game's skin screen is still to be tried by
+  hand. ⏳

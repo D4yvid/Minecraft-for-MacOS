@@ -16,7 +16,7 @@ SHARED_INC   := -Ishared/include -Ishared/apple
 SHARED_CORE  := shared/src/platform.cpp shared/src/win10_ui.cpp shared/src/keyboard_mouse.cpp
 SHARED_HEADERS := $(wildcard shared/include/mcfm/*.h shared/include/mcfm/*/*.h shared/apple/*.h)
 SHARED_TESTS := keymap_test input_state_test features_test launcher_app_platform_test launcher_engine_test hook_table_test macho_uuid_bounds_test launcher_uuid_race_test launcher_platform_test launcher_text_test macho_file_test macho_fixups_test
-MACOS_TESTS  := titlebar_test input_policy_test resize_math_test mac_keymap_test mouse_math_test
+MACOS_TESTS  := titlebar_test input_policy_test resize_math_test mac_keymap_test mouse_math_test image_pick_test
 
 # ---------------------------------------------------------------- macOS (Mac Catalyst) — DEPRECATED
 # The Catalyst build is a deprecated build mode, kept working: catalyst, catalyst-run,
@@ -88,13 +88,14 @@ LAUNCHER_SRCS := macos/launcher/main.mm shared/apple/macho_uuid.cpp shared/apple
                  shared/launcher/app_platform.cpp shared/launcher/engine.cpp shared/launcher/seams.cpp shared/launcher/text_input.cpp \
                  shared/launcher/launcher_platform.cpp macos/launcher/input.mm macos/launcher/mac_keymap.cpp \
                  shared/src/keyboard_mouse.cpp shared/src/platform.cpp shared/src/keymap.cpp \
-                 shared/loader/macho_file.cpp shared/loader/fixups.cpp shared/loader/loader.cpp macos/launcher/loader_macos.cpp
+                 shared/loader/macho_file.cpp shared/loader/fixups.cpp shared/loader/loader.cpp macos/launcher/loader_macos.cpp macos/launcher/image_pick.mm
 LAUNCHER_CXXFLAGS := -arch arm64 -mmacosx-version-min=11.0 -std=c++17 -fobjc-arc -O2 -Wall -Wextra \
                      -Wno-unused-parameter -Ishared/apple -Ishared/launcher -Ishared/loader -Imacos/launcher $(SHARED_INC)
 
 $(LAUNCHER_BIN): $(LAUNCHER_SRCS) $(SHARED_HEADERS) $(wildcard shared/launcher/*.h shared/loader/*.h macos/launcher/*.h)
 	@mkdir -p $(dir $@)
 	clang++ $(LAUNCHER_CXXFLAGS) $(LAUNCHER_SRCS) -framework AppKit -framework QuartzCore -framework GameController \
+	  -framework ImageIO -framework UniformTypeIdentifiers \
 	  -Wl,-rpath,@executable_path -o $@
 
 LAUNCHER_OUT ?= $(CURDIR)/dist/launcher
@@ -394,6 +395,11 @@ $(BUILD)/test/audio_toolbox_test: macos/tests/audio_toolbox_test.cpp
 $(BUILD)/test/mouse_math_test: macos/tests/mouse_math_test.cpp macos/launcher/mouse_math.h
 	@mkdir -p $(dir $@)
 	clang++ -std=c++17 -Wall -O1 -Imacos/launcher macos/tests/mouse_math_test.cpp -o $@
+
+$(BUILD)/test/image_pick_test: macos/tests/image_pick_test.mm macos/launcher/image_pick.mm macos/launcher/image_pick.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++17 -fobjc-arc -Wall -O1 -Imacos/launcher macos/tests/image_pick_test.mm macos/launcher/image_pick.mm \
+	  -framework Foundation -framework AppKit -framework ImageIO -framework UniformTypeIdentifiers -o $@
 
 $(BUILD)/test/macho_file_test: shared/tests/macho_file_test.cpp $(LOADER_SRCS) $(LOADER_HDRS)
 	@mkdir -p $(dir $@)
