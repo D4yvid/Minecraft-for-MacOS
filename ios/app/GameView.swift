@@ -9,10 +9,12 @@ import UniformTypeIdentifiers
 final class GameView: UIView, UIKeyInput {
     override class var layerClass: AnyClass { CAMetalLayer.self }
 
-    private var eglReady = false
+    private var eglReady = false, eglFailed = false
     private(set) var pixelWidth: Int32 = 0, pixelHeight: Int32 = 0
     /// The drawable changed size: (width, height) in pixels.
     var onResize: ((Int32, Int32) -> Void)?
+    /// ANGLE cannot draw into the view (called once; it is not tried again).
+    var onGraphicsFailure: (() -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -34,11 +36,16 @@ final class GameView: UIView, UIKeyInput {
         super.layoutSubviews()
         var w: Int32 = 0, h: Int32 = 0
         mcfm_ios_pixel_size(Double(bounds.width), Double(bounds.height), Double(contentScaleFactor), &w, &h)
-        guard w > 0 && h > 0 else { return }
+        guard w > 0 && h > 0 && !eglFailed else { return }
+        // bounds x scale, as ANGLE keeps it (ios/launcher/layout.h): never another shape.
         (layer as! CAMetalLayer).drawableSize = CGSize(width: CGFloat(w), height: CGFloat(h))
         if !eglReady {
             eglReady = mcfm_ios_egl_init(Unmanaged.passUnretained(layer).toOpaque()) != 0
-            if !eglReady { return }
+            if !eglReady {
+                eglFailed = true
+                onGraphicsFailure?()
+                return
+            }
         }
         checkSize()
     }
@@ -91,6 +98,9 @@ final class GameView: UIView, UIKeyInput {
 
     // MARK: Keys and text. The view stays first responder so hardware keys always arrive; the
     // soft keyboard shows only while the game has a text box open (an empty input view hides it).
+    // While a text box is open the launcher hands hardware presses back to UIKit too
+    // (ios/launcher/ios_keys.h): UIKit types into this UIKeyInput only for presses that reach
+    // super, through insertText / deleteBackward, Return as insertText("\n") (Enter once).
 
     private let noKeyboard = UIView(frame: .zero)
     private var softKeyboard = false
@@ -103,24 +113,27 @@ final class GameView: UIView, UIKeyInput {
         if !isFirstResponder { becomeFirstResponder() }
     }
 
-    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        var unhandled = Set<UIPress>()
-        for p in presses {
-            if let key = p.key { mcfm_ios_key(Int32(key.keyCode.rawValue), 1) } else { unhandled.insert(p) }
+    /// The engine gets each key press; the result is the presses UIKit gets too.
+    private func feed(_ presses: Set<UIPress>, down: Bool) -> Set<UIPress> {
+        presses.filter { p in
+            guard let key = p.key else { return true }
+            return mcfm_ios_key(Int32(key.keyCode.rawValue), down ? 1 : 0) != 0
         }
-        super.pressesBegan(unhandled, with: event)
+    }
+
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        let rest = feed(presses, down: true)
+        if !rest.isEmpty { super.pressesBegan(rest, with: event) }
     }
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        var unhandled = Set<UIPress>()
-        for p in presses {
-            if let key = p.key { mcfm_ios_key(Int32(key.keyCode.rawValue), 0) } else { unhandled.insert(p) }
-        }
-        super.pressesEnded(unhandled, with: event)
+        let rest = feed(presses, down: false)
+        if !rest.isEmpty { super.pressesEnded(rest, with: event) }
     }
 
     override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        pressesEnded(presses, with: event)
+        let rest = feed(presses, down: false)
+        if !rest.isEmpty { super.pressesCancelled(rest, with: event) }
     }
 
     var hasText: Bool { true }  // backspace reaches the game's text even before anything is typed here

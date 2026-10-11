@@ -37,19 +37,36 @@ Our own Swift iOS app running the game's iOS image ([LAUNCHER.md](../LAUNCHER.md
 - Metal display (`EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE`), window surface on the view's
   `CAMetalLayer` (`drawableSize` = the native pixel size): the title screen at 2868×1320, full
   screen, no status bar, 60 fps target (`CADisplayLink`). ✅
+- The drawable is the view's bounds × scale in the view's own shape, never swapped to landscape:
+  ANGLE's `WindowSurfaceMtl::checkIfLayerResized` (in the dylib) sets the layer's `drawableSize`
+  to bounds × `contentsScale` itself, so any other shape is stretched or replaced a frame later.
+  The app is landscape-only and iPhone-only (`UIDeviceFamily` 1) until the iPad is tested;
+  `UIRequiredDeviceCapabilities` asks for `metal`.
+- ANGLE is tried once: if it cannot start, its objects are released and the app shows why it
+  cannot run (no splash forever).
 
 ## Lifecycle, input
 - At launch the first drawable comes before the scene is active: the engine starts, pauses
   (`suspend`, saves), and resumes when the scene becomes active; the app reads the scene's real
   state after starting. Frames stop while inactive (no GL in the background). ✅
+- Leaving: suspend (the save) inside a `beginBackgroundTask`, then `glFinish`; nothing but
+  resume reaches a suspended engine (`ios/launcher/lifecycle.h`, as on Android, where a resize
+  while suspended crashed): a new drawable size is applied after resume, before focus. The
+  screen does not auto-lock while the game is active (`isIdleTimerDisabled`). The audio session
+  is activated again when an interruption (a call, an alarm) ends.
 - Touch: per-finger ids (`UITouch` → small integers), pixels, through the shared
   `touch_input` to `Multitouch::feed` (Play → Create a World by touch). ✅
 - Keyboard: the view is always first responder (hardware keys via `pressesBegan`, HID usage →
   VK, `ios_keymap`); the soft keyboard is shown by swapping an empty input view; return
-  presses Enter as iOS's `textViewShouldReturn`. ❓ (hand checklist)
-- Skins: `PHPickerViewController` → PNG in the game's temp dir → `image_picked`. ❓
+  presses Enter as iOS's `textViewShouldReturn`. UIKit types into a `UIKeyInput` only for
+  presses that reach `super`: while a text box is open every press goes to `super` too (its
+  characters come through `insertText` / `deleteBackward`, hardware Return as
+  `insertText("\n")`, one Enter) and the engine gets only Escape; otherwise the engine gets
+  them all (`ios/launcher/ios_keys.h`, as the macOS launcher). ❓ (hand checklist)
+- Skins: `PHPickerViewController` → PNG in the app's tmp → `image_picked`. ❓
 - The game's home is `Documents` (as the original iOS game); `UIFileSharingEnabled` and
-  `LSSupportsOpeningDocumentsInPlace` show worlds in the Files app. ❓
+  `LSSupportsOpeningDocumentsInPlace` show worlds in the Files app. The game's temp dir is the
+  app's tmp (`NSTemporaryDirectory`, not shown in Files; the old `Documents/tmp` is removed). ❓
 - Loading takes a second or two: a splash (the game's name and a spinner) covers the view until
   the first frame; the game starts one run loop turn after it is on screen. ✅
 
@@ -58,6 +75,9 @@ Our own Swift iOS app running the game's iOS image ([LAUNCHER.md](../LAUNCHER.md
   has the Personal Team chosen (`com.mojang.*` cannot be registered by a free team). The build
   signs every dylib in `Frameworks/`, then the app with the profile's entitlements
   (`ios/tools/signing.sh`). The first launch needs the developer trusted on the device. ✅
+- The identity is the keychain's one whose certificate (SHA-1 of its DER) is among the profile's
+  `DeveloperCertificates`, not the first "Apple Development" one: with several teams or a renewed
+  certificate the first may not match the profile, and iOS refuses the install. ✅
 - `xcodebuild` cannot pick the team by itself (no cached team id until Xcode used it once); the
   team id is read from the project after the owner chooses it.
 - A hidden failed install showed up as "invalid code signature … not trusted" at launch;

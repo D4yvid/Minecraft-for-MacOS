@@ -18,9 +18,10 @@
 #include "app_platform.h"
 #include "engine.h"
 #include "hook_table.h"
-#include "ios_keymap.h"
+#include "ios_keys.h"
 #include "launcher_platform.h"
 #include "layout.h"
+#include "lifecycle.h"
 #include "macho_uuid.h"
 #include "mcfm_ios.h"
 #include "seams.h"
@@ -33,12 +34,18 @@ namespace {
 
 McfmIosCallbacks g_callbacks;
 uintptr_t g_slide = 0;
-bool g_found = false, g_hooks_ok = false, g_started = false, g_suspended = false, g_paused = false;
+bool g_found = false, g_hooks_ok = false, g_started = false, g_text_mode = false;
 TouchSlots g_touches;
+IosKeys g_keys;
 
 Engine &engine() {
   static Engine e;
   return e;
+}
+
+Lifecycle<Engine> &life() {
+  static Lifecycle<Engine> l(engine());
+  return l;
 }
 
 void fatal(const std::string &message) {
@@ -73,27 +80,17 @@ bool file_is_game(const std::string &path) {
   return head.size() >= 32 && mcfm::is_expected_game_image(head.data(), head.size());
 }
 
-void show_keyboard(const std::string &) { if (g_callbacks.show_keyboard) g_callbacks.show_keyboard(); }
-void hide_keyboard() { if (g_callbacks.hide_keyboard) g_callbacks.hide_keyboard(); }
+void show_keyboard(const std::string &) {
+  g_text_mode = true;
+  if (g_callbacks.show_keyboard) g_callbacks.show_keyboard();
+}
+void hide_keyboard() {
+  g_text_mode = false;
+  if (g_callbacks.hide_keyboard) g_callbacks.hide_keyboard();
+}
 void pick_image() {
   if (g_callbacks.pick_image) g_callbacks.pick_image();
   else image_pick_cancelled();
-}
-
-// Suspend saves; resume comes before focus (as on Android: the engine must be resumed before it
-// hears of focus).
-void sync_pause() {
-  if (!g_started) return;
-  if (g_paused && !g_suspended) {
-    engine().focus_lost();
-    engine().suspend();
-    g_suspended = true;
-    std::fprintf(stderr, "mcfm: paused (saved)\n");
-  } else if (!g_paused && g_suspended) {
-    engine().resume();
-    engine().focus_gained();
-    g_suspended = false;
-  }
 }
 
 uintptr_t text_queue() { return addr::kKeyboardText + g_slide; }
@@ -121,9 +118,13 @@ int mcfm_ios_start(const char *image_path, const char *data_dir, const char *hom
     return 0;
   }
   std::fprintf(stderr, "mcfm: game image loaded (slide 0x%lx)\n", static_cast<unsigned long>(g_slide));
-  HostInfo info = make_host_info(home, data_dir, home + "/tmp");
-  info.input_mode = 2;  // touch; hardware keys still work
+  // Worlds and options in Documents (the Files app shows them); the game's temp files (and a
+  // picked skin) in the app's own tmp, which Files does not show. Builds before 2026-10-11 used
+  // Documents/tmp: it goes.
   NSFileManager *fm = NSFileManager.defaultManager;
+  [fm removeItemAtPath:@((home + "/tmp").c_str()) error:nil];
+  HostInfo info = make_host_info(home, data_dir, NSTemporaryDirectory().stringByStandardizingPath.UTF8String);
+  info.input_mode = 2;  // touch; hardware keys still work
   for (const std::string &d : {info.internal_dir, info.userdata_dir, info.temp_dir})
     [fm createDirectoryAtPath:@(d.c_str()) withIntermediateDirectories:YES attributes:nil error:nil];
   set_keyboard_callbacks(KeyboardCallbacks{&show_keyboard, &hide_keyboard});
@@ -136,39 +137,31 @@ int mcfm_ios_start(const char *image_path, const char *data_dir, const char *hom
   mcfm::keyboard_mouse::install(platform, mcfm::keyboard_mouse::PointerCallbacks{nullptr, nullptr}, false);
   g_started = true;
   std::fprintf(stderr, "mcfm: engine started (%dx%d)\n", width_px, height_px);
-  sync_pause();  // a pause that came before the engine started
+  life().started();  // a pause that came before the engine started applies now
   return 1;
 }
 
 void mcfm_ios_frame(void) {
-  if (g_started && !g_suspended) engine().frame();
+  if (life().running()) engine().frame();
 }
 
-void mcfm_ios_resize(int width_px, int height_px) {
-  if (g_started) engine().resize(width_px, height_px);
-}
+void mcfm_ios_resize(int width_px, int height_px) { life().resize(width_px, height_px); }
 
-void mcfm_ios_pause(int paused) {
-  g_paused = paused != 0;
-  sync_pause();
-}
-
-void mcfm_ios_focus(int focused) {
-  if (!g_started || g_suspended) return;
-  focused ? engine().focus_gained() : engine().focus_lost();
-}
+void mcfm_ios_pause(int paused) { life().set_paused(paused != 0); }
 
 void mcfm_ios_touch(int action, int pointer, float x_px, float y_px) {
   typedef void (*MultitouchFeed)(int, int, int, int, int);
-  if (!g_started) return;
+  if (!life().running()) return;
   FeedCall f;
   if (touch_feed(&g_touches, static_cast<TouchAction>(action), pointer, x_px, y_px, &f))
     reinterpret_cast<MultitouchFeed>(addr::kMultitouchFeed + g_slide)(f.button, f.state, f.x, f.y, f.slot);
 }
 
-void mcfm_ios_key(int hid_usage, int down) {
-  int vk = ios_hid_to_vk(hid_usage);
-  if (g_started && vk) mcfm::keyboard_mouse::key(vk, down != 0);
+int mcfm_ios_key(int hid_usage, int down) {
+  if (!g_started) return 0;
+  KeyRoute r = g_keys.press(hid_usage, down != 0, g_text_mode);
+  if (r.vk && life().running()) mcfm::keyboard_mouse::key(r.vk, r.down);
+  return r.to_text ? 1 : 0;
 }
 
 void mcfm_ios_text(const char *utf8) {

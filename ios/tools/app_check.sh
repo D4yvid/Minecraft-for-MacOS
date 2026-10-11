@@ -14,9 +14,14 @@ export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Develope
 DEVICE="$(mcfm_find_device)"
 [ -n "$DEVICE" ] || { echo "app_check: no paired iPhone/iPad connected" >&2; exit 1; }
 mkdir -p "$OUT"
-fail() { echo "app_check: FAIL ($1)"; grep 'mcfm' "$OUT/ios-console.log" | grep -v 'mcfm: stub ' | tail -20; exit 1; }
+fail() {  # the console's last lines, if the app ran at all
+  echo "app_check: FAIL ($1)"
+  [ -f "$OUT/ios-console.log" ] && { grep 'mcfm' "$OUT/ios-console.log" | grep -v 'mcfm: stub ' | tail -20 || true; }
+  exit 1
+}
+# Never a stale console or screenshot: the app also deletes Documents/<screenshot> when it starts.
+rm -f "$OUT/ios-console.log" "$OUT/ios-shot.ppm" "$OUT/ios-shot.png"
 xcrun devicectl device install app --device "$DEVICE" "$APP" > "$OUT/ios-install.log" 2>&1 || { cat "$OUT/ios-install.log"; fail "install"; }
-rm -f "$OUT/ios-shot.ppm"
 # The console runs until the app exits (it does after the frames); 120 s at most.
 ( xcrun devicectl device process launch --console --terminate-existing --device "$DEVICE" "$BUNDLE_ID" \
     --frames 300 --screenshot shot.ppm > "$OUT/ios-console.log" 2>&1 ) &

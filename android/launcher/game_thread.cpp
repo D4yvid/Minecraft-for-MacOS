@@ -197,7 +197,9 @@ void run() {
     return;
   }
   static Engine engine;
-  bool started = false, paused = false, suspended = false, drawable = false;
+  // shown: the current window has had a frame (a new window, as a recreated activity's, has its
+  // own splash to dismiss).
+  bool started = false, paused = false, suspended = false, drawable = false, shown = false;
   int width = 0, height = 0;
   ANativeWindow *window = nullptr;
   TouchSlots touches;
@@ -232,6 +234,7 @@ void run() {
         if (window) ANativeWindow_release(window);
         window = wanted;
         drawable = window && attach_surface(window);
+        shown = false;
       } else if (wanted) {
         ANativeWindow_release(wanted);  // the same window resized: one reference is enough
       }
@@ -271,7 +274,6 @@ void run() {
     engine.frame();
     mcfm_darwin_drain_main_queue();
     if (eglSwapBuffers(egl.display, egl.surface)) {
-      static bool shown = false;
       if (!shown && g_callbacks.first_frame) g_callbacks.first_frame();  // the splash goes
       shown = true;
     } else {
