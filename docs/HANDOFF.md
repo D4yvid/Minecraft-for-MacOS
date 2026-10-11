@@ -274,8 +274,7 @@ runtime, persisted config, ordering/dependencies, C++11. Design it with the owne
   one-time macOS prompt for the re-signed app — ❓ unconfirmed). `make catalyst-check` reruns
   usually pass.
 - Catalyst: mouse look sign/speed (`kLookScale` in `macos/src/mac_input.mm`, dy sign) and
-  trackpad scroll units (`MCPEKBM_LOG_SCROLL=1` logs raw values; the variable still has the old
-  project's prefix) are untuned. The launcher's turn speed is `MCFM_LOOK_SCALE`.
+  trackpad scroll units (`MCFM_LOG_SCROLL=1` logs raw values) are untuned. The launcher's turn speed is `MCFM_LOOK_SCALE`.
 - Catalyst: title bar fade can jump if a resize happens mid-fade.
 - iOS (the app and the legacy mod) requires iOS 15+ (libc++ floor) though the game runs on
   older iOS.

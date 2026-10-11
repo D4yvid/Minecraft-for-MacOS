@@ -98,7 +98,7 @@ void attach_mouse(GCMouse *mouse) {
   in.rightButton.pressedChangedHandler = ^(GCControllerButtonInput *, float, BOOL p) { button(2, p); };
   in.middleButton.pressedChangedHandler = ^(GCControllerButtonInput *, float, BOOL p) { button(3, p); };
   in.scroll.yAxis.valueChangedHandler = ^(GCControllerAxisInput *, float v) {
-    if (getenv("MCPEKBM_LOG_SCROLL")) NSLog(@"mcfm: scroll %f", v);
+    if (getenv("MCFM_LOG_SCROLL")) NSLog(@"mcfm: scroll %f", v);
     int notches = gScroll.feed(v, CACurrentMediaTime());
     if (notches && feeds(mcfm::PointerEvent::Scroll)) kbm::mouse_wheel(notches, gX, gY);
   };
