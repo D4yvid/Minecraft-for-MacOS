@@ -171,7 +171,7 @@ our loader; fixture tests cover fixups, imports, initializers, exceptions and ho
    `mprotect`s it (verified on the API 28 emulator); our `.so` files are 16 KB aligned.
    Split: **3a** load the game and run its initializers on Android (loader, libc translation,
    Apple-ABI libc++, stubs; command-line test over adb); **3b** engine boot, EGL/GLES, audio;
-   **3c** our APK (Kotlin, built by make), window, input, text, IPA import.
+   **3c** our APK (Kotlin, built by make) with the game bundled, window, input, text.
 2. ☑ **libc translation layer** (Darwin ABI → bionic), `android/launcher/darwin/`: every
    libSystem symbol the game imports is in one sorted table (`symbols.cpp`: shimmed, bionic's,
    or the runtime's); numbers and layouts come from `darwin_abi.h`, generated from the macOS
@@ -201,10 +201,12 @@ our loader; fixture tests cover fixups, imports, initializers, exceptions and ho
    macOS launcher's AppPlatform code (`shared/launcher`) in `mcfm-run --boot` (headless GLES 3
    pbuffer; 3c draws into the app's window).
 5. ☑ Android platform layer: **our own APK** (`android/app/`, Kotlin; built from scratch by
-   `make android-app` with aapt2, kotlinc, d8, zipalign and apksigner, no Gradle, nothing from
-   Mojang's APK). `ImportActivity` imports the user's decrypted IPA (`Payload/*.app/minecraftpe2`
-   converted on the device by `shared/loader/convert.cpp`, byte-identical to `mcfm_image.py`,
-   and its `data/`); `GameActivity` hands its surface, lifecycle and input to a native render
+   `make android-app IPA=…` with aapt2, kotlinc, d8, zipalign and apksigner, no Gradle, nothing
+   from Mojang's APK): a launcher for the game bundled in it. The build puts the IPA's
+   `minecraftpe2` and `data/` in `assets/game/` (so the APK is a local build, never committed);
+   on first start (and after an update that brings another game) the app copies them out and
+   converts the binary on the device (`shared/loader/convert.cpp`, byte-identical to
+   `mcfm_image.py`). `GameActivity` hands its surface, lifecycle and input to a native render
    thread (`android/launcher/game_thread.cpp`) that owns EGL and the engine. Touch goes to
    `Multitouch::feed`; keys, a mouse and soft-keyboard text through `shared/` keyboard_mouse;
    custom skins through the system photo picker (`pickImage`);
@@ -224,12 +226,12 @@ Stage 3b acceptance (met 2026-10-10): `make android-frames-check` boots the game
 checked), FMOD plays through AAudio (24 kHz int16 stereo) and the options are saved on suspend.
 
 Stage 3c acceptance (met 2026-10-10): `make android-app` builds a signed, 16 KB-aligned APK
-(target SDK 37, min SDK 28, 14.5 MB); `make android-app-check` passes on Android 17 (16 KB
-pages) and Android 9 from a clean install: the IPA is imported on the device, the title screen
-renders in the window, touch taps create a world and it renders, the game saves in the
+(target SDK 37, min SDK 28, about 65 MB with the game); `make android-app-check` passes on
+Android 17 (16 KB pages) and Android 9 from a clean install: the first start prepares the bundled
+game, the title screen renders in the window, touch taps create a world and it renders, the game saves in the
 background and draws again after resuming (twice, then screen off and on; screenshots checked),
-a stale image is converted again, and a game that cannot start shows its message and leads to a
-new import without crashing. Text input, suggestions, back and a hardware keyboard were checked by
+a stale image is converted again, and a damaged copy shows its message without crashing and is
+prepared again on the next start. Text input, suggestions, back and a hardware keyboard were checked by
 hand on both.
 
 Acceptance: an APK (target SDK 37) that installs on Android 9+ arm64, including 16 KB-page
@@ -243,7 +245,8 @@ devices, imports a user-supplied IPA and plays — met by 3c.
 ## Decisions
 - 2026-10-10: the Android app is our own APK that launches the launcher `.so` (not a patched
   Mojang APK); the old Android mod's library is named `libmcfm.so` like everything else.
-- 2026-10-10: the Android app code (activity, IPA import, settings) is written in Kotlin; the
+- 2026-10-10: the APK always bundles the game (no import screen): the app is a launcher for it.
+- 2026-10-10: the Android app code (activity, game preparation, settings) is written in Kotlin; the
   launcher, loader and Darwin layer stay native (C++).
 - 2026-10-10: Android targets the latest SDK (37, 16 KB pages), minimum API 28; prebuilt APKs
   outside Google Play (replaces the earlier SDK 28 decision). Toolchain: NDK r27d (LLVM 18),

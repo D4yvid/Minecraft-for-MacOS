@@ -11,16 +11,21 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.provider.MediaStore
+import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
+import android.widget.FrameLayout
+import android.widget.TextView
 import java.io.File
 
 /**
- * The game, full screen: the native render thread draws into [GameView]. One per process
- * (singleTask): the native side runs one game, so after a fatal error the process ends.
+ * The app: a launcher for the game bundled in the APK. It prepares the game on first start (and
+ * after an update that brings another one), then runs it full screen: the native render thread
+ * draws into [GameView]. One per process (singleTask): the native side runs one game, so after
+ * a fatal error the process ends.
  */
 class GameActivity : Activity() {
     private companion object {
@@ -39,16 +44,36 @@ class GameActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         view = GameView(this)
-        setContentView(view)
+        val preparing = TextView(this).apply {
+            text = "Preparing the game…"
+            textSize = 18f
+            gravity = Gravity.CENTER
+        }
+        setContentView(FrameLayout(this).apply {
+            addView(view)
+            addView(preparing)
+        })
         view.requestFocus()
         Native.game = this
-        GameFiles.recover(this)
+        if (Build.VERSION.SDK_INT >= 33) back = BackGesture(this)  // older: KEYCODE_BACK in GameView
+        if (GameFiles.ready(this)) {
+            preparing.visibility = View.GONE
+            start()
+        } else {
+            GameFiles.prepare(this) { error ->
+                preparing.visibility = View.GONE
+                if (error == null) start() else showFatal(error)
+            }
+        }
+    }
+
+    /** The render thread: it draws once the game is prepared and the window exists. */
+    private fun start() {
         val game = GameFiles.game(this)
         // Worlds and options: internal storage (Android/data is out of reach of file managers and
         // adb on Android 11+ anyway); `adb shell run-as io.github.d4yvid.mcfm` reaches it.
         val home = GameFiles.home(this)
         Native.nativeStart(File(game, "minecraftpe.dylib").path, File(game, "data").path + "/", home.path)
-        if (Build.VERSION.SDK_INT >= 33) back = BackGesture(this)  // older: KEYCODE_BACK in GameView
     }
 
     override fun onResume() {
@@ -135,19 +160,16 @@ class GameActivity : Activity() {
     }
 
     /**
-     * The game cannot run (not imported, a bad image, no GLES 3): say why, offer a new import. The
-     * process ends either way: its one game is gone, and the import runs in its own process.
+     * The game cannot run (a damaged copy, no GLES 3): say why. The process ends: its one game is
+     * gone; the next start prepares the bundled game again.
      */
     fun showFatal(message: String) {
         if (isFinishing) return
+        GameFiles.forget(this)
         AlertDialog.Builder(this)
             .setTitle("Minecraft PE cannot start")
             .setMessage(message)
-            .setPositiveButton("Import again") { _, _ ->
-                startActivity(Intent(this, ImportActivity::class.java).putExtra(ImportActivity.EXTRA_REIMPORT, true))
-                end(false)
-            }
-            .setNegativeButton("Close") { _, _ -> end(true) }
+            .setPositiveButton("Close") { _, _ -> end(true) }
             .setCancelable(false)
             .show()
     }

@@ -1,21 +1,20 @@
 #!/bin/bash
-# usage: app_check.sh <mcfm-debug.apk> <minecraftpe2.ipa> <out dir>   (make android-app-check)
-# Stage 3c acceptance (docs/LAUNCHER.md) on the running emulator/device, from a clean install:
-# the app imports the IPA (the debuggable build's `path` extra, no picker), shows the title
-# screen, Play -> Create New World -> Create World! reaches a world (touch input), the game saves
-# when the app goes to the background and draws again when it comes back (twice, then the screen
-# off and on). Then: an image whose hooks changed is converted again from the kept binary, and a
-# game that cannot start shows its message (no crash) and "Import again" opens the import screen
-# in a new process. Screenshots: <out>/app-*.raw.
+# usage: app_check.sh <mcfm-debug.apk> <out dir>   (make android-app-check)
+# Stage 3c acceptance (docs/LAUNCHER.md) on the running emulator/device, from a clean install of
+# the app with its bundled game: the first start prepares the game, the title screen shows,
+# Play -> Create New World -> Create World! reaches a world (touch input), the game saves when the
+# app goes to the background and draws again when it comes back (twice, then the screen off and
+# on). Then: an image whose hooks changed is converted again from the kept binary, and a damaged
+# copy shows its message (no crash), "Close" ends the process and the next start prepares the game
+# again. Screenshots: <out>/app-*.raw.
 # The taps are fractions of the screen, measured on the game's GUI at 1280x720 (the emulators).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-APK="$1"; IPA="$2"; OUT="$3"
+APK="$1"; OUT="$2"
 SDK="${ANDROID_SDK:-$HOME/Library/Android/sdk}"
 ADB="$SDK/platform-tools/adb"
 PKG=io.github.d4yvid.mcfm
 [ -f "$APK" ] || { echo "app_check: no APK at $APK (make android-app)" >&2; exit 2; }
-[ -f "$IPA" ] || { echo "app_check: no IPA at $IPA (make android-app-check IPA=<decrypted minecraftpe .ipa>)" >&2; exit 2; }
 mkdir -p "$OUT"
 fail() { echo "app_check: FAIL ($1)"; "$ADB" logcat -d -s mcfm:I AndroidRuntime:E DEBUG:F libc:F | grep -v 'mcfm: stub ' | tail -30; exit 1; }
 log() { "$ADB" logcat -d -s mcfm:I AndroidRuntime:E DEBUG:F libc:F 2>/dev/null; }
@@ -49,6 +48,7 @@ wait_focus() {  # [activity, default GameActivity]
   done
   fail "${1:-the game} did not come to the front"
 }
+launch() { "$ADB" shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "$PKG/.GameActivity" >/dev/null; }
 # ui_tap <text>: taps the view showing <text> (uiautomator; for the app's own dialogs).
 ui_tap() {
   "$ADB" shell uiautomator dump /data/local/tmp/mcfm-ui.xml >/dev/null 2>&1
@@ -68,7 +68,7 @@ cycle() {
   local name="$1"; shift
   "$ADB" logcat -c
   for k in "$@"; do "$ADB" shell input keyevent "$k"; sleep 2; done
-  case "$name" in home*) "$ADB" shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "$PKG/.ImportActivity" >/dev/null ;; esac
+  case "$name" in home*) launch ;; esac
   log | grep -q 'mcfm: paused (saved)' || fail "no save when the app left the screen ($name)"
   wait_focus
   sleep 3
@@ -84,16 +84,11 @@ echo "app_check: installing $(basename "$APK") on $("$ADB" shell getprop ro.buil
 "$ADB" shell "run-as $PKG true" 2>/dev/null || fail "$(basename "$APK") is not debuggable (make android-app-debug)"
 "$ADB" shell pm clear "$PKG" >/dev/null  # a fresh install: no game, no worlds
 "$ADB" shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null  # e.g. an old crash dialog
-# The IPA goes through /data/local/tmp (exec-in into run-as drops bytes); the app reads it there.
-"$ADB" push "$IPA" /data/local/tmp/mcfm-import.ipa >/dev/null 2>&1
-"$ADB" shell "run-as $PKG sh -c 'mkdir -p cache && cp /data/local/tmp/mcfm-import.ipa cache/test.ipa'" \
-  || fail "cannot copy the IPA into the app"
-"$ADB" shell rm /data/local/tmp/mcfm-import.ipa
 "$ADB" logcat -c
-"$ADB" shell am start -n "$PKG/.ImportActivity" --es path "/data/data/$PKG/cache/test.ipa" >/dev/null
+launch
 wait_log 'mcfm: engine started' 180
-"$ADB" shell "run-as $PKG sh -c 'cd files && test -f game/minecraftpe.dylib && test -f game/minecraftpe.hooks && test -f game/minecraftpe2 && test -d game/data && ! ls -d import* game.old 2>/dev/null && rm ../cache/test.ipa'" >/dev/null \
-  || fail "the import did not leave files/game/{minecraftpe.dylib,minecraftpe.hooks,minecraftpe2,data} alone"
+"$ADB" shell "run-as $PKG sh -c 'cd files && test -f game/minecraftpe.dylib && test -f game/minecraftpe.hooks && test -f game/minecraftpe2 && test -d game/data && test -s game/bundle.id && ! ls -d import* game.old 2>/dev/null'" >/dev/null \
+  || fail "the first start did not leave files/game/{minecraftpe.dylib,minecraftpe.hooks,minecraftpe2,data,bundle.id} alone"
 wait_focus
 shot title
 tap 0.5 0.493     # Play
@@ -106,7 +101,7 @@ shot world --world
 wait_log 'mcfm: paused (saved)' 30
 "$ADB" shell "run-as $PKG sh -c 'ls files/home/games/com.mojang/minecraftWorlds/*/level.dat && test -f files/home/games/com.mojang/minecraftpe/options.txt'" >/dev/null \
   || fail "no world (level.dat) or options.txt saved under files/home/games/com.mojang"
-"$ADB" shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "$PKG/.ImportActivity" >/dev/null
+launch
 wait_focus
 sleep 3
 tap 0.25 0.133    # Back to Game (the game pauses itself in the background)
@@ -123,22 +118,26 @@ log | grep 'unsupported' | sed 's/^/  /' | head -10 || true
 "$ADB" shell am force-stop "$PKG"
 "$ADB" shell "run-as $PKG sh -c 'echo stale > files/game/minecraftpe.hooks'"
 "$ADB" logcat -c
-"$ADB" shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "$PKG/.ImportActivity" >/dev/null
+launch
 wait_log 'converting the game again' 60
 wait_log 'mcfm: engine started' 120
 wait_focus
 shot reconverted
 
-# A game that cannot start: its message, no crash; "Import again" opens the import screen and
-# the game's process is gone.
+# A damaged copy (the hooks changed and the kept binary is broken): its message, no crash;
+# "Close" ends the process, and the next start prepares the bundled game again.
 "$ADB" shell am force-stop "$PKG"
-"$ADB" shell "run-as $PKG sh -c 'rm files/game/minecraftpe2 && echo stale > files/game/minecraftpe.hooks'"
+"$ADB" shell "run-as $PKG sh -c 'echo broken > files/game/minecraftpe2 && echo stale > files/game/minecraftpe.hooks'"
 "$ADB" logcat -c
-"$ADB" shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "$PKG/.ImportActivity" >/dev/null
-for i in $(seq 1 30); do ui_tap "Import again" && break; [ "$i" = 30 ] && fail "no 'cannot start' dialog"; sleep 1; done
-wait_focus ImportActivity
+launch
+for i in $(seq 1 30); do ui_tap "Close" && break; [ "$i" = 30 ] && fail "no 'cannot start' dialog"; sleep 1; done
 sleep 2
-crashed && fail "the app crashed on a game that cannot start"
-[ -z "$("$ADB" shell pidof "$PKG" | tr -d '\r')" ] || fail "the game's process is still running after the dialog"
+crashed && fail "the app crashed on a damaged game"
+[ -z "$("$ADB" shell pidof "$PKG" | tr -d '\r')" ] || fail "the process is still running after the dialog"
+"$ADB" logcat -c
+launch
+wait_log 'mcfm: engine started' 180
+wait_focus
+shot prepared-again
 "$ADB" shell am force-stop "$PKG"
-echo "app_check: passed ($OUT/app-{title,world,resumed,home,screen,reconverted}.raw)"
+echo "app_check: passed ($OUT/app-{title,world,resumed,home,screen,reconverted,prepared-again}.raw)"

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Our Android app (docs/LAUNCHER.md, Stage 3c): imports the user's Minecraft PE 0.15.10 IPA and
-     runs its iOS game image with libmcfm_launcher.so. SDK versions are set by tools/android/build_app.sh. -->
+<!-- Our Android app (docs/LAUNCHER.md, Stage 3c): a launcher for the Minecraft PE 0.15.10 iOS game
+     bundled in the APK (assets/game, from the IPA given to the build), run with
+     libmcfm_launcher.so. SDK versions are set by tools/android/build_app.sh. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="io.github.d4yvid.mcfm">
 
@@ -18,28 +19,20 @@
         android:enableOnBackInvokedCallback="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
 
-        <!-- Its own process: the game's process ends after a fatal error (one game per process),
-             and an import outlives configuration changes. -->
+        <!-- One game per process (the native side runs one): opening the app again brings back
+             this instance instead of a second one. -->
         <activity
-            android:name=".ImportActivity"
-            android:process=":import"
+            android:name=".GameActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|locale|layoutDirection|fontScale"
-            android:exported="true">
+            android:windowSoftInputMode="adjustNothing|stateHidden"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!-- One game per process (the native side runs one): opening the app again, after
-             ImportActivity has finished, brings back this instance instead of a second one. -->
-        <activity
-            android:name=".GameActivity"
-            android:exported="false"
-            android:launchMode="singleTask"
-            android:screenOrientation="sensorLandscape"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
-            android:windowSoftInputMode="adjustNothing|stateHidden"
-            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
     </application>
 </manifest>

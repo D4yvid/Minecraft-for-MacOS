@@ -4,21 +4,22 @@
 
 Our own APK, "Minecraft PE (mcfm)" (`io.github.d4yvid.mcfm`): it runs the **iOS** version
 0.15.10 of Minecraft PE with our Mach-O loader (docs/LAUNCHER.md, Stage 3). arm64, Android 9
-(API 28) or newer, 16 KB-page devices included. Nothing from Mojang is in the APK: on first
-start you choose your own decrypted `minecraftpe` IPA and the app imports it (the game binary,
-converted on the device, and its `data/`). Not on Google Play (its policy forbids running code
-that did not come from Play); install the APK directly.
+(API 28) or newer, 16 KB-page devices included. The APK is a launcher for the game bundled in
+it: the build takes your decrypted `minecraftpe` IPA and puts its game binary and `data/` in the
+APK, and the first start prepares them (the binary is converted on the device). The APK holds
+Mojang's files: it is a local build, never committed. Not on Google Play; install it directly.
 
 ```sh
 make android-sdk llvm-runtimes android-app-sdk   # once: NDK r27d, SDK, LLVM sources, JDK, kotlinc
-make android-app                                 # dist/android/mcfm.apk (android-app-debug: debuggable)
+make android-app IPA=/path/to/minecraftpe.ipa    # dist/android/mcfm.apk (android-app-debug: debuggable)
 adb install dist/android/mcfm.apk
-make android-emulator && make android-app-check IPA=/path/to/minecraftpe.ipa   # the acceptance check
+make android-app-run IPA=…                       # play it in the emulator, in a window (API=28: Android 9)
+make android-emulator && make android-app-check IPA=…   # the acceptance check
 ```
 
-- `app/`: the Kotlin activities (`ImportActivity`: the IPA picker and import; `GameActivity`:
-  the game's surface, lifecycle, touch, keys, mouse and soft keyboard), the manifest and
-  resources. Built without Gradle by `tools/android/build_app.sh` (aapt2, kotlinc, d8,
+- `app/`: the Kotlin app (`GameActivity`: the launcher, the game's surface, lifecycle, touch,
+  keys, mouse, soft keyboard and skin picker; `GameFiles`: preparing the bundled game), the
+  manifest and resources. The IPA is found in `game-files/ios/` when `IPA=` is not given. Built without Gradle by `tools/android/build_app.sh` (aapt2, kotlinc, d8,
   zipalign -P 16, apksigner with the local debug key `build/android/debug.keystore`).
 - `launcher/`: `libmcfm_launcher.so` (the loader, the Darwin libSystem layer `darwin/`, the
   Apple-ABI libc++ `runtime/`, the render thread `game_thread.cpp`, the JNI entry points

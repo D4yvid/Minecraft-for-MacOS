@@ -28,7 +28,7 @@ by modding the shipped engine — never redistributing it. Next goals set by the
 | macOS launcher (default, `make app`) | iOS binary loaded by our own launcher: no Catalyst/UIKit, every framework stubbed; ANGLE/Metal window, keyboard, raw mouse look, text entry, sound, no Xbox prompt | ✅ `make test`; `make check` (120 frames); owner played a world 2026-10-10 |
 | macOS Catalyst (deprecated, `make catalyst`) | Win10 UI, keyboard+mouse with pointer capture, resizable window that the engine follows, auto-hiding/fading title bar, App Store receipt prompt skipped | ✅ `make check` (bundle test + 15 s launch with log asserts); owner's screenshots (Win10 title screen, game filling the window). Hand checks M1–M7 below **not** all confirmed |
 | iOS | Win10 UI + receipt skip dylib, `make ios-ipa` → unsigned IPA | ✅ compiles for iOS (`make ios-syntax`), IPA structure test with a stub dylib. ❓ never linked against the real iOS SDK (no Xcode here), never run on a device |
-| Android app (`make android-app`) | Our own Kotlin APK (target SDK 37, min 28, 16 KB pages): imports the user's decrypted IPA, runs the iOS image with our loader over a Darwin libSystem layer and an Apple-ABI libc++; GLES 3 window, touch GUI, soft keyboard, a mouse and keys, FMOD on AAudio, saves in the background | ✅ `make android-app-check` on the Android 17 and 9 emulators (import, title screen, a world created by touch, background/resume); `make android-test`. ❓ never run on a physical device |
+| Android app (`make android-app`) | Our own Kotlin APK (target SDK 37, min 28, 16 KB pages), a launcher with the game bundled (built from your IPA; local only), runs the iOS image with our loader over a Darwin libSystem layer and an Apple-ABI libc++; GLES 3 window, touch GUI, soft keyboard, a mouse and keys, FMOD on AAudio, saves in the background | ✅ `make android-app-check` on the Android 17 and 9 emulators (first start, title screen, a world created by touch, background/resume, errors); `make android-test`. ❓ never run on a physical device |
 | Android, legacy mod | Win10 UI via `libmcfm.so`, `make android-apk` (patches Mojang's APK; replaced by the app above) | ✅ builds with NDK r10c, library + APK pipeline tests on stand-in APKs. ❓ never run on a device |
 | Shared core | `Platform` interface, `win10_ui`, `keyboard_mouse`, input logic | ✅ host tests (C++11), ASan/UBSan clean |
 | Repo hygiene | Apache-2.0, no Mojang files, `make test` from a fresh clone | ✅ `no_game_files_test`, fresh-clone run |
@@ -93,9 +93,10 @@ make android-test                # runtime, Darwin layer and loader tests on the
 make android-boot-check          # the converted game (make app) initializes on the device
 make android-frames-check        # ... boots, renders 120 frames, screenshot in build/android-launcher
 make android-app-sdk             # once: JDK 21, kotlinc, build-tools/platform 37 (for the app)
-make android-app                 # dist/android/mcfm.apk (Kotlin, aapt2, d8, zipalign, apksigner)
-make android-app-debug           # dist/android/mcfm-debug.apk: debuggable (run-as, test hooks)
-make android-app-check IPA=…     # debug APK: import, title, world by touch, lifecycle, errors
+make android-app IPA=…           # dist/android/mcfm.apk with the game bundled (local only)
+make android-app-debug           # dist/android/mcfm-debug.apk: debuggable (run-as)
+make android-app-run [API=28]    # play it in the emulator, in a window
+make android-app-check           # debug APK: first start, title, world by touch, lifecycle, errors
 ```
 
 ## 4. How it works (beyond ARCHITECTURE.md)
@@ -182,8 +183,8 @@ Darwin libSystem layer (`android/launcher/darwin/`) and an Apple-ABI libc++ runt
 (`android/launcher/runtime/`). **Stage 3b landed (2026-10-10):** the engine boots there with the
 launcher's AppPlatform and renders the title screen (GLES 3, FMOD on AAudio; `make
 android-frames-check`). **Stage 3c landed (2026-10-10), Stage 3 done:** our own Kotlin APK
-(`android/app/`, built by `make android-app` without Gradle) imports the user's IPA on the device
-and plays: window, touch, soft keyboard, lifecycle (`make android-app-check` on Android 17 and 9).
+(`android/app/`, built by `make android-app` without Gradle) bundles the game from your IPA and
+plays: window, touch, soft keyboard, lifecycle (`make android-app-check` on Android 17 and 9).
 Findings in research/macho-launcher.md and research/android-launcher.md. Next candidates: a
 physical-device run, world export/import in the app, the generic AppPlatform (6.1).
 

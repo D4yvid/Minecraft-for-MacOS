@@ -185,7 +185,7 @@ ANDROID_JAR := $(ANDROID_SDK)/platforms/android-37.0/android.jar
 android-app-sdk: android-sdk
 	bash tools/android/fetch_jvm_tools.sh "$(JVM_TOOLS)"
 
-.PHONY: android-sdk llvm-runtimes android-emulator android-emulator-stop darwin-abi
+.PHONY: android-sdk llvm-runtimes android-emulator android-emulator-window android-emulator-stop darwin-abi
 # Regenerates the Darwin ABI tables from the macOS SDK (committed; darwin_abi_test checks them).
 darwin-abi:
 	@mkdir -p $(BUILD)/tools
@@ -199,6 +199,8 @@ llvm-runtimes:
 	bash tools/android/fetch_llvm_runtimes.sh "$(LLVM_RUNTIMES)"
 android-emulator:
 	ANDROID_SDK="$(ANDROID_SDK)" bash tools/android/emulator.sh start $(API)
+android-emulator-window:
+	ANDROID_SDK="$(ANDROID_SDK)" bash tools/android/emulator.sh window $(API)
 android-emulator-stop:
 	ANDROID_SDK="$(ANDROID_SDK)" bash tools/android/emulator.sh stop
 
@@ -255,10 +257,12 @@ $(ALAUNCH_OUT)/tests/audio_test: android/launcher/tests/audio_test.cpp android/l
 	@mkdir -p $(dir $@)
 	$(ACXX) $(RT_CXXFLAGS) -Iandroid/launcher $< android/launcher/audio_toolbox.cpp $(RT_LDFLAGS) -laaudio -o $@
 
-# The app (Stage 3c): dist/android/mcfm.apk with the launcher library and the game's stubs,
-# built from the committed import list android/launcher/game_imports.tsv (mcfm_image.py imports on
-# the game, minus libSystem/libc++/libz, which the launcher provides). mcfm-debug.apk is the same
-# app debuggable (run-as, the import's `path` extra), for android-app-check.
+# The app (Stage 3c): dist/android/mcfm.apk, a launcher for the game bundled in it: the launcher
+# library, the game's stubs (from the committed import list android/launcher/game_imports.tsv:
+# mcfm_image.py imports on the game, minus libSystem/libc++/libz, which the launcher provides)
+# and the game from $(IPA) (minecraftpe2 and data/ in assets/game: Mojang's files, so the APK is a
+# local build, never committed). mcfm-debug.apk is the same app debuggable (run-as) for the checks.
+IPA ?= $(firstword $(wildcard $(GAME_FILES)/ios/*.ipa))
 APP_APK := $(CURDIR)/dist/android/mcfm.apk
 APP_DEBUG_APK := $(CURDIR)/dist/android/mcfm-debug.apk
 APP_STUBS := $(ALAUNCH_OUT)/app-stubs
@@ -272,15 +276,22 @@ $(APP_STUBS)/.built: android/launcher/game_imports.tsv tools/launcher/build_stub
 	rm -rf $(APP_STUBS)
 	ANDROID_CC="$(ACC)" bash tools/launcher/build_stubs.sh --target android android/launcher/game_imports.tsv $(APP_STUBS) >/dev/null
 	touch $@
-$(APP_APK) $(APP_DEBUG_APK): $(APP_SRCS) $(LAUNCHER_SO) $(APP_STUBS)/.built tools/android/build_app.sh
+$(APP_APK) $(APP_DEBUG_APK): $(APP_SRCS) $(LAUNCHER_SO) $(APP_STUBS)/.built tools/android/build_app.sh $(IPA)
+	@test -f "$(IPA)" || { echo "The APK bundles the game: make $(if $(filter $(APP_DEBUG_APK),$@),android-app-debug,android-app) IPA=<decrypted minecraftpe .ipa> (or put it in game-files/ios/)"; exit 1; }
 	@test -x "$(KOTLINC)" -a -f "$(ANDROID_JAR)" || { echo "App toolchain missing (make android-app-sdk)"; exit 1; }
-	$(APP_ENV) bash tools/android/build_app.sh $(if $(filter $(APP_DEBUG_APK),$@),--debug) $@
+	$(APP_ENV) bash tools/android/build_app.sh $(if $(filter $(APP_DEBUG_APK),$@),--debug) --bundle "$(IPA)" $@
+
+.PHONY: android-app-run
+# Play the app in the emulator, in a window (API ?= 37; API=28 for Android 9): installs the debug
+# APK keeping your worlds and opens the game.
+android-app-run: $(APP_DEBUG_APK)
+	ANDROID_SDK="$(ANDROID_SDK)" bash tools/android/app_run.sh $(APP_DEBUG_APK) $(API)
 
 .PHONY: android-app-check
-# Stage 3c acceptance on the running emulator/device: import, title screen, a new world, background/resume.
-IPA ?= $(firstword $(wildcard $(GAME_FILES)/ios/*.ipa))
+# Stage 3c acceptance on the running emulator/device: first start, title screen, a new world,
+# lifecycle, re-conversion, the fatal path.
 android-app-check: $(APP_DEBUG_APK)
-	bash tools/android/app_check.sh $(APP_DEBUG_APK) "$(IPA)" $(ALAUNCH_OUT)
+	bash tools/android/app_check.sh $(APP_DEBUG_APK) $(ALAUNCH_OUT)
 
 .PHONY: android-frames-check
 # Stage 3b acceptance: the converted game (make app) boots and renders 120 frames on the device.

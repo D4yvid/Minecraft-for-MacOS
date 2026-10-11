@@ -199,14 +199,17 @@ By the work a shim does:
   pbuffer: the game reloads its shaders on resume, and with nothing current its uniform lookups
   crashed (surfaceless contexts need an extension the Android 9 emulator lacks). The game shows its
   Game Menu when it comes back. One game per process: `GameActivity` is `singleTask`; after a
-  fatal error the render thread detaches from the JVM and the process ends after the dialog,
-  while `ImportActivity` runs in its own process (`:import`). ✅
+  fatal error the render thread detaches from the JVM and the process ends after the dialog
+  (the next start prepares the bundled game again). ✅
 - **Storage**: `Android/data/<package>` is out of reach of `adb shell`, `run-as` and file managers
   on Android 11+, so the game's home (worlds, options) is `files/home`; `adb shell run-as
-  io.github.d4yvid.mcfm` reaches it. `files/game` keeps the IPA's `minecraftpe2` next to the
-  converted image and `minecraftpe.hooks` (the hooks it was made with): an update whose hooks
-  differ converts the image again without a new import. The import reads the IPA with `ZipFile`
-  (a truncated archive is refused), stages it in its own `files/import-*` and swaps it in by
-  renames (`game.old` restored if a swap was cut short); files are synced before the renames. `adb exec-in run-as … 'cat > file'` dropped bytes from a
-  59 MB IPA; `adb push` to `/data/local/tmp` and `run-as cp` is exact. ✅
+  io.github.d4yvid.mcfm` reaches it. The game is bundled in the APK (`assets/game/`: the IPA's
+  `minecraftpe2`, `data/`, and `bundle.id`, the IPA's SHA-256). The app prepares `files/game`
+  from its own APK (`ZipFile` on `applicationInfo.sourceDir`) on first start and whenever the
+  bundle changes: staged in `files/import-*`, converted on the device, swapped in by renames
+  (`game.old` restored if a swap was cut short), files synced first. `files/game` keeps
+  `minecraftpe2` next to the converted image and `minecraftpe.hooks` (the hooks it was made with):
+  an update whose hooks differ converts the image again. (Before the bundle, `adb exec-in run-as …
+  'cat > file'` dropped bytes from a 59 MB IPA; `adb push` to `/data/local/tmp` and `run-as cp`
+  is exact.) ✅
 - An app's stdout/stderr go nowhere: `JNI_OnLoad` forwards them to logcat (tag `mcfm`). ✅
