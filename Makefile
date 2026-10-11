@@ -5,6 +5,10 @@
 BUILD   ?= build
 # Your own game files (make game-files), used when config.mk doesn't say otherwise.
 GAME_FILES := $(CURDIR)/game-files
+# In a git worktree without its own game-files/, the main checkout's.
+ifeq ($(wildcard $(GAME_FILES)),)
+GAME_FILES := $(shell git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$$||')/game-files
+endif
 GAME    ?= $(wildcard $(GAME_FILES)/ios/Payload/minecraftpe2.app)
 OUT_APP ?= $(CURDIR)/dist/minecraftpe.app
 
