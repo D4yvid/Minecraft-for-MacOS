@@ -1,25 +1,22 @@
 import ImageIO
-import OpenGLES
+import QuartzCore
 import UIKit
 import UniformTypeIdentifiers
 
-/// The game's view: an OpenGL ES 3 drawable at the screen's native resolution, the source of
-/// touches and hardware keys, and the soft keyboard's text input (to the engine's text box).
+/// The game's view: a Metal layer ANGLE draws into (OpenGL ES 3 on Metal, ios/launcher/egl_view.mm)
+/// at the screen's native resolution, the source of touches and hardware keys, and the soft
+/// keyboard's text input (to the engine's text box).
 final class GameView: UIView, UIKeyInput {
-    override class var layerClass: AnyClass { CAEAGLLayer.self }
+    override class var layerClass: AnyClass { CAMetalLayer.self }
 
-    let context = EAGLContext(api: .openGLES3)!
-    private var framebuffer: GLuint = 0, color: GLuint = 0, depth: GLuint = 0
+    private var eglReady = false
     private(set) var pixelWidth: Int32 = 0, pixelHeight: Int32 = 0
     /// The drawable changed size: (width, height) in pixels.
     var onResize: ((Int32, Int32) -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        let layer = self.layer as! CAEAGLLayer
         layer.isOpaque = true
-        layer.drawableProperties = [kEAGLDrawablePropertyRetainedBacking: false,
-                                    kEAGLDrawablePropertyColorFormat: kEAGLColorFormatRGBA8]
         isMultipleTouchEnabled = true
     }
 
@@ -27,53 +24,44 @@ final class GameView: UIView, UIKeyInput {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        if let screen = window?.windowScene?.screen { contentScaleFactor = screen.nativeScale }
+        if let screen = window?.windowScene?.screen {
+            contentScaleFactor = screen.nativeScale
+            layer.contentsScale = screen.nativeScale
+        }
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         var w: Int32 = 0, h: Int32 = 0
         mcfm_ios_pixel_size(Double(bounds.width), Double(bounds.height), Double(contentScaleFactor), &w, &h)
-        if w > 0 && h > 0 && (w != pixelWidth || h != pixelHeight) { rebuildFramebuffer() }
-    }
-
-    /// One framebuffer: a colour renderbuffer from the layer and a depth/stencil one.
-    private func rebuildFramebuffer() {
-        EAGLContext.setCurrent(context)
-        if framebuffer != 0 {
-            glDeleteFramebuffers(1, &framebuffer)
-            glDeleteRenderbuffers(1, &color)
-            glDeleteRenderbuffers(1, &depth)
+        guard w > 0 && h > 0 else { return }
+        (layer as! CAMetalLayer).drawableSize = CGSize(width: CGFloat(w), height: CGFloat(h))
+        if !eglReady {
+            eglReady = mcfm_ios_egl_init(Unmanaged.passUnretained(layer).toOpaque()) != 0
+            if !eglReady { return }
         }
-        glGenFramebuffers(1, &framebuffer)
-        glBindFramebuffer(GLenum(GL_FRAMEBUFFER), framebuffer)
-        glGenRenderbuffers(1, &color)
-        glBindRenderbuffer(GLenum(GL_RENDERBUFFER), color)
-        context.renderbufferStorage(Int(GL_RENDERBUFFER), from: layer as! CAEAGLLayer)
-        glFramebufferRenderbuffer(GLenum(GL_FRAMEBUFFER), GLenum(GL_COLOR_ATTACHMENT0), GLenum(GL_RENDERBUFFER), color)
-        glGetRenderbufferParameteriv(GLenum(GL_RENDERBUFFER), GLenum(GL_RENDERBUFFER_WIDTH), &pixelWidth)
-        glGetRenderbufferParameteriv(GLenum(GL_RENDERBUFFER), GLenum(GL_RENDERBUFFER_HEIGHT), &pixelHeight)
-        glGenRenderbuffers(1, &depth)
-        glBindRenderbuffer(GLenum(GL_RENDERBUFFER), depth)
-        glRenderbufferStorage(GLenum(GL_RENDERBUFFER), GLenum(GL_DEPTH24_STENCIL8), pixelWidth, pixelHeight)
-        glFramebufferRenderbuffer(GLenum(GL_FRAMEBUFFER), GLenum(GL_DEPTH_STENCIL_ATTACHMENT), GLenum(GL_RENDERBUFFER), depth)
-        let status = glCheckFramebufferStatus(GLenum(GL_FRAMEBUFFER))
-        if status != GL_FRAMEBUFFER_COMPLETE { print("mcfm: framebuffer incomplete (0x\(String(status, radix: 16)))") }
-        onResize?(pixelWidth, pixelHeight)
+        checkSize()
     }
 
-    /// Before each engine frame: iOS has no framebuffer 0, the game draws into ours (as its own
-    /// -[EAGLView setFramebuffer] did).
-    func bindFramebuffer() {
-        EAGLContext.setCurrent(context)
-        glBindFramebuffer(GLenum(GL_FRAMEBUFFER), framebuffer)
-        glViewport(0, 0, pixelWidth, pixelHeight)
+    /// The surface follows the layer: a new size reaches the game before its next frame.
+    func checkSize() {
+        var w: Int32 = 0, h: Int32 = 0
+        mcfm_ios_egl_size(&w, &h)
+        if w > 0 && h > 0 && (w != pixelWidth || h != pixelHeight) {
+            pixelWidth = w
+            pixelHeight = h
+            onResize?(w, h)
+        }
     }
 
-    func present() {
-        glBindRenderbuffer(GLenum(GL_RENDERBUFFER), color)
-        context.presentRenderbuffer(Int(GL_RENDERBUFFER))
+    /// Before each engine frame: ANGLE current, the window surface (framebuffer 0) bound.
+    func beginFrame() {
+        checkSize()
+        mcfm_ios_egl_begin_frame()
     }
+
+    /// After it: shown; the frame's GL error (0: none).
+    func endFrame() -> UInt32 { mcfm_ios_egl_end_frame() }
 
     // MARK: Touches: a small, stable id per finger, pixels.
 

@@ -1,9 +1,11 @@
 #!/bin/bash
 # usage: build_app.sh <minecraftpe.ipa> <out dir> [<bundle id>]   (make ios-app)
+# ANGLE: $ANGLE_IOS (default build/angle-ios/libGLESv2.dylib, from make angle-ios).
 # Our iOS app (docs/LAUNCHER.md, Stage 4), built from the command line: the game binary from the
 # IPA converted into a dylib for iOS (dyld loads it; iOS runs no code that was not signed when
 # the app was built) with the launcher's hooks, stubs for the frameworks the game's iOS glue
-# imports (OpenGLES and AudioToolbox stay the system's), the launcher (ios/launcher, shared/)
+# imports (OpenGLES re-exports ANGLE, OpenGL ES 3 on Metal; AudioToolbox stays the system's),
+# the launcher (ios/launcher, shared/)
 # and the Swift app (ios/app) linked into one executable, the game's data/ bundled, all signed
 # with your Apple Development identity and the profile Xcode made for <bundle id>.
 # Writes <out>/mcfm.app and <out>/mcfm.ipa. The app holds Mojang's files: a local build.
@@ -12,6 +14,8 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 IPA="$1"; OUT="$2"; BUNDLE_ID="${3:-io.github.d4yvid.mcfm.ios}"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 [ -f "$IPA" ] || { echo "build_app: no IPA at $IPA" >&2; exit 2; }
+ANGLE_IOS="${ANGLE_IOS:-$ROOT/build/angle-ios/libGLESv2.dylib}"
+[ -f "$ANGLE_IOS" ] || { echo "build_app: no ANGLE for iOS at $ANGLE_IOS (make angle-ios)" >&2; exit 2; }
 SDK="$(xcrun --sdk iphoneos --show-sdk-path 2>/dev/null)" || { echo "build_app: no iPhoneOS SDK (install Xcode)" >&2; exit 2; }
 TARGET=arm64-apple-ios15.0
 W="$ROOT/build/ios-app"; APP="$OUT/mcfm.app"
@@ -42,26 +46,29 @@ run clang++ -std=c++11 -O1 -I"$ROOT/shared/launcher" -I"$ROOT/shared/apple" -I"$
 "$W/print_hooks" > "$W/hooks.tsv"
 python3 -I "$ROOT/tools/launcher/mcfm_image.py" imports "$W/game" > "$W/imports.tsv"
 run python3 -I "$ROOT/tools/launcher/mcfm_image.py" dylib "$W/game" "$APP/Frameworks/libminecraftpe.dylib" \
-  --hooks "$W/hooks.tsv" --platform ios --host OpenGLES,AudioToolbox
-run bash "$ROOT/tools/launcher/build_stubs.sh" --target ios "$W/imports.tsv" "$W/stubs" --skip OpenGLES --skip AudioToolbox
+  --hooks "$W/hooks.tsv" --platform ios --host AudioToolbox
+cp "$ANGLE_IOS" "$APP/Frameworks/libGLESv2.dylib"
+run bash "$ROOT/tools/launcher/build_stubs.sh" --target ios "$W/imports.tsv" "$W/stubs" --skip AudioToolbox \
+  --provider OpenGLES="$APP/Frameworks/libGLESv2.dylib"
 cp "$W"/stubs/*.dylib "$APP/Frameworks/"
 cp -R "$GAME_APP/data" "$APP/game/data"
 
 # The executable: the launcher (C++/Objective-C++) and the Swift app.
 SRCS=(shared/apple/macho_uuid.cpp shared/apple/hook_table.cpp shared/launcher/app_platform.cpp shared/launcher/engine.cpp
       shared/launcher/seams.cpp shared/launcher/text_input.cpp shared/launcher/launcher_platform.cpp shared/launcher/touch_input.cpp
-      shared/src/keyboard_mouse.cpp shared/src/platform.cpp shared/src/keymap.cpp ios/launcher/ios_keymap.cpp ios/launcher/launcher.mm)
+      shared/src/keyboard_mouse.cpp shared/src/platform.cpp shared/src/keymap.cpp ios/launcher/ios_keymap.cpp ios/launcher/launcher.mm
+      ios/launcher/egl_view.mm)
 OBJS=()
 for s in "${SRCS[@]}"; do
   o="$W/obj/$(echo "$s" | tr / _).o"
   run xcrun --sdk iphoneos clang++ -target "$TARGET" -isysroot "$SDK" -std=c++17 -fobjc-arc -O2 -Wall -Wextra \
-    -Wno-unused-parameter -I"$ROOT/shared/include" -I"$ROOT/shared/apple" -I"$ROOT/shared/launcher" -I"$ROOT/ios/launcher" \
+    -Wno-unused-parameter -I"$ROOT/shared/include" -I"$ROOT/shared/apple" -I"$ROOT/shared/launcher" -I"$ROOT/ios/launcher" -I"$ROOT/macos/launcher" \
     -c "$ROOT/$s" -o "$o"
   OBJS+=("$o")
 done
 run xcrun --sdk iphoneos swiftc -swift-version 5 -O -target "$TARGET" -sdk "$SDK" \
   -import-objc-header "$ROOT/ios/app/Bridging.h" -I"$ROOT/ios/launcher" "$ROOT"/ios/app/*.swift "${OBJS[@]}" \
-  -lc++ -framework OpenGLES -framework QuartzCore -framework UIKit -framework AVFoundation -framework PhotosUI \
+  -lc++ "$APP/Frameworks/libGLESv2.dylib" -framework QuartzCore -framework UIKit -framework AVFoundation -framework PhotosUI \
   -framework UniformTypeIdentifiers -framework ImageIO -Xlinker -rpath -Xlinker @executable_path/Frameworks \
   -o "$APP/mcfm"
 

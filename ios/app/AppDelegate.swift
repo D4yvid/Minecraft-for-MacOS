@@ -27,8 +27,15 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     // Leaving the screen (home, app switcher, lock, a call): the game saves before this returns,
     // and nothing is drawn until it comes back (iOS ends apps that use GL in the background).
-    func sceneWillResignActive(_ scene: UIScene) { gameController?.setActive(false) }
-    func sceneDidBecomeActive(_ scene: UIScene) { gameController?.setActive(true) }
+    func sceneWillResignActive(_ scene: UIScene) {
+        print("mcfm: scene will resign active")
+        gameController?.setActive(false)
+    }
+
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        print("mcfm: scene did become active")
+        gameController?.setActive(true)
+    }
 
     private var gameController: GameViewController? { window?.rootViewController as? GameViewController }
 }

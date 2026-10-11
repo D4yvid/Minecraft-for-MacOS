@@ -52,22 +52,63 @@ final class GameViewController: UIViewController, PHPickerViewControllerDelegate
                 let text = message.map { String(cString: $0) } ?? "unknown error"
                 GameViewController.current?.showFatal(text)
             })
-        gameView.bindFramebuffer()
+        mcfm_ios_egl_begin_frame()
         started = mcfm_ios_start(image, data, home, w, h, callbacks) != 0
+        // The scene's state now, whatever events came before the first drawable.
+        let state = view.window?.windowScene?.activationState
+        if started { setActive(state == .foregroundActive) }
     }
+
+    // --frames N [--screenshot <file in Documents>]: after N frames, the last one read back and
+    // written as PPM (the device check, ios/tools/app_check.sh), then exit.
+    private lazy var framesLeft: Int = {
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--frames"), i + 1 < args.count { return Int(args[i + 1]) ?? 0 }
+        return 0
+    }()
+    private var framesDone = 0
 
     @objc private func step() {
         guard started, active else { return }
-        gameView.bindFramebuffer()
+        gameView.beginFrame()
         mcfm_ios_frame()
-        gameView.present()
+        framesDone += 1
+        if framesLeft > 0 && framesDone == framesLeft { finishFrames() }
+        let error = gameView.endFrame()
+        if error != 0 && framesDone < 4 { print("mcfm: GL error 0x\(String(error, radix: 16)) in frame \(framesDone)") }
+    }
+
+    private func finishFrames() {
+        let w = Int(gameView.pixelWidth), h = Int(gameView.pixelHeight)
+        var rgba = [UInt8](repeating: 0, count: w * h * 4)
+        mcfm_ios_egl_read_pixels(Int32(w), Int32(h), &rgba)
+        var rgb = [UInt8](repeating: 0, count: w * h * 3)
+        var lit = 0
+        for y in 0..<h {  // GL rows go bottom-up; PPM top-down
+            for x in 0..<w {
+                let s = ((h - 1 - y) * w + x) * 4, d = (y * w + x) * 3
+                rgb[d] = rgba[s]; rgb[d + 1] = rgba[s + 1]; rgb[d + 2] = rgba[s + 2]
+                if Int(rgba[s]) + Int(rgba[s + 1]) + Int(rgba[s + 2]) > 30 { lit += 1 }
+            }
+        }
+        print("mcfm: \(framesDone) frames rendered (\(w)x\(h), \(100 * lit / max(1, w * h))% not black)")
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--screenshot"), i + 1 < args.count {
+            let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent(args[i + 1])
+            var data = Data("P6\n\(w) \(h)\n255\n".utf8)
+            data.append(contentsOf: rgb)
+            try? data.write(to: url)
+            print("mcfm: screenshot \(url.lastPathComponent)")
+        }
+        exit(0)
     }
 
     /// The scene left or came back to the screen: suspend (saves) / resume, no frames between.
     func setActive(_ value: Bool) {
+        print("mcfm: active \(value)")
         active = value
         displayLink?.isPaused = !value
-        if !value { glFinish() }
+        if !value { mcfm_ios_egl_finish() }
         mcfm_ios_pause(value ? 0 : 1)
     }
 

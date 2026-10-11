@@ -30,7 +30,7 @@ PROVIDED=(); declare -a PROVIDER_LIBS=(); declare -a PROVIDER_DYLIBS=(); SKIP=" 
 while [ $# -gt 0 ]; do
   if [ "$1" = "--skip" ] && [ $# -ge 2 ]; then SKIP="$SKIP$2 "; shift 2; continue; fi
   [ "$1" = "--provider" ] && [ $# -ge 2 ] || { echo "build_stubs.sh: bad argument $1" >&2; exit 2; }
-  [ "$TARGET" = macos ] || { echo "build_stubs.sh: providers are macOS-only for now" >&2; exit 2; }
+  [ "$TARGET" != android ] || { echo "build_stubs.sh: no providers on Android" >&2; exit 2; }
   lib="${2%%=*}"; dylib="${2#*=}"
   nm -gUj "$dylib" > "$OUT/src/$lib.provided"
   PROVIDED+=(--provided "$lib" "$OUT/src/$lib.provided")

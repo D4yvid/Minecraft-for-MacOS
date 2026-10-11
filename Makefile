@@ -88,12 +88,18 @@ IOS_APP := $(CURDIR)/dist/ios/mcfm.app
 IOS_APP_SRCS := $(wildcard ios/app/* ios/launcher/* shared/launcher/*.cpp shared/launcher/*.h shared/src/*.cpp shared/apple/*.cpp shared/apple/*.h) \
   ios/tools/build_app.sh ios/tools/signing.sh ios/tools/print_hooks.cpp tools/launcher/mcfm_image.py tools/launcher/build_stubs.sh
 IOS_DEVELOPER_DIR := $(or $(DEVELOPER_DIR),/Applications/Xcode.app/Contents/Developer)
-$(IOS_APP) ios-app-run: export DEVELOPER_DIR := $(IOS_DEVELOPER_DIR)
+$(IOS_APP) $(ANGLE_IOS) ios-app-run: export DEVELOPER_DIR := $(IOS_DEVELOPER_DIR)
+# ANGLE for iOS (Godot's static build, linked into one dylib): make angle-ios once.
+ANGLE_IOS := $(BUILD)/angle-ios/libGLESv2.dylib
+.PHONY: angle-ios
+angle-ios: $(ANGLE_IOS)
+$(ANGLE_IOS): tools/launcher/fetch_angle_ios.sh tools/launcher/angle_ios_shims.cpp
+	bash tools/launcher/fetch_angle_ios.sh $(BUILD)/angle-ios
 .PHONY: ios-app ios-app-run
 ios-app: $(IOS_APP)
-$(IOS_APP): $(IOS_APP_SRCS) $(IPA)
+$(IOS_APP): $(IOS_APP_SRCS) $(IPA) $(ANGLE_IOS)
 	@test -f "$(IPA)" || { echo "The iOS app bundles the game: make ios-app IPA=<decrypted minecraftpe .ipa> (or put it in game-files/ios/)"; exit 1; }
-	bash ios/tools/build_app.sh "$(IPA)" $(CURDIR)/dist/ios $(IOS_BUNDLE_ID)
+	ANGLE_IOS=$(CURDIR)/$(ANGLE_IOS) bash ios/tools/build_app.sh "$(IPA)" $(CURDIR)/dist/ios $(IOS_BUNDLE_ID)
 # Installs the app on the connected iPhone/iPad and launches it with its console here.
 ios-app-run: $(IOS_APP)
 	xcrun devicectl device install app --device "$$(. ios/tools/signing.sh; mcfm_find_device)" $(IOS_APP)
@@ -489,6 +495,7 @@ $(BUILD)/test/layout_test: ios/tests/layout_test.cpp ios/launcher/layout.h
 test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS) $(IOS_TESTS))
 	@for t in $(SHARED_TESTS) $(MACOS_TESTS) $(IOS_TESTS); do $(BUILD)/test/$$t || exit 1; done
 	bash ios/tests/signing_test.sh
+	bash tools/tests/fetch_angle_ios_test.sh
 	$(MAKE) --no-print-directory ios-syntax
 	bash tools/tests/inject_test.sh
 	bash tools/tests/check_game_test.sh $(GAME)
