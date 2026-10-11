@@ -102,7 +102,7 @@ bool check_hooks(const std::vector<uint8_t> &data, const std::vector<ConvertHook
       return fail(error, "hooks " + h.name + " and " + by_addr[i + 1].name + " overlap (" + hex(h.address) + ", " +
                              hex(by_addr[i + 1].address) + ")");
     uint64_t off = h.address - t.vmaddr + t.fileoff;
-    if (off + 8 > data.size()) return fail(error, "hook " + h.name + " is past the end of the file");
+    if (off + 12 > data.size()) return fail(error, "hook " + h.name + " is past the end of the file");
     if (is_return_or_branch(u32(&data[off])) || is_return_or_branch(u32(&data[off + 4])))
       return fail(error, "hook " + h.name + " at " + hex(h.address) + ": function is shorter than 12 bytes");
   }
@@ -206,6 +206,7 @@ bool convert_executable(const std::vector<uint8_t> &in, const std::vector<Conver
       continue;
     }
     if (is_dylib_load(cmd)) {
+      if (c.size() < 24) return fail(error, "malformed load commands (dylib command shorter than 24 bytes)");
       uint32_t name_off = u32(&c[8]);
       if (name_off >= c.size()) return fail(error, "malformed load commands (dylib name past cmdsize)");
       const char *p = reinterpret_cast<const char *>(&c[name_off]);

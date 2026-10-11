@@ -94,7 +94,8 @@ make android-boot-check          # the converted game (make app) initializes on 
 make android-frames-check        # ... boots, renders 120 frames, screenshot in build/android-launcher
 make android-app-sdk             # once: JDK 21, kotlinc, build-tools/platform 37 (for the app)
 make android-app                 # dist/android/mcfm.apk (Kotlin, aapt2, d8, zipalign, apksigner)
-make android-app-check IPA=…     # clean install, import, title, new world by touch, resume
+make android-app-debug           # dist/android/mcfm-debug.apk: debuggable (run-as, test hooks)
+make android-app-check IPA=…     # debug APK: import, title, world by touch, lifecycle, errors
 ```
 
 ## 4. How it works (beyond ARCHITECTURE.md)
@@ -268,6 +269,10 @@ runtime, persisted config, ordering/dependencies, C++11. Design it with the owne
   Play screen; an app's stdout/stderr go nowhere (forwarded to logcat, tag `mcfm`);
   `Android/data` is unreachable by adb/`run-as` on Android 11+ (worlds are in `files/home`);
   `adb exec-in run-as … 'cat > f'` truncates big files (push to `/data/local/tmp`, `run-as cp`).
+- **Android lifecycle**: requests to the render thread arrive in batches; resume before resize or
+  focus, and keep a GL context current (pbuffer) without a window — the game reloads shaders on
+  resume. A class implementing an API 33 interface fails verification on Android 9: keep such
+  code in its own class.
 - **Darwin variadic ABI**: a test that calls a variadic `mcfm_darwin_*` shim from NDK code
   passes the arguments in registers, the shim reads the stack: call the `_impl` function.
 

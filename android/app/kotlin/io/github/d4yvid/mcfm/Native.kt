@@ -22,7 +22,8 @@ object Native {
     @JvmStatic external fun nativeMouse(kind: Int, a: Int, b: Int, x: Float, y: Float)
     @JvmStatic external fun nativeText(text: String)
     @JvmStatic external fun nativeBackspace()
-    @JvmStatic external fun nativeReturn()
+    /** pressEnter: the soft keyboard's return, which also presses Enter (ends editing, as on iOS). */
+    @JvmStatic external fun nativeReturn(pressEnter: Boolean)
 
     @Volatile var game: GameActivity? = null
 

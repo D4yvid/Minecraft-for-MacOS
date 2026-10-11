@@ -11,7 +11,7 @@ that did not come from Play); install the APK directly.
 
 ```sh
 make android-sdk llvm-runtimes android-app-sdk   # once: NDK r27d, SDK, LLVM sources, JDK, kotlinc
-make android-app                                 # dist/android/mcfm.apk
+make android-app                                 # dist/android/mcfm.apk (android-app-debug: debuggable)
 adb install dist/android/mcfm.apk
 make android-emulator && make android-app-check IPA=/path/to/minecraftpe.ipa   # the acceptance check
 ```

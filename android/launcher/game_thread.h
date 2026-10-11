@@ -21,16 +21,18 @@ struct AppCallbacks {
   void (*show_keyboard)(const std::string &initial_text);
   void (*hide_keyboard)();
   void (*fatal)(const std::string &message);  // the game cannot run: show the message, finish
+  void (*thread_exit)();                       // last call on the render thread (JVM detach)
 };
 
 // Starts the render thread once; later calls are ignored.
 void start_game(const GamePaths &paths, const AppCallbacks &callbacks);
 
-// The window to draw into (null: none). Returns once the thread uses it, or has let go of the
-// previous one (Android destroys the window right after surfaceDestroyed returns).
+// The window to draw into, from surfaceChanged; returns at once. Null (surfaceDestroyed): returns
+// once the thread has let go of the window it draws into (Android destroys it right after).
 void set_window(ANativeWindow *window, int width, int height);
 
-// Activity paused (true: the game saves before this returns) or resumed; window focus.
+// Activity paused (true: once the game runs, returns after it saved) or resumed (returns at
+// once: the first load takes seconds); window focus. See render_requests.h.
 void set_paused(bool paused);
 void set_focus(bool focused);
 

@@ -5,11 +5,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <condition_variable>
 #include <cstdio>
 #include <fstream>
 #include <iterator>
-#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -18,10 +16,12 @@
 #include "addresses_0_15_10.h"
 #include "darwin.h"
 #include "engine.h"
+#include "game_import.h"
 #include "launcher_platform.h"
 #include "loader.h"
 #include "loader_android.h"
 #include "macho_uuid.h"
+#include "render_requests.h"
 #include "seams.h"
 #include "text_input.h"
 
@@ -31,18 +31,13 @@ namespace {
 
 using namespace mcfm::launcher;
 
-// What the UI thread asks for; guarded by g_lock, signalled with g_changed.
-struct Shared {
-  ANativeWindow *window = nullptr;  // wanted window (owned reference)
-  int width = 0, height = 0;
-  bool window_changed = false;
-  bool paused = false, pause_changed = false;
-  bool focused = true, focus_changed = false;
-  long acked = 0, requested = 0;  // set_window / set_paused wait until acked catches up
-  bool finished = false;          // the render thread ended (the game could not run)
-} g;
-std::mutex g_lock;
-std::condition_variable g_changed, g_acked;
+void acquire_window(void *w) { ANativeWindow_acquire(static_cast<ANativeWindow *>(w)); }
+void release_window(void *w) { ANativeWindow_release(static_cast<ANativeWindow *>(w)); }
+
+RenderRequests &requests() {
+  static RenderRequests r(WindowRefs{&acquire_window, &release_window});
+  return r;
+}
 EventQueue g_events;
 GamePaths g_paths;
 AppCallbacks g_callbacks;
@@ -52,8 +47,41 @@ void make_dirs(const std::string &path) {
     if (i == path.size() || path[i] == '/') mkdir(path.substr(0, i).c_str(), 0700);
 }
 
+std::vector<loader::ConvertHook> convert_hooks() {
+  size_t n = 0;
+  const Hook *h = hooks(&n);
+  std::vector<loader::ConvertHook> out;
+  for (size_t i = 0; i < n; i++) out.push_back({h[i].name, h[i].address});
+  return out;
+}
+
+// An app update may change the launcher's hooks: the image is converted again from the binary
+// kept next to it (no new import needed). False (message given) when that is not possible.
+bool image_up_to_date() {
+  std::string dir = g_paths.image.substr(0, g_paths.image.rfind('/'));
+  std::vector<loader::ConvertHook> current = convert_hooks();
+  if (image_is_current(dir, current)) return true;
+  std::string binary = dir + "/minecraftpe2";
+  if (access(binary.c_str(), R_OK) != 0) {
+    g_callbacks.fatal(access(g_paths.image.c_str(), R_OK) == 0
+                          ? "This version of the app needs the game imported again."
+                          : "The game is not imported (" + g_paths.image + ").");
+    return false;
+  }
+  std::fprintf(stderr, "mcfm: the launcher's hooks changed: converting the game again\n");
+  ImportOptions options;
+  options.hooks = current;
+  std::string error = import_game(binary, dir, options);
+  if (!error.empty()) {
+    g_callbacks.fatal(error);
+    return false;
+  }
+  return true;
+}
+
 // The game image with the launcher's hooks; false (message given) when it cannot load.
 bool load_game(uintptr_t *slide) {
+  if (!image_up_to_date()) return false;
   std::ifstream f(g_paths.image, std::ios::binary);
   std::vector<uint8_t> file((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
   int fd = open(g_paths.image.c_str(), O_RDONLY | O_CLOEXEC);
@@ -97,32 +125,43 @@ struct Egl {
   EGLConfig config = nullptr;
   EGLContext context = EGL_NO_CONTEXT;
   EGLSurface surface = EGL_NO_SURFACE;
+  EGLSurface pbuffer = EGL_NO_SURFACE;  // current while there is no window
 } egl;
 
 bool init_egl() {
   egl.display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
   if (!eglInitialize(egl.display, nullptr, nullptr)) return false;
-  const EGLint attrs[] = {EGL_SURFACE_TYPE, EGL_WINDOW_BIT, EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
+  const EGLint attrs[] = {EGL_SURFACE_TYPE, EGL_WINDOW_BIT | EGL_PBUFFER_BIT, EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
                           EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
                           EGL_DEPTH_SIZE, 24, EGL_STENCIL_SIZE, 8, EGL_NONE};
   EGLint count = 0;
   if (!eglChooseConfig(egl.display, attrs, &egl.config, 1, &count) || count < 1) return false;
   const EGLint ctx[] = {EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE};
   egl.context = eglCreateContext(egl.display, egl.config, EGL_NO_CONTEXT, ctx);
-  return egl.context != EGL_NO_CONTEXT;
+  const EGLint size[] = {EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE};
+  egl.pbuffer = eglCreatePbufferSurface(egl.display, egl.config, size);
+  return egl.context != EGL_NO_CONTEXT && egl.pbuffer != EGL_NO_SURFACE &&
+         eglMakeCurrent(egl.display, egl.pbuffer, egl.pbuffer, egl.context);
 }
 
-// Drops the window surface, keeping the context (and with it every GL object the game made).
+// Drops the window surface. The context stays current on a 1x1 pbuffer (with it every GL object
+// the game made): the game reloads its shaders on resume, before the new window exists, and
+// without a current context its uniform lookups crashed. (Surfaceless needs an extension.)
 void release_surface() {
   if (egl.surface == EGL_NO_SURFACE) return;
-  eglMakeCurrent(egl.display, EGL_NO_SURFACE, EGL_NO_SURFACE, egl.context);
+  eglMakeCurrent(egl.display, egl.pbuffer, egl.pbuffer, egl.context);
   eglDestroySurface(egl.display, egl.surface);
   egl.surface = EGL_NO_SURFACE;
 }
 
 bool attach_surface(ANativeWindow *window) {
   egl.surface = eglCreateWindowSurface(egl.display, egl.config, window, nullptr);
-  return egl.surface != EGL_NO_SURFACE && eglMakeCurrent(egl.display, egl.surface, egl.surface, egl.context);
+  if (egl.surface != EGL_NO_SURFACE && eglMakeCurrent(egl.display, egl.surface, egl.surface, egl.context)) return true;
+  std::fprintf(stderr, "mcfm: cannot draw into the window (EGL error 0x%x)\n", eglGetError());
+  if (egl.surface != EGL_NO_SURFACE) eglDestroySurface(egl.display, egl.surface);
+  egl.surface = EGL_NO_SURFACE;
+  eglMakeCurrent(egl.display, egl.pbuffer, egl.pbuffer, egl.context);
+  return false;
 }
 
 typedef void (*MultitouchFeed)(int, int, int, int, int);
@@ -144,11 +183,7 @@ void apply(const Event &e, uintptr_t slide, TouchSlots *touches) {
     case EventType::MouseWheel: keyboard_mouse::mouse_wheel(e.a, int(e.x), int(e.y)); break;
     case EventType::Text: push_text(addr::kKeyboardText + slide, e.text); break;
     case EventType::Backspace: push_backspace(addr::kKeyboardText + slide); break;
-    case EventType::Return:  // as iOS's textViewShouldReturn: the newline, then Enter pressed (ends editing)
-      push_return(addr::kKeyboardText + slide);
-      keyboard_mouse::key(0x0D, true);
-      keyboard_mouse::key(0x0D, false);
-      break;
+    case EventType::Return: push_return(addr::kKeyboardText + slide); break;
   }
 }
 
@@ -160,42 +195,57 @@ void run() {
     return;
   }
   static Engine engine;
-  bool started = false, paused = false;
+  bool started = false, paused = false, suspended = false, drawable = false;
   int width = 0, height = 0;
   ANativeWindow *window = nullptr;
   TouchSlots touches;
   std::vector<Event> events;
   for (;;) {
-    // Take what the UI thread asked for.
-    bool new_window = false, pause_changed = false, focus_changed = false, focused = true;
-    ANativeWindow *wanted = nullptr;
-    {
-      std::unique_lock<std::mutex> hold(g_lock);
-      g_changed.wait(hold, [&] { return g.window_changed || g.pause_changed || g.focus_changed || (window && !paused); });
-      new_window = g.window_changed;
-      wanted = g.window;
-      if (new_window) { width = g.width; height = g.height; }
-      pause_changed = g.pause_changed;
-      paused = g.paused;
-      focus_changed = g.focus_changed;
-      focused = g.focused;
-      g.window_changed = g.pause_changed = g.focus_changed = false;
-    }
-    if (new_window) {
+    // What the UI thread asked for (blocks while there is nothing, and nothing to draw).
+    Requests q = requests().wait(started && drawable && !paused);
+    // Requests often come in one batch (a resume with its new window and the window focus). The
+    // engine is resumed before it hears of a window size or focus, and suspended while it still
+    // has its surface, as when each came alone (resize or focus_gained while suspended crashed).
+    if (q.pause_changed) paused = q.paused;
+    bool resumed = false;
+    auto sync_pause = [&] {
+      if (started && paused && !suspended) {
+        engine.focus_lost();
+        engine.suspend();  // the game saves
+        mcfm_darwin_drain_main_queue();
+        suspended = true;
+        std::fprintf(stderr, "mcfm: paused (saved)\n");
+      } else if (started && !paused && suspended) {
+        engine.resume();
+        engine.focus_gained();
+        suspended = false;
+        resumed = true;
+      }
+    };
+    sync_pause();
+    if (q.window_changed) {
+      ANativeWindow *wanted = static_cast<ANativeWindow *>(q.window);  // a reference of our own
       if (wanted != window) {
         release_surface();
         if (window) ANativeWindow_release(window);
         window = wanted;
-        if (window) ANativeWindow_acquire(window);
-        if (window && !attach_surface(window)) std::fprintf(stderr, "mcfm: cannot draw into the window\n");
+        drawable = window && attach_surface(window);
+      } else if (wanted) {
+        ANativeWindow_release(wanted);  // the same window resized: one reference is enough
       }
-      if (window && !started) {
-        GamePaths &p = g_paths;
-        HostInfo info = make_host_info(p.home, p.data, p.home + "/tmp");
+      if (window) {
+        width = q.width;
+        height = q.height;
+      }
+      if (drawable && !started) {
+        HostInfo info = make_host_info(g_paths.home, g_paths.data, g_paths.home + "/tmp");
         info.input_mode = 2;  // touch; keys and a mouse still work
         for (const std::string &d : {info.internal_dir, info.userdata_dir, info.temp_dir}) make_dirs(d);
         set_keyboard_callbacks(KeyboardCallbacks{&show_keyboard, &hide_keyboard});
         if (!engine.start(EngineAddresses::for_slide(slide), info, width, height)) {
+          release_surface();
+          ANativeWindow_release(window);
+          requests().ack(q);
           g_callbacks.fatal("The game engine did not start.");
           return;
         }
@@ -203,91 +253,48 @@ void run() {
         keyboard_mouse::install(platform, keyboard_mouse::PointerCallbacks{nullptr, nullptr}, false);
         std::fprintf(stderr, "mcfm: engine started (%dx%d)\n", width, height);
         started = true;
-      } else if (window && started) {
+        requests().set_engine_started();
+      } else if (drawable && started) {
         engine.resize(width, height);
       }
     }
-    if (started && focus_changed) focused ? engine.focus_gained() : engine.focus_lost();
-    if (started && pause_changed) {
-      if (paused) {
-        engine.focus_lost();
-        engine.suspend();  // the game saves
-        mcfm_darwin_drain_main_queue();
-        std::fprintf(stderr, "mcfm: paused (saved)\n");
-      } else {
-        engine.resume();
-        engine.focus_gained();
-      }
-    }
-    {
-      std::lock_guard<std::mutex> hold(g_lock);
-      g.acked = g.requested;  // the window / pause requests so far are done
-    }
-    g_acked.notify_all();
-    if (!started || !window || paused) continue;
+    sync_pause();  // a pause that came before the engine started
+    if (started && !paused && q.focus_changed && !(resumed && q.focused))
+      q.focused ? engine.focus_gained() : engine.focus_lost();
+    requests().ack(q);  // only what was taken above: a request that came in since waits its turn
+    if (!started || !drawable || paused) continue;
     g_events.drain(&events);
     for (const Event &e : events) apply(e, slide, &touches);
     engine.frame();
     mcfm_darwin_drain_main_queue();
-    eglSwapBuffers(egl.display, egl.surface);
+    if (!eglSwapBuffers(egl.display, egl.surface)) {
+      std::fprintf(stderr, "mcfm: the window cannot be drawn into any more (EGL error 0x%x)\n", eglGetError());
+      drawable = false;  // until the next window
+    }
   }
-}
-
-// Wakes the render thread and waits until it has handled this request (or has ended).
-void request_and_wait(std::unique_lock<std::mutex> &hold) {
-  long ticket = ++g.requested;
-  g_changed.notify_all();
-  g_acked.wait(hold, [&] { return g.acked >= ticket || g.finished; });
 }
 
 void thread_main() {
   run();
-  std::lock_guard<std::mutex> hold(g_lock);
-  g.finished = true;
-  g_acked.notify_all();
+  requests().finish();  // the game cannot run: nobody waits for this thread any more
+  if (g_callbacks.thread_exit) g_callbacks.thread_exit();
 }
-
-bool g_started = false;
 
 }  // namespace
 
 void start_game(const GamePaths &paths, const AppCallbacks &callbacks) {
-  std::lock_guard<std::mutex> hold(g_lock);
-  if (g_started) return;
-  g_started = true;
+  static bool started = false;  // the UI thread only
+  if (started) return;
+  started = true;
   g_paths = paths;
   g_callbacks = callbacks;
   std::thread(thread_main).detach();
 }
 
-void set_window(ANativeWindow *window, int width, int height) {
-  std::unique_lock<std::mutex> hold(g_lock);
-  if (g.window) ANativeWindow_release(g.window);
-  g.window = window;
-  if (window) ANativeWindow_acquire(window);
-  g.width = width;
-  g.height = height;
-  g.window_changed = true;
-  if (g_started) request_and_wait(hold);
-}
-
-void set_paused(bool paused) {
-  std::unique_lock<std::mutex> hold(g_lock);
-  g.paused = paused;
-  g.pause_changed = true;
-  if (g_started) request_and_wait(hold);
-}
-
-void set_focus(bool focused) {
-  std::lock_guard<std::mutex> hold(g_lock);
-  g.focused = focused;
-  g.focus_changed = true;
-  g_changed.notify_all();
-}
-
-void push_event(const Event &event) {
-  g_events.push(event);
-}
+void set_window(ANativeWindow *window, int width, int height) { requests().set_window(window, width, height); }
+void set_paused(bool paused) { requests().set_paused(paused); }
+void set_focus(bool focused) { requests().set_focus(focused); }
+void push_event(const Event &event) { g_events.push(event); }
 
 }  // namespace android
 }  // namespace mcfm

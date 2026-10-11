@@ -27,7 +27,8 @@ std::string from_java(JNIEnv *env, jstring s) {
   return out;
 }
 
-// Calls into io.github.d4yvid.mcfm.Native's static methods, from the render thread.
+// Calls into io.github.d4yvid.mcfm.Native's static methods, from the render thread, which stays
+// attached to the JVM until it ends (a thread that exits attached aborts the process).
 JavaVM *g_vm = nullptr;
 jclass g_native = nullptr;
 jmethodID g_show_keyboard = nullptr, g_hide_keyboard = nullptr, g_fatal = nullptr;
@@ -80,6 +81,11 @@ void forward_output_to_logcat() {
   }, fds[0]).detach();
 }
 
+void thread_exit() {
+  JNIEnv *env = nullptr;
+  if (g_vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) == JNI_OK) g_vm->DetachCurrentThread();
+}
+
 void push(mcfm::android::EventType type, int a = 0, int b = 0, float x = 0, float y = 0) {
   mcfm::android::Event e;
   e.type = type;
@@ -114,7 +120,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *) {
 // Starts the game's render thread (once). It draws when a window is set.
 JNIEXPORT void JNICALL Java_io_github_d4yvid_mcfm_Native_nativeStart(JNIEnv *env, jclass, jstring image, jstring data, jstring home) {
   mcfm::android::GamePaths paths{from_java(env, image), from_java(env, data), from_java(env, home)};
-  mcfm::android::start_game(paths, mcfm::android::AppCallbacks{&show_keyboard, &hide_keyboard, &fatal});
+  mcfm::android::start_game(paths, mcfm::android::AppCallbacks{&show_keyboard, &hide_keyboard, &fatal, &thread_exit});
 }
 
 // surfaceChanged (a Surface) / surfaceDestroyed (null): returns once the game uses / let go of it.
@@ -164,8 +170,14 @@ JNIEXPORT void JNICALL Java_io_github_d4yvid_mcfm_Native_nativeBackspace(JNIEnv 
   push(mcfm::android::EventType::Backspace);
 }
 
-JNIEXPORT void JNICALL Java_io_github_d4yvid_mcfm_Native_nativeReturn(JNIEnv *, jclass) {
+// Return: the newline for the text box; press_enter (the soft keyboard's return, as iOS's
+// textViewShouldReturn) also presses Enter, which ends editing. A hardware Enter sends its own key.
+JNIEXPORT void JNICALL Java_io_github_d4yvid_mcfm_Native_nativeReturn(JNIEnv *, jclass, jboolean press_enter) {
   push(mcfm::android::EventType::Return);
+  if (press_enter == JNI_TRUE) {
+    push(mcfm::android::EventType::Key, 0x0D, 1);
+    push(mcfm::android::EventType::Key, 0x0D, 0);
+  }
 }
 
 // Converts the extracted game binary into <dir>/minecraftpe.dylib. Returns null, or a message.

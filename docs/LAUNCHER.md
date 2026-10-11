@@ -208,7 +208,9 @@ our loader; fixture tests cover fixups, imports, initializers, exceptions and ho
    thread (`android/launcher/game_thread.cpp`) that owns EGL and the engine. Touch goes to
    `Multitouch::feed`; keys, a mouse and soft-keyboard text through `shared/` keyboard_mouse;
    the game saves when the app goes to the background. Worlds live in internal storage
-   (`files/home`). It replaces the old Win10-UI mod that patches Mojang's APK (`android/`,
+   (`files/home`); an update that changes the launcher's hooks converts the kept binary again.
+   `make android-app` builds the release APK (`mcfm.apk`), `make android-app-debug` the
+   debuggable one the checks use. It replaces the old Win10-UI mod that patches Mojang's APK (`android/`,
    `make android-apk`, legacy).
 
 Stage 3a acceptance (met 2026-10-10): `make android-boot-check` loads the converted game with
@@ -224,7 +226,10 @@ Stage 3c acceptance (met 2026-10-10): `make android-app` builds a signed, 16 KB-
 (target SDK 37, min SDK 28, 14.5 MB); `make android-app-check` passes on Android 17 (16 KB
 pages) and Android 9 from a clean install: the IPA is imported on the device, the title screen
 renders in the window, touch taps create a world and it renders, the game saves in the
-background and draws again after resuming (screenshots checked).
+background and draws again after resuming (twice, then screen off and on; screenshots checked),
+a stale image is converted again, and a game that cannot start shows its message and leads to a
+new import without crashing. Text input, suggestions, back and a hardware keyboard were checked by
+hand on both.
 
 Acceptance: an APK (target SDK 37) that installs on Android 9+ arm64, including 16 KB-page
 devices, imports a user-supplied IPA and plays — met by 3c.

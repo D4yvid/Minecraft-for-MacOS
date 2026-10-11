@@ -166,19 +166,39 @@ By the work a shim does:
   with the D-pad. A physical mouse and keys still go through `keyboard_mouse` without switching
   the mode at runtime. Touch: `Multitouch::feed(button, state, x, y, slot)` `0x100020EFC`, down
   `(1, 1)`, move `(0, 0)`, up and cancel `(1, 0)`, pixel coordinates, slots 0–11. ✅
-- **Text input**: `showKeyboard` reaches the app through a JNI callback; the soft keyboard talks
-  to a `BaseInputConnection` on the game's view, whose commits and backspaces become the engine's
-  keyboard text events. Return does what iOS's `-[ShowKeyboardView textViewShouldReturn:]`
-  does: a `"\n"` text event, then Enter (VK 13) pressed and released in the engine's `Keyboard`;
-  without the key the text box stays in edit mode. The game's own Done button calls
-  `hideKeyboard`. Typed on the Android 9 emulator's keyboard (letters, backspace, ✓). ✅
-- **Lifecycle**: `onPause` waits until the render thread has suspended the engine (the game saves
-  `options.txt` and the world's `level.dat`); `surfaceDestroyed` waits until the thread let go of
-  the window; the EGL context survives a lost window, so resuming needs no reload. The game shows
-  its Game Menu when it comes back. One game per process: `GameActivity` is `singleTask`
-  (reopening the app after `ImportActivity` finished had stacked a second one). ✅
+- **Text input**: `showKeyboard` reaches the app through a JNI callback. The engine's text box
+  only takes characters, backspaces and return, while keyboards compose, replace words with
+  suggestions (`replaceText` from Android 13) and send key events: the app's `InputConnection`
+  lets the keyboard edit a real `Editable` of what this session typed and types the difference
+  into the game (backspaces to the common prefix, then the new text); deleting past the session's
+  start (the box's initial text) becomes backspaces. Return does what iOS's
+  `-[ShowKeyboardView textViewShouldReturn:]` does: a `"\n"` text event, then Enter (VK 13)
+  pressed and released in the engine's `Keyboard`; without the key the text box stays in edit
+  mode. A hardware keyboard sends the VK and, as on the Mac, its text. The game's own Done button
+  calls `hideKeyboard`. Typed on Android 9's keyboard and Gboard on Android 17 (letters,
+  suggestions, backspace past the start, return, injected key text). ✅
+- **Back**: from Android 16 (target SDK 36+) the back gesture never reaches `onKeyDown`; an
+  `OnBackInvokedCallback` (API 33+, `enableOnBackInvokedCallback`) presses the game's Escape. The
+  callback lives in its own class: a class implementing `OnBackInvokedCallback` fails
+  verification on Android 9 (the lambda inside `GameActivity` made the whole activity fail). ✅
+- **Lifecycle**: only two calls wait for the render thread: `onPause` (once the engine runs,
+  until it suspended: the game saves `options.txt` and the world's `level.dat`) and
+  `surfaceDestroyed` (until the thread let go of the window); a new window, a resume and focus
+  return at once, as the first load takes seconds (`render_requests.h`, host-tested: an ack
+  covers only the requests the thread took). Requests then often come in one batch; the engine is
+  resumed before it hears of a window size or focus (`resize` or `focus_gained` on a suspended
+  engine crashed in the game's shader reload). With no window the context stays current on a 1×1
+  pbuffer: the game reloads its shaders on resume, and with nothing current its uniform lookups
+  crashed (surfaceless contexts need an extension the Android 9 emulator lacks). The game shows its
+  Game Menu when it comes back. One game per process: `GameActivity` is `singleTask`; after a
+  fatal error the render thread detaches from the JVM and the process ends after the dialog,
+  while `ImportActivity` runs in its own process (`:import`). ✅
 - **Storage**: `Android/data/<package>` is out of reach of `adb shell`, `run-as` and file managers
   on Android 11+, so the game's home (worlds, options) is `files/home`; `adb shell run-as
-  io.github.d4yvid.mcfm` reaches it. `adb exec-in run-as … 'cat > file'` dropped bytes from a
+  io.github.d4yvid.mcfm` reaches it. `files/game` keeps the IPA's `minecraftpe2` next to the
+  converted image and `minecraftpe.hooks` (the hooks it was made with): an update whose hooks
+  differ converts the image again without a new import. The import reads the IPA with `ZipFile`
+  (a truncated archive is refused), stages it in its own `files/import-*` and swaps it in by
+  renames (`game.old` restored if a swap was cut short); files are synced before the renames. `adb exec-in run-as … 'cat > file'` dropped bytes from a
   59 MB IPA; `adb push` to `/data/local/tmp` and `run-as cp` is exact. ✅
 - An app's stdout/stderr go nowhere: `JNI_OnLoad` forwards them to logcat (tag `mcfm`). ✅

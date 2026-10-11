@@ -28,8 +28,10 @@ Reverse-engineering notes: docs/research/. Local game files and the IDA database
   from the generated `darwin_abi.h` (`make darwin-abi`), every import in `symbols.cpp` (sorted).
   Darwin variadic calls pass all variadic arguments on the stack (see `darwin/stdio.c`).
 - Android app (Stage 3c, `android/app/`, Kotlin, no Gradle): `make android-app-sdk` once, then
-  `make android-app` (dist/android/mcfm.apk) and `make android-app-check IPA=…` on a running
-  emulator (clean install, import, title, new world by touch, resume). Logs: `adb logcat -s mcfm`;
+  `make android-app` (dist/android/mcfm.apk; `android-app-debug`: the debuggable mcfm-debug.apk)
+  and `make android-app-check IPA=…` on a running emulator (clean install, import, title, new
+  world by touch, lifecycle, re-conversion, the fatal path). The UI thread waits for the render
+  thread only in onPause and surfaceDestroyed (`android/launcher/render_requests.h`). Logs: `adb logcat -s mcfm`;
   the app's files: `adb shell run-as io.github.d4yvid.mcfm`. One game per process: the render
   thread (`android/launcher/game_thread.cpp`) owns EGL and the engine; JNI only queues.
 - `make ios` needs Xcode; without it `make ios-syntax` (part of `make test`) compiles iOS code.

@@ -15,10 +15,15 @@
         android:label="@string/app_name"
         android:allowBackup="false"
         android:extractNativeLibs="false"
+        android:enableOnBackInvokedCallback="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
 
+        <!-- Its own process: the game's process ends after a fatal error (one game per process),
+             and an import outlives configuration changes. -->
         <activity
             android:name=".ImportActivity"
+            android:process=":import"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|locale|layoutDirection|fontScale"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

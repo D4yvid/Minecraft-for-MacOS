@@ -58,6 +58,21 @@ int main(int argc, char **argv) {
   EXPECT(import_game(fixture, dir, fixture_options).empty());
   EXPECT(read(dir + "/minecraftpe.dylib") == read(argv[3]));
 
+  // 5. The image records the hooks it was converted with: an app whose seams changed sees it is
+  //    stale and converts the kept binary again (no new import).
+  using mcfm::launcher::image_is_current;
+  EXPECT(image_is_current(dir, hooks));
+  std::vector<mcfm::loader::ConvertHook> other = hooks;
+  other.back().address += 4;
+  EXPECT(!image_is_current(dir, other));
+  other = hooks;
+  other.pop_back();  // a hook removed from the seams
+  EXPECT(!image_is_current(dir, other));
+  std::remove((dir + "/minecraftpe.hooks").c_str());
+  EXPECT(!image_is_current(dir, hooks));
+  EXPECT(!image_is_current(dir + "/nowhere", hooks));
+  EXPECT(import_game(fixture, dir, fixture_options).empty() && image_is_current(dir, hooks));
+
   if (fails) { std::printf("%d failure(s)\n", fails); return 1; }
   std::printf("game_import_test: all passed\n");
   return 0;

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Process
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -14,7 +15,10 @@ import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import java.io.File
 
-/** The game, full screen: the native render thread draws into [GameView]. */
+/**
+ * The game, full screen: the native render thread draws into [GameView]. One per process
+ * (singleTask): the native side runs one game, so after a fatal error the process ends.
+ */
 class GameActivity : Activity() {
     private lateinit var view: GameView
     /** Wi-Fi drops broadcasts without it: LAN games would not show on the Play screen. */
@@ -22,6 +26,7 @@ class GameActivity : Activity() {
         (applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager?)
             ?.createMulticastLock("mcfm-lan")?.apply { setReferenceCounted(false) }
     }
+    private var back: BackGesture? = null  // API 33+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,11 +35,13 @@ class GameActivity : Activity() {
         setContentView(view)
         view.requestFocus()
         Native.game = this
-        val game = File(filesDir, "game")
+        GameFiles.recover(this)
+        val game = GameFiles.game(this)
         // Worlds and options: internal storage (Android/data is out of reach of file managers and
         // adb on Android 11+ anyway); `adb shell run-as io.github.d4yvid.mcfm` reaches it.
-        val home = File(filesDir, "home")
+        val home = GameFiles.home(this)
         Native.nativeStart(File(game, "minecraftpe.dylib").path, File(game, "data").path + "/", home.path)
+        if (Build.VERSION.SDK_INT >= 33) back = BackGesture(this)  // older: KEYCODE_BACK in GameView
     }
 
     override fun onResume() {
@@ -51,6 +58,7 @@ class GameActivity : Activity() {
     }
 
     override fun onDestroy() {
+        back?.unregister()
         if (Native.game === this) Native.game = null
         super.onDestroy()
     }
@@ -77,24 +85,35 @@ class GameActivity : Activity() {
 
     fun showKeyboard() {
         view.requestFocus()
-        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(view, 0)
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.restartInput(view)  // a new text box: nothing composing
+        imm.showSoftInput(view, 0)
     }
 
     fun hideKeyboard() {
         (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(view.windowToken, 0)
     }
 
-    /** The game cannot run (not imported, a bad image, no GLES 3): say why, offer a new import. */
+    /**
+     * The game cannot run (not imported, a bad image, no GLES 3): say why, offer a new import. The
+     * process ends either way: its one game is gone, and the import runs in its own process.
+     */
     fun showFatal(message: String) {
+        if (isFinishing) return
         AlertDialog.Builder(this)
             .setTitle("Minecraft PE cannot start")
             .setMessage(message)
             .setPositiveButton("Import again") { _, _ ->
                 startActivity(Intent(this, ImportActivity::class.java).putExtra(ImportActivity.EXTRA_REIMPORT, true))
-                finish()
+                end(false)
             }
-            .setNegativeButton("Close") { _, _ -> finish() }
+            .setNegativeButton("Close") { _, _ -> end(true) }
             .setCancelable(false)
             .show()
+    }
+
+    private fun end(removeTask: Boolean) {
+        if (removeTask) finishAndRemoveTask() else finish()
+        view.post { Process.killProcess(Process.myPid()) }
     }
 }

@@ -48,6 +48,37 @@ open(sys.argv[2], 'wb').write(d)
 PY
 refuses "$T/enc" "encrypted" "an encrypted binary"
 "$TOOL" "$T/f/fixture" "$T/missing.tsv" "$T/out" 2>/dev/null && { echo "FAIL: a missing hooks file accepted"; fails=$((fails+1)); }
+# Malformed input is refused without reading or writing past it (convert_tool runs under ASan):
+# a dylib load command too short for its name offset, and a hook whose 12-byte patch would end
+# past the end of a truncated file.
+python3 -I - "$T/f/fixture" "$T/shortdylib" <<'PY'
+import struct, sys
+d = bytearray(open(sys.argv[1], 'rb').read())
+ncmds, size = struct.unpack_from('<II', d, 16)
+struct.pack_into('<II', d, 32 + size, 0xC, 8)  # LC_LOAD_DYLIB, cmdsize 8
+struct.pack_into('<II', d, 16, ncmds + 1, size + 8)
+open(sys.argv[2], 'wb').write(d)
+PY
+refuses "$T/shortdylib" "malformed" "a dylib command shorter than its fields"
+python3 -I - "$T/f/fixture" "$T/f/hooks.tsv" "$T/hookend" "$T/hookend.tsv" <<'PY'
+import struct, sys
+d = open(sys.argv[1], 'rb').read()
+name, addr = open(sys.argv[2]).readline().split()
+addr = int(addr, 16)
+ncmds = struct.unpack_from('<I', d, 16)[0]
+off = 32
+for _ in range(ncmds):
+    cmd, size = struct.unpack_from('<II', d, off)
+    if cmd == 0x19 and d[off + 8:off + 14] == b'__TEXT':
+        vmaddr, vmsize, fileoff = struct.unpack_from('<QQQ', d, off + 24)
+    off += size
+open(sys.argv[3], 'wb').write(d[:addr - vmaddr + fileoff + 10])
+open(sys.argv[4], 'w').write('%s\t%x\n' % (name, addr))
+PY
+err="$("$TOOL" "$T/hookend" "$T/hookend.tsv" "$T/out" 2>&1)" && { echo "FAIL: a hook past the end accepted"; fails=$((fails+1)); }
+grep -q "past the end\|malformed\|truncated" <<<"$err" && ! grep -q "Sanitizer" <<<"$err" \
+  || { echo "FAIL: a hook past the end: $err" | head -5; fails=$((fails+1)); }
+rm -f "$T/out"
 
 # The real game, when present: same bytes as the Python converter with the launcher's hooks.
 GAME_BIN="$ROOT/game-files/ios/Payload/minecraftpe2.app/minecraftpe2"

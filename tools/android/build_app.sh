@@ -1,21 +1,24 @@
 #!/bin/bash
-# usage: build_app.sh <out.apk>   (make android-app; the variables come from the Makefile)
+# usage: build_app.sh [--debug] <out.apk>   (make android-app / android-app-debug; the variables come
+# from the Makefile). --debug: debuggable (run-as, the import's `path` extra) for the checks.
 # Our Android app (docs/LAUNCHER.md, Stage 3c) without Gradle: aapt2 (resources, manifest),
 # kotlinc (android/app/kotlin), d8 (with kotlin-stdlib), the native libraries stored uncompressed
 # in lib/arm64-v8a, zipalign -P 16 (16 KB pages), apksigner with the local debug key.
 # Needs: BUILD_TOOLS ANDROID_JAR KOTLINC JAVA_HOME LAUNCHER_SO STUBS_DIR (libmcfm_stub*.so, libmcfm_stubrt.so).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+DEBUG=()
+if [ "${1:-}" = "--debug" ]; then DEBUG=(--debug-mode); shift; fi
 OUT="$1"
 : "${BUILD_TOOLS:?}" "${ANDROID_JAR:?}" "${KOTLINC:?}" "${JAVA_HOME:?}" "${LAUNCHER_SO:?}" "${STUBS_DIR:?}"
 export JAVA_HOME PATH="$JAVA_HOME/bin:$PATH"
-W="$ROOT/build/android-app"
+W="$ROOT/build/android-app${DEBUG[@]+-debug}"
 rm -rf "$W" && mkdir -p "$W/res" "$W/dex" "$(dirname "$OUT")"
 run() { local out; out="$("$@" 2>&1)" || { echo "build_app: $(basename "$1") failed:" >&2; echo "$out" >&2; exit 1; }; }
 
 run "$BUILD_TOOLS/aapt2" compile --dir "$ROOT/android/app/res" -o "$W/res/compiled.zip"
 run "$BUILD_TOOLS/aapt2" link -I "$ANDROID_JAR" --manifest "$ROOT/android/app/AndroidManifest.xml" \
-  --min-sdk-version 28 --target-sdk-version 37 --version-code 1 --version-name 0.1 --debug-mode \
+  --min-sdk-version 28 --target-sdk-version 37 --version-code 1 --version-name 0.1 ${DEBUG[@]+"${DEBUG[@]}"} \
   -o "$W/base.apk" "$W/res/compiled.zip"
 run "$KOTLINC" -no-reflect -jvm-target 11 -cp "$ANDROID_JAR" -d "$W/classes.jar" $(find "$ROOT/android/app/kotlin" -name '*.kt' | sort)
 STDLIB="$(dirname "$KOTLINC")/../lib/kotlin-stdlib.jar"

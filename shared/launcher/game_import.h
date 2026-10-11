@@ -2,7 +2,7 @@
 // Imports the user's game binary (from their decrypted IPA) as the image the launcher loads:
 // thinned to arm64, checked to be Minecraft PE 0.15.10 (LC_UUID), converted with the launcher's
 // hooks (shared/loader/convert.cpp) and written as <dir>/minecraftpe.dylib, replacing the
-// previous image atomically. Used by the Android app (docs/LAUNCHER.md, Stage 3c). C++11.
+// previous image atomically, with the hooks it was made with in <dir>/minecraftpe.hooks. Used by the Android app (docs/LAUNCHER.md, Stage 3c). C++11.
 #include <string>
 #include <vector>
 
@@ -18,6 +18,10 @@ struct ImportOptions {
 
 // Empty on success, else a message for the user; on failure the previous image is untouched.
 std::string import_game(const std::string &binary_path, const std::string &dir, const ImportOptions &options);
+
+// True when <dir>/minecraftpe.dylib exists and was converted with exactly these hooks (recorded
+// in <dir>/minecraftpe.hooks by import_game); false means: import the binary again.
+bool image_is_current(const std::string &dir, const std::vector<loader::ConvertHook> &hooks);
 
 }  // namespace launcher
 }  // namespace mcfm
