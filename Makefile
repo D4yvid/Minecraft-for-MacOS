@@ -458,8 +458,17 @@ $(BUILD)/test/input_policy_test: macos/tests/input_policy_test.cpp macos/src/inp
 	@mkdir -p $(dir $@)
 	clang++ -std=c++17 -Wall -O1 $(SHARED_INC) macos/tests/input_policy_test.cpp -o $@
 
-test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS))
-	@for t in $(SHARED_TESTS) $(MACOS_TESTS); do $(BUILD)/test/$$t || exit 1; done
+# Host tests of the iOS app's platform-free parts (Stage 4).
+IOS_TESTS := ios_keymap_test layout_test
+$(BUILD)/test/ios_keymap_test: ios/tests/ios_keymap_test.cpp ios/launcher/ios_keymap.cpp ios/launcher/ios_keymap.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -Wextra -O1 -Iios/launcher ios/tests/ios_keymap_test.cpp ios/launcher/ios_keymap.cpp -o $@
+$(BUILD)/test/layout_test: ios/tests/layout_test.cpp ios/launcher/layout.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -Wextra -O1 -Iios/launcher ios/tests/layout_test.cpp -o $@
+
+test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS) $(IOS_TESTS))
+	@for t in $(SHARED_TESTS) $(MACOS_TESTS) $(IOS_TESTS); do $(BUILD)/test/$$t || exit 1; done
 	$(MAKE) --no-print-directory ios-syntax
 	bash tools/tests/inject_test.sh
 	bash tools/tests/check_game_test.sh $(GAME)
