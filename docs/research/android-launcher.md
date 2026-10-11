@@ -183,7 +183,8 @@ By the work a shim does:
   queue: slot 2 `(const std::string &path)` when picked, slot 3 `()` when cancelled. The app
   opens the photo picker (Android 13+, no permission) or `GET_CONTENT` for `image/*`, re-encodes
   the picture as PNG in the game's temp directory and answers on the render thread; the game then
-  asks for the model type. A host without a picker (the Mac launcher for now) cancels at once.
+  asks for the model type. A host without a picker cancels at once (the Mac launcher has an
+  open panel: docs/research/macho-launcher.md).
   Picked and cancelled on Android 9 (DocumentsUI) and 17 (photo picker). ✅
 - **Back**: from Android 16 (target SDK 36+) the back gesture never reaches `onKeyDown`; an
   `OnBackInvokedCallback` (API 33+, `enableOnBackInvokedCallback`) presses the game's Escape. The

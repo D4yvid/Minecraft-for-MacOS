@@ -118,7 +118,8 @@ pointer capture, text entry, sound, no Xbox Live prompt; the owner played a worl
 7. ☑ **Input**: reuse `shared/` keyboard/mouse (it writes the engine's `Keyboard`/`Mouse`
    queues directly) and pointer capture. As built (1c): `LauncherPlatform` (shared) +
    `macos/launcher/input.mm` (NSEvent keys/buttons/wheel, GCMouse raw look, CoreGraphics
-   capture, text entry through the engine's `Keyboard` text queue; `MCFM_LOOK_SCALE`).
+   capture, text entry through the engine's `Keyboard` text queue; `MCFM_LOOK_SCALE`). Custom
+   skins (`pickImage`): an open panel for images, re-encoded as PNG (`image_pick.mm`).
 8. ☑ **Audio**: FMOD's output uses a RemoteIO AudioUnit and `AudioSession*`: our AudioToolbox
    wrappers implement the subset it calls (RemoteIO → CoreAudio default output; session calls
    succeed) — the same wrapper API is reimplemented on AAudio for Android. As built (1c):

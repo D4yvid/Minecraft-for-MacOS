@@ -5,6 +5,7 @@
 // (OpenGL ES 3 on Metal) context. docs/LAUNCHER.md, Stage 1b.
 #import <AppKit/AppKit.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include <crt_externs.h>
 #include <dlfcn.h>
@@ -22,6 +23,7 @@
 #include "egl_min.h"
 #include "engine.h"
 #include "hook_table.h"
+#include "image_pick.h"
 #include "input.h"
 #include "launcher_platform.h"
 #include "loader.h"
@@ -122,6 +124,12 @@ HostInfo host_info(const std::string &game_data_dir) {
   return info;
 }
 
+// The skin screen's "Choose New Skin" (pickImage) asks from inside a frame: the panel opens
+// once that frame is done, and its answer goes to the engine at the start of a later one.
+bool g_pick_requested = false;  // the main (engine) thread only
+PickMailbox g_pick_answer;
+void request_image() { g_pick_requested = true; }
+
 }  // namespace
 
 @interface McfmView : NSView
@@ -161,6 +169,8 @@ HostInfo host_info(const std::string &game_data_dir) {
   Engine _engine;
   std::string _dataDir;
   std::string _screenshot;  // written from the last frame of --frames
+  std::string _tempDir;     // the game's temp dir: the picked skin goes there
+  BOOL _pickerOpen;
 }
 - (instancetype)initWithDataDir:(const std::string &)dir frames:(long)frames screenshot:(const std::string &)shot {
   if ((self = [super init])) { _dataDir = dir; _framesLeft = frames; _screenshot = shot; }
@@ -209,7 +219,10 @@ HostInfo host_info(const std::string &game_data_dir) {
   }
   std::printf("mcfm: EGL %d.%d (ANGLE, Metal)\n", major, minor);
   NSSize px = [self pixelSize];
-  if (!_engine.start(EngineAddresses::for_slide(g_slide), host_info(_dataDir), (int)px.width, (int)px.height)) exit(5);
+  HostInfo info = host_info(_dataDir);
+  _tempDir = info.temp_dir;
+  set_image_picker(&request_image);
+  if (!_engine.start(EngineAddresses::for_slide(g_slide), info, (int)px.width, (int)px.height)) exit(5);
   std::printf("mcfm: engine started (%dx%d)\n", (int)px.width, (int)px.height);
   mcfm::launcher::input::install(self.window.contentView, _engine.vtable(), mcfm::launcher::InputAddresses::for_slide(g_slide));
   self.window.acceptsMouseMovedEvents = YES;
@@ -223,7 +236,13 @@ HostInfo host_info(const std::string &game_data_dir) {
   self.egl.MakeCurrent(self.display, self.surface, self.surface, self.context);
   self.egl.BindFramebuffer(GL_FRAMEBUFFER, 0);
   self.egl.Viewport(0, 0, (int)px.width, (int)px.height);
+  std::string png;
+  if (g_pick_answer.take(&png)) png.empty() ? image_pick_cancelled() : image_picked(png);
   _engine.frame();
+  if (g_pick_requested) {
+    g_pick_requested = false;
+    [self showImagePanel];
+  }
   if (self.framesLeft == 1 && !_screenshot.empty()) {
     // Read the default framebuffer with tightly packed rows into client memory, whatever
     // state the engine left behind.
@@ -245,6 +264,36 @@ HostInfo host_info(const std::string &game_data_dir) {
     // _exit: engine threads (REST, audio, ...) are still running; static destructors must not.
     _exit(0);
   }
+}
+// As iOS's photo picker: the chosen picture, re-encoded as PNG in the game's temp dir (any DPI
+// or format ImageIO reads). A sheet, not runModal: the frame timer must not run inside the
+// engine's pickImage, and the game keeps drawing behind it.
+- (void)showImagePanel {
+  if (_pickerOpen) return;  // already asking: its answer goes to the latest request
+  _pickerOpen = YES;
+  NSOpenPanel *panel = [NSOpenPanel openPanel];
+  panel.canChooseFiles = YES;
+  panel.canChooseDirectories = NO;
+  panel.allowsMultipleSelection = NO;
+  panel.allowedContentTypes = @[ UTTypeImage ];
+  panel.message = @"Choose New Skin";
+  panel.prompt = @"Choose";
+  std::string out = _tempDir + "/newSkin.png";
+  [panel beginSheetModalForWindow:self.window completionHandler:^(NSModalResponse response) {
+    self->_pickerOpen = NO;
+    if (response != NSModalResponseOK || !panel.URL) {
+      std::printf("mcfm: image picker cancelled\n");
+      g_pick_answer.post("");
+      return;
+    }
+    std::string source = panel.URL.path.UTF8String;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      bool ok = write_png(source, out);
+      if (ok) std::printf("mcfm: image picked: %s -> %s\n", source.c_str(), out.c_str());
+      else std::fprintf(stderr, "mcfm: image picker: cannot read %s as a picture\n", source.c_str());
+      g_pick_answer.post(ok ? out : "");
+    });
+  }];
 }
 - (void)updateSurfaceSize {
   NSSize px = [self pixelSize];
