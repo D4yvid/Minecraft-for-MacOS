@@ -27,7 +27,8 @@ by modding the shipped engine — never redistributing it. Next goals set by the
 |---|---|---|
 | macOS launcher (default, `make app`) | iOS binary loaded by our own launcher: no Catalyst/UIKit, every framework stubbed; ANGLE/Metal window, keyboard, raw mouse look, text entry, sound, no Xbox prompt | ✅ `make test`; `make check` (120 frames); owner played a world 2026-10-10 |
 | macOS Catalyst (deprecated, `make catalyst`) | Win10 UI, keyboard+mouse with pointer capture, resizable window that the engine follows, auto-hiding/fading title bar, App Store receipt prompt skipped | ✅ `make check` (bundle test + 15 s launch with log asserts); owner's screenshots (Win10 title screen, game filling the window). Hand checks M1–M7 below **not** all confirmed |
-| iOS | Win10 UI + receipt skip dylib, `make ios-ipa` → unsigned IPA | ✅ compiles for iOS (`make ios-syntax`), IPA structure test with a stub dylib. ❓ never linked against the real iOS SDK (no Xcode here), never run on a device |
+| iOS app (`make ios-app`) | Our own Swift app with the game bundled: the image converted for iOS, loaded by dyld; ANGLE on Metal; touch, keyboard, skins, splash | ✅ `make ios-app-check` on the owner's iPhone 16 Pro Max (iOS 27): title screen at 2868×1320; touch. ❓ hand checklist (lifecycle, keyboard, skins, sound) |
+| iOS, legacy mod | Win10 UI + receipt skip dylib injected into the IPA, `make ios-ipa` / `make ios-device` (signs and installs) | ✅ runs full screen on the iPhone 16 Pro Max (SDK field set to 11.0) |
 | Android app (`make android-app`) | Our own Kotlin APK (target SDK 37, min 28, 16 KB pages), a launcher with the game bundled (built from your IPA; local only), runs the iOS image with our loader over a Darwin libSystem layer and an Apple-ABI libc++; GLES 3 window, touch GUI, soft keyboard, a mouse and keys, FMOD on AAudio, saves in the background | ✅ `make android-app-check` on the Android 17 and 9 emulators (first start, title screen, a world created by touch, background/resume, errors); `make android-test`. ❓ never run on a physical device |
 | Android, legacy mod | Win10 UI via `libmcfm.so`, `make android-apk` (patches Mojang's APK; replaced by the app above) | ✅ builds with NDK r10c, library + APK pipeline tests on stand-in APKs. ❓ never run on a device |
 | Shared core | `Platform` interface, `win10_ui`, `keyboard_mouse`, input logic | ✅ host tests (C++11), ASan/UBSan clean |
@@ -86,6 +87,10 @@ make catalyst-check  # bundle/IPA/UUID tests + 15 s launch — CLOSES a running 
 make catalyst-run
 # The Catalyst build is a deprecated build mode until the launcher replaces it (LAUNCHER.md).
 make android     # libmcfm.so + tests       make android-apk APK=…   make ios-ipa
+# iOS app (Stage 4): Xcode installed, your Apple ID in Xcode, the iPhone connected and trusted
+make angle-ios                   # once: ANGLE for iOS (Godot's static build, 4 MB)
+make ios-app IPA=…               # dist/ios/mcfm.app, signed (7-day free profile)
+make ios-app-run                 # install + launch with its console; ios-app-check: 300 frames + screenshot
 # Android launcher (Stage 3): toolchain once, then an emulator (or a device over adb)
 make android-sdk llvm-runtimes   # NDK r27d, adb, emulator, API 37/28 images; LLVM sources
 make android-emulator [API=28]   # boots the API 37 (16 KB pages) or API 28 emulator headless

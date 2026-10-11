@@ -36,7 +36,13 @@ Reverse-engineering notes: docs/research/. Local game files and the IDA database
   thread only in onPause and surfaceDestroyed (`android/launcher/render_requests.h`). Logs: `adb logcat -s mcfm`;
   the app's files: `adb shell run-as io.github.d4yvid.mcfm`. One game per process: the render
   thread (`android/launcher/game_thread.cpp`) owns EGL and the engine; JNI only queues.
-- `make ios` needs Xcode; without it `make ios-syntax` (part of `make test`) compiles iOS code.
+- iOS app (Stage 4, `ios/app` Swift + `ios/launcher` Objective-C++): `make angle-ios` once,
+  `make ios-app` (signed `dist/ios/mcfm.app`, the game bundled), `make ios-app-run` /
+  `ios-app-check` on the connected iPhone (unlocked). The image is loaded by dyld (iOS runs no
+  unsigned code); all GL goes through ANGLE in `ios/launcher/egl_view.mm` (never link the
+  system OpenGLES). Xcode at /Applications/Xcode.app is used through DEVELOPER_DIR.
+- `make ios` (the legacy IPA mod) needs Xcode; without it `make ios-syntax` (part of
+  `make test`) compiles iOS code.
 
 ## Rules
 - Never commit Mojang files (`tools/tests/no_game_files_test.sh` enforces it).

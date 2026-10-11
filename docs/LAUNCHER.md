@@ -238,6 +238,25 @@ hand on both.
 Acceptance: an APK (target SDK 37) that installs on Android 9+ arm64, including 16 KB-page
 devices, imports a user-supplied IPA and plays — met by 3c.
 
+## Stage 4 — our own iOS app ☑ (2026-10-10)
+The Android app's model on iOS ([research/ios-app.md](research/ios-app.md)): a Swift app
+(`ios/app`, UIScene, built from the command line by `make ios-app IPA=…`, no Xcode project)
+with the game bundled. iOS runs no unsigned code, so the game binary is converted at build time
+(`mcfm_image.py dylib --platform ios`), signed into `Frameworks/` and loaded by **dyld** with the
+hook table filled before its initializers (the macOS launcher's `--loader dyld` path); the
+frameworks of its iOS glue are stubbed, AudioToolbox stays the system's. Graphics through
+**ANGLE** (Godot's static iOS build, `make angle-ios`; the system OpenGL ES has no framebuffer 0,
+which the engine binds for the screen): an EGL window surface on a `CAMetalLayer` at the native
+resolution. The launcher core (`ios/launcher`, Objective-C++) runs `shared/launcher` on the main
+thread from a display link; touches through the shared `touch_input`, hardware keys, the soft
+keyboard, skins through the photo picker, a splash while loading. `make ios-app-run` installs it
+on the connected device; signing with a free Apple ID (7-day profiles). The IPA mod
+(`make ios-ipa`, `ios-device`) stays as legacy.
+
+Stage 4 acceptance (met 2026-10-10): `make ios-app` builds and signs `dist/ios/mcfm.app` (110 MB
+with the game); `make ios-app-check` on the owner's iPhone 16 Pro Max (iOS 27): the engine
+starts at 2868×1320, 300 frames, the screenshot shows the title screen; touch reaches the game.
+
 ## Later
 - Linux arm64 / Windows on ARM launchers (Stage 2 loader + Stage 3 translation, different host).
 - Our own renderer behind the `gl*` imports ([research/renderer.md](research/renderer.md)).
@@ -247,6 +266,9 @@ devices, imports a user-supplied IPA and plays — met by 3c.
 - 2026-10-10: the Android app is our own APK that launches the launcher `.so` (not a patched
   Mojang APK); the old Android mod's library is named `libmcfm.so` like everything else.
 - 2026-10-10: the APK always bundles the game (no import screen): the app is a launcher for it.
+- 2026-10-10: iOS gets our own Swift app (not the edited IPA), made with make + the command-line
+  tools, the game bundled; graphics through ANGLE (the owner's choice after the system OpenGL ES
+  drew nothing: no framebuffer 0); the app in Swift, Objective-C++ only for the glue.
 - 2026-10-10: the Android app code (activity, game preparation, settings) is written in Kotlin; the
   launcher, loader and Darwin layer stay native (C++).
 - 2026-10-10: Android targets the latest SDK (37, 16 KB pages), minimum API 28; prebuilt APKs
