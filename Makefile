@@ -73,6 +73,12 @@ ios-ipa: $(IOS_DYLIB)
 	@test -n "$(GAME)" || { echo "Set GAME=<your decrypted Minecraft .app or .ipa> (or put it in config.mk)"; exit 1; }
 	bash ios/tools/make_ipa.sh "$(GAME)" "$(IOS_IPA)" "$(IOS_DYLIB)"
 
+# Signs dist/minecraftpe-mcfm.ipa with your Apple Development identity and installs it on the
+# iPhone/iPad connected over USB (ios/tools/sign_install.sh; free profiles last 7 days).
+.PHONY: ios-device
+ios-device: ios-ipa
+	bash ios/tools/sign_install.sh "$(IOS_IPA)" $(IOS_BUNDLE_ID)
+
 # Compiles the iOS sources for the iOS target without linking (works without Xcode).
 ios-syntax:
 	clang++ $(IOS_CXXFLAGS) -isysroot $(SDK) -Wno-incompatible-sysroot -fsyntax-only $(IOS_SRCS)

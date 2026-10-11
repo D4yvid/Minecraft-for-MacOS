@@ -31,6 +31,18 @@ otool -L "$APP/$EXE" | grep -q '@executable_path/Frameworks/libmcfm.dylib' || fa
 vtool -show-build "$APP/Frameworks/libmcfm.dylib" 2>/dev/null | grep -q 'platform IOS$' || fail "dylib is not an iOS build"
 vtool -show-build "$APP/$EXE" 2>/dev/null | grep -q 'MACCATALYST' && fail "main binary was retagged for Mac"
 [ ! -e "$APP/_CodeSignature" ] || fail "stale _CodeSignature left in the app"
+# Full screen on current iPhones: iOS letterboxes apps linked against an SDK older than 11 (the
+# game says 9.3); the deployment target stays as it was.
+SDK_V="$(otool -l "$APP/$EXE" | awk '/LC_VERSION_MIN_IPHONEOS|LC_BUILD_VERSION/ {f=1} f && $1=="sdk" {print $2; exit}')"
+[ "${SDK_V%%.*}" -ge 11 ] 2>/dev/null || fail "main binary still linked against SDK $SDK_V (letterboxed on current iPhones)"
+otool -l "$APP/$EXE" | awk '/LC_VERSION_MIN_IPHONEOS/ {f=1} f && $1=="version" {print $2; exit}' | grep -qx '8.0' \
+  || fail "the deployment target changed"
+# A game, full screen, without the status bar.
+plist() { /usr/libexec/PlistBuddy -c "Print :$1" "$APP/Info.plist" 2>/dev/null; }
+[ "$(plist LSApplicationCategoryType)" = public.app-category.games ] || fail "not declared a game (LSApplicationCategoryType)"
+[ "$(plist GCSupportsGameMode)" = true ] || fail "GCSupportsGameMode missing"
+[ "$(plist UIStatusBarHidden)" = true ] && [ "$(plist UIViewControllerBasedStatusBarAppearance)" = false ] || fail "the status bar is not hidden"
+[ "$(plist UIRequiresFullScreen)" = true ] || fail "UIRequiresFullScreen missing"
 # Relative paths and a trailing slash on the .app must work too.
 APP_ABS="$(cd "$GAME" && pwd)"
 (cd "$(dirname "$APP_ABS")" && bash "$ROOT/ios/tools/make_ipa.sh" "$(basename "$APP_ABS")/" "$T/slash.ipa" "$T/libmcfm.dylib" >/dev/null) \
