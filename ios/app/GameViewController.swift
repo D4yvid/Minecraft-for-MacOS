@@ -7,7 +7,8 @@ import UIKit
 final class GameViewController: UIViewController, PHPickerViewControllerDelegate {
     private let gameView = GameView(frame: .zero)
     private var displayLink: CADisplayLink?
-    private var started = false, active = true
+    private var started = false, starting = false, active = true
+    private let splash = SplashView(frame: .zero)
     fileprivate static weak var current: GameViewController?
 
     override func loadView() { view = gameView }
@@ -25,6 +26,9 @@ final class GameViewController: UIViewController, PHPickerViewControllerDelegate
         try? AVAudioSession.sharedInstance().setCategory(.ambient)
         try? AVAudioSession.sharedInstance().setActive(true)
         gameView.onResize = { [weak self] w, h in self?.resized(w, h) }
+        splash.frame = gameView.bounds
+        splash.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        gameView.addSubview(splash)
         let link = CADisplayLink(target: self, selector: #selector(step))
         link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
         link.add(to: .main, forMode: .common)
@@ -36,9 +40,17 @@ final class GameViewController: UIViewController, PHPickerViewControllerDelegate
         gameView.becomeFirstResponder()
     }
 
-    /// The first drawable starts the game; later ones resize it.
+    /// The first drawable starts the game, one run loop turn later so the splash is on screen
+    /// first (the load blocks the main thread); later ones resize it.
     private func resized(_ w: Int32, _ h: Int32) {
         if started { mcfm_ios_resize(w, h); return }
+        if starting { return }
+        starting = true
+        DispatchQueue.main.async { [weak self] in self?.start() }
+    }
+
+    private func start() {
+        let w = gameView.pixelWidth, h = gameView.pixelHeight
         let bundle = Bundle.main
         let image = (bundle.privateFrameworksPath ?? "") + "/libminecraftpe.dylib"
         let data = (bundle.resourcePath ?? "") + "/game/data/"
@@ -75,6 +87,7 @@ final class GameViewController: UIViewController, PHPickerViewControllerDelegate
         framesDone += 1
         if framesLeft > 0 && framesDone == framesLeft { finishFrames() }
         let error = gameView.endFrame()
+        if framesDone == 1 { splash.dismiss() }  // the first frame is on screen
         if error != 0 && framesDone < 4 { print("mcfm: GL error 0x\(String(error, radix: 16)) in frame \(framesDone)") }
     }
 

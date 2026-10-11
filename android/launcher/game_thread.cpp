@@ -270,7 +270,11 @@ void run() {
     for (const Event &e : events) apply(e, slide, &touches);
     engine.frame();
     mcfm_darwin_drain_main_queue();
-    if (!eglSwapBuffers(egl.display, egl.surface)) {
+    if (eglSwapBuffers(egl.display, egl.surface)) {
+      static bool shown = false;
+      if (!shown && g_callbacks.first_frame) g_callbacks.first_frame();  // the splash goes
+      shown = true;
+    } else {
       std::fprintf(stderr, "mcfm: the window cannot be drawn into any more (EGL error 0x%x)\n", eglGetError());
       drawable = false;  // until the next window
     }

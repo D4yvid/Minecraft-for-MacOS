@@ -39,29 +39,30 @@ class GameActivity : Activity() {
             ?.createMulticastLock("mcfm-lan")?.apply { setReferenceCounted(false) }
     }
     private var back: BackGesture? = null  // API 33+
+    private lateinit var splash: SplashView
+
+    /** The render thread drew its first frame: the splash goes. */
+    fun firstFrame() = splash.dismiss()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         view = GameView(this)
-        val preparing = TextView(this).apply {
-            text = "Preparing the game…"
-            textSize = 18f
-            gravity = Gravity.CENTER
-        }
+        splash = SplashView(this)
         setContentView(FrameLayout(this).apply {
             addView(view)
-            addView(preparing)
+            addView(splash)
         })
+        hideSystemBars()  // from the splash on
         view.requestFocus()
         Native.game = this
         if (Build.VERSION.SDK_INT >= 33) back = BackGesture(this)  // older: KEYCODE_BACK in GameView
         if (GameFiles.ready(this)) {
-            preparing.visibility = View.GONE
             start()
         } else {
+            splash.setStatus("Preparing the game…")
             GameFiles.prepare(this) { error ->
-                preparing.visibility = View.GONE
+                splash.setStatus("Loading…")
                 if (error == null) start() else showFatal(error)
             }
         }

@@ -22,6 +22,7 @@ struct AppCallbacks {
   void (*hide_keyboard)();
   void (*fatal)(const std::string &message);  // the game cannot run: show the message, finish
   void (*thread_exit)();                       // last call on the render thread (JVM detach)
+  void (*first_frame)();                       // the first frame is on screen (the splash goes)
   void (*pick_image)();                        // show the image picker (the skin screen); the
                                                // answer comes back as an ImagePicked event
 };

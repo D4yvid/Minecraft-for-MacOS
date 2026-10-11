@@ -31,7 +31,8 @@ std::string from_java(JNIEnv *env, jstring s) {
 // attached to the JVM until it ends (a thread that exits attached aborts the process).
 JavaVM *g_vm = nullptr;
 jclass g_native = nullptr;
-jmethodID g_show_keyboard = nullptr, g_hide_keyboard = nullptr, g_fatal = nullptr, g_pick_image = nullptr;
+jmethodID g_show_keyboard = nullptr, g_hide_keyboard = nullptr, g_fatal = nullptr, g_pick_image = nullptr,
+          g_first_frame = nullptr;
 
 JNIEnv *thread_env() {
   JNIEnv *env = nullptr;
@@ -49,6 +50,7 @@ void show_keyboard(const std::string &text) {
 
 void hide_keyboard() { thread_env()->CallStaticVoidMethod(g_native, g_hide_keyboard); }
 void pick_image() { thread_env()->CallStaticVoidMethod(g_native, g_pick_image); }
+void first_frame() { thread_env()->CallStaticVoidMethod(g_native, g_first_frame); }
 
 void fatal(const std::string &message) {
   std::fprintf(stderr, "mcfm: %s\n", message.c_str());
@@ -116,13 +118,14 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *) {
   g_hide_keyboard = env->GetStaticMethodID(c, "hideKeyboard", "()V");
   g_fatal = env->GetStaticMethodID(c, "fatal", "(Ljava/lang/String;)V");
   g_pick_image = env->GetStaticMethodID(c, "pickImage", "()V");
+  g_first_frame = env->GetStaticMethodID(c, "firstFrame", "()V");
   return JNI_VERSION_1_6;
 }
 
 // Starts the game's render thread (once). It draws when a window is set.
 JNIEXPORT void JNICALL Java_io_github_d4yvid_mcfm_Native_nativeStart(JNIEnv *env, jclass, jstring image, jstring data, jstring home) {
   mcfm::android::GamePaths paths{from_java(env, image), from_java(env, data), from_java(env, home)};
-  mcfm::android::start_game(paths, mcfm::android::AppCallbacks{&show_keyboard, &hide_keyboard, &fatal, &thread_exit, &pick_image});
+  mcfm::android::start_game(paths, mcfm::android::AppCallbacks{&show_keyboard, &hide_keyboard, &fatal, &thread_exit, &first_frame, &pick_image});
 }
 
 // surfaceChanged (a Surface) / surfaceDestroyed (null): returns once the game uses / let go of it.

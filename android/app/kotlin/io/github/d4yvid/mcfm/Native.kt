@@ -37,6 +37,10 @@ object Native {
         game?.let { it.runOnUiThread { it.hideKeyboard() } }
     }
 
+    @JvmStatic fun firstFrame() {
+        game?.let { it.runOnUiThread { it.firstFrame() } }
+    }
+
     @JvmStatic fun pickImage() {
         val g = game
         if (g == null) nativeImagePicked(null) else g.runOnUiThread { g.pickImage() }
