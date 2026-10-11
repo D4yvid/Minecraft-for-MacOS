@@ -4,8 +4,10 @@
 usage: mcfm_image.py imports <macho>              imports as TSV: lib, symbol, fn|data
        mcfm_image.py stubs <imports.tsv> <outdir> [--provided <lib> <symbols>]...
                                                   one C stub source per stubbed library
-       mcfm_image.py dylib <executable> <out> [--hooks <hooks.tsv>]
-                                                  executable -> dylib loadable on macOS
+       mcfm_image.py dylib <executable> <out> [--hooks <hooks.tsv>] [--platform macos|ios]
+                           [--host <lib>[,<lib>]...]
+                                                  executable -> dylib loadable on macOS (or iOS:
+                                                  Stage 4); --host keeps those frameworks real
 Exit 2 when the input is unsuitable.
 """
 import os
@@ -132,6 +134,8 @@ LC_REEXPORT_DYLIB, LC_LAZY_LOAD_DYLIB, LC_LOAD_UPWARD_DYLIB = 0x8000001F, 0x20, 
 DYLIB_LOADS = (LC_LOAD_DYLIB, LC_LOAD_WEAK_DYLIB, LC_REEXPORT_DYLIB, LC_LAZY_LOAD_DYLIB, LC_LOAD_UPWARD_DYLIB)
 LC_VERSION_MIN = (0x24, 0x25, 0x2F, 0x30)  # macOS, iOS, tvOS, watchOS
 PLATFORM_MACOS, MACOS_11 = 1, 0x000B0000
+PLATFORM_IOS, IOS_15 = 2, 0x000F0000
+PLATFORM_TAGS = {"macos": (PLATFORM_MACOS, MACOS_11), "ios": (PLATFORM_IOS, IOS_15)}
 PAD_SIZE = 0x4000
 IMAGE_ID = "@rpath/libminecraftpe.dylib"
 
@@ -217,7 +221,11 @@ def segment_name(cmd_bytes):
     return cmd_bytes[8:24].rstrip(b"\0").decode()
 
 
-def cmd_dylib(src, dst, hooks=()):
+def cmd_dylib(src, dst, hooks=(), platform="macos", host_libs=()):
+    if platform not in PLATFORM_TAGS:
+        fail("unknown platform %s (macos or ios)" % platform)
+    tag_platform, tag_version = PLATFORM_TAGS[platform]
+    keep = set(HOST_LIBS) | set(host_libs)
     try:
         data = bytearray(open(src, "rb").read())
     except OSError as e:
@@ -258,15 +266,15 @@ def cmd_dylib(src, dst, hooks=()):
         if cmd in (LC_MAIN, LC_LOAD_DYLINKER, LC_ENCRYPTION_INFO, LC_ENCRYPTION_INFO_64):
             continue
         if cmd in LC_VERSION_MIN or cmd == LC_BUILD_VERSION:
-            if not tagged:  # one macOS tag, however many platform commands the input has
-                out.append(struct.pack("<IIIIII", LC_BUILD_VERSION, 24, PLATFORM_MACOS, MACOS_11, MACOS_11, 0))
+            if not tagged:  # one platform tag, however many platform commands the input has
+                out.append(struct.pack("<IIIIII", LC_BUILD_VERSION, 24, tag_platform, tag_version, tag_version, 0))
                 tagged = True
             continue
         if cmd in DYLIB_LOADS:
             name_off = struct.unpack_from("<I", c, 8)[0]
             name = c[name_off:].split(b"\0")[0].decode()
             lib = short_name(name)
-            out.append(c if lib in HOST_LIBS else dylib_command(cmd, "@rpath/mcfm_stub_%s.dylib" % lib))
+            out.append(c if lib in keep else dylib_command(cmd, "@rpath/mcfm_stub_%s.dylib" % lib))
             continue
         if cmd == LC_SEGMENT_64:
             c = bytearray(c)
@@ -311,13 +319,18 @@ def main(argv):
             except OSError as e:
                 fail("cannot read %s: %s" % (argv[k + 2], e))
         return cmd_stubs(argv[2], argv[3], provided)
-    if len(argv) in (4, 6) and argv[1] == "dylib":
-        hooks = ()
-        if len(argv) == 6:
-            if argv[4] != "--hooks":
+    if len(argv) >= 4 and len(argv) % 2 == 0 and argv[1] == "dylib":
+        hooks, platform, host_libs = (), "macos", ()
+        for k in range(4, len(argv), 2):
+            if argv[k] == "--hooks":
+                hooks = read_hooks(argv[k + 1])
+            elif argv[k] == "--platform":
+                platform = argv[k + 1]
+            elif argv[k] == "--host":
+                host_libs = tuple(x for x in argv[k + 1].split(",") if x)
+            else:
                 fail(__doc__.strip())
-            hooks = read_hooks(argv[5])
-        return cmd_dylib(argv[2], argv[3], hooks)
+        return cmd_dylib(argv[2], argv[3], hooks, platform, host_libs)
     fail(__doc__.strip())
 
 

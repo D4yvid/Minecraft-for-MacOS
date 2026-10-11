@@ -1,11 +1,14 @@
 #!/bin/bash
-# usage: build_stubs.sh [--target android] <imports.tsv> <outdir> [--provider <lib>=<dylib>]...
+# usage: build_stubs.sh [--target android|ios] <imports.tsv> <outdir> [--provider <lib>=<dylib>]...
+#        [--skip <lib>]...
 # Builds libmcfm_stubrt.dylib and mcfm_stub_<lib>.dylib for every stubbed library listed
 # in imports.tsv (mcfm_image.py imports). A provider's exports are not stubbed: the stub
 # re-exports the provider (e.g. OpenGLES=libGLESv2.dylib from ANGLE). Install names @rpath/….
 # --target android (Stage 3): ELF libmcfm_stub_<lib>.so files for arm64 (soname = file name,
 # 16 KB pages; the lib prefix the APK installer needs) built with $ANDROID_CC; symbols keep their
 # Mach-O names (leading '_'). No providers.
+# --target ios (Stage 4): iOS dylibs from the iPhoneOS SDK (xcrun; DEVELOPER_DIR for Xcode).
+# --skip <lib>: no stub for that library (the image keeps the system's, mcfm_image.py --host).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TARGET=macos
@@ -17,12 +20,15 @@ if [ "$TARGET" = android ]; then
   [ -x "${ANDROID_CC:-}" ] || { echo "build_stubs.sh: set ANDROID_CC to the NDK's aarch64-linux-android28-clang" >&2; exit 2; }
   CC=("$ANDROID_CC" -O1 -Wall -fPIC -shared -Wl,-z,max-page-size=16384)
   EXT=so
+elif [ "$TARGET" = ios ]; then
+  CC=(xcrun --sdk iphoneos clang -target arm64-apple-ios15.0 -O1 -Wall -dynamiclib)
 elif [ "$TARGET" != macos ]; then
   echo "build_stubs.sh: unknown target $TARGET" >&2; exit 2
 fi
 rm -rf "$OUT/src"; mkdir -p "$OUT/src"
-PROVIDED=(); declare -a PROVIDER_LIBS=(); declare -a PROVIDER_DYLIBS=()
+PROVIDED=(); declare -a PROVIDER_LIBS=(); declare -a PROVIDER_DYLIBS=(); SKIP=" "
 while [ $# -gt 0 ]; do
+  if [ "$1" = "--skip" ] && [ $# -ge 2 ]; then SKIP="$SKIP$2 "; shift 2; continue; fi
   [ "$1" = "--provider" ] && [ $# -ge 2 ] || { echo "build_stubs.sh: bad argument $1" >&2; exit 2; }
   [ "$TARGET" = macos ] || { echo "build_stubs.sh: providers are macOS-only for now" >&2; exit 2; }
   lib="${2%%=*}"; dylib="${2#*=}"
@@ -41,6 +47,7 @@ python3 -I "$ROOT/tools/launcher/mcfm_image.py" stubs "$TSV" "$OUT/src" ${PROVID
 for c in "$OUT"/src/*.c; do
   [ -e "$c" ] || continue
   lib="$(basename "$c" .c)"
+  case "$SKIP" in *" $lib "*) continue ;; esac
   extra=()
   for i in ${PROVIDER_LIBS[@]+"${!PROVIDER_LIBS[@]}"}; do
     [ "${PROVIDER_LIBS[$i]}" = "$lib" ] && extra=(-Wl,-reexport_library,"${PROVIDER_DYLIBS[$i]}")

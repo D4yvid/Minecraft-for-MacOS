@@ -79,4 +79,19 @@ if [ -x "$ANDROID_CC" ]; then
 else
   echo "launcher_stubs_test: NDK r27d not found, Android stubs not checked"
 fi
+# --target ios (Stage 4): iOS dylibs from the iPhoneOS SDK; --skip leaves a library to the system.
+if DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}" xcrun --sdk iphoneos --show-sdk-path >/dev/null 2>&1; then
+  export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
+  if bash "$ROOT/tools/launcher/build_stubs.sh" --target ios "$T/imports.tsv" "$T/ios" --skip EmptyKit >/dev/null; then
+    for f in "$T"/ios/*.dylib; do
+      vtool -show-build "$f" 2>/dev/null | grep -q 'platform IOS$' || { echo "FAIL: $(basename "$f") is not an iOS build"; fails=$((fails+1)); }
+    done
+    [ -e "$T/ios/mcfm_stub_FakeKit.dylib" ] && [ -e "$T/ios/libmcfm_stubrt.dylib" ] || { echo "FAIL: iOS stubs missing"; fails=$((fails+1)); }
+    [ -e "$T/ios/mcfm_stub_EmptyKit.dylib" ] && { echo "FAIL: --skip EmptyKit still built a stub"; fails=$((fails+1)); }
+  else
+    echo "FAIL: build_stubs --target ios"; fails=$((fails+1))
+  fi
+else
+  echo "launcher_stubs_test: iOS stubs skipped (no iPhoneOS SDK)"
+fi
 [ $fails = 0 ] && echo "launcher_stubs_test: passed" || { echo "$fails failure(s)"; exit 1; }

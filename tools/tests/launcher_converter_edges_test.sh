@@ -62,4 +62,17 @@ check_hook unaligned "aligned" "$(printf 'a\t0x%x' $((16#$ANSWER + 2)))"
 check_hook duplicate "overlap" "$(printf 'a\t0x%s' "$ANSWER")" "$(printf 'b\t0x%s' "$ANSWER")"
 check_hook overlapping "overlap" "$(printf 'a\t0x%s' "$ANSWER")" "$(printf 'b\t0x%x' $((16#$ANSWER + 4)))"
 check_hook too-short "shorter than 12 bytes" "$(printf 'tiny\t0x%s' "$TINY")"
+# iOS (Stage 4): --platform ios tags the image for iOS 15; --host keeps a framework load real
+# (the app links the real OpenGLES/AudioToolbox); without flags the output is unchanged.
+"${TOOL[@]}" dylib "$T/fixture" "$T/mac.dylib" || { echo "FAIL: default conversion"; fails=$((fails+1)); }
+"${TOOL[@]}" dylib "$T/fixture" "$T/ios.dylib" --platform ios --host FakeKit || { echo "FAIL: iOS conversion refused"; fails=$((fails+1)); }
+otool -l "$T/ios.dylib" | grep -A3 LC_BUILD_VERSION | grep -q 'platform 2' || { echo "FAIL: iOS image not tagged platform 2"; fails=$((fails+1)); }
+otool -l "$T/ios.dylib" | grep -A4 LC_BUILD_VERSION | grep -q 'minos 15.0' || { echo "FAIL: iOS image minos is not 15.0"; fails=$((fails+1)); }
+otool -L "$T/ios.dylib" | grep -q 'mcfm_stub_FakeKit' && { echo "FAIL: --host FakeKit still redirected to a stub"; fails=$((fails+1)); }
+otool -L "$T/ios.dylib" | grep -q 'FakeKit' || { echo "FAIL: --host FakeKit load dropped"; fails=$((fails+1)); }
+otool -L "$T/ios.dylib" | grep -q 'mcfm_stub_libobjc' || { echo "FAIL: libobjc not stubbed on iOS"; fails=$((fails+1)); }
+"${TOOL[@]}" dylib "$T/fixture" "$T/mac2.dylib" --platform macos && cmp -s "$T/mac.dylib" "$T/mac2.dylib" \
+  || { echo "FAIL: --platform macos differs from the default"; fails=$((fails+1)); }
+"${TOOL[@]}" dylib "$T/fixture" "$T/bad.dylib" --platform tvos 2>"$T/err-p"; [ $? = 2 ] && grep -q "platform" "$T/err-p" \
+  || { echo "FAIL: an unknown platform is not refused"; fails=$((fails+1)); }
 [ $fails = 0 ] && echo "launcher_converter_edges_test: passed" || { echo "$fails failure(s)"; exit 1; }
