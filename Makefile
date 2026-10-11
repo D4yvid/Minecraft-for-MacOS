@@ -10,6 +10,8 @@ ifeq ($(wildcard $(GAME_FILES)),)
 GAME_FILES := $(shell git rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/\.git$$||')/game-files
 endif
 GAME    ?= $(wildcard $(GAME_FILES)/ios/Payload/minecraftpe2.app)
+# The decrypted IPA the Android and iOS apps bundle (make android-app / ios-app IPA=…).
+IPA ?= $(firstword $(wildcard $(GAME_FILES)/ios/*.ipa))
 OUT_APP ?= $(CURDIR)/dist/minecraftpe.app
 
 SHARED_INC   := -Ishared/include -Ishared/apple
@@ -78,6 +80,24 @@ ios-ipa: $(IOS_DYLIB)
 .PHONY: ios-device
 ios-device: ios-ipa
 	bash ios/tools/sign_install.sh "$(IOS_IPA)" $(IOS_BUNDLE_ID)
+
+# Our iOS app (Stage 4, ios/app + ios/launcher): dist/ios/mcfm.app and mcfm.ipa, a launcher with
+# the game from $(IPA) bundled (Mojang's files: a local build), signed for the connected device.
+IOS_BUNDLE_ID ?= io.github.d4yvid.mcfm.ios
+IOS_APP := $(CURDIR)/dist/ios/mcfm.app
+IOS_APP_SRCS := $(wildcard ios/app/* ios/launcher/* shared/launcher/*.cpp shared/launcher/*.h shared/src/*.cpp shared/apple/*.cpp shared/apple/*.h) \
+  ios/tools/build_app.sh ios/tools/signing.sh ios/tools/print_hooks.cpp tools/launcher/mcfm_image.py tools/launcher/build_stubs.sh
+IOS_DEVELOPER_DIR := $(or $(DEVELOPER_DIR),/Applications/Xcode.app/Contents/Developer)
+$(IOS_APP) ios-app-run: export DEVELOPER_DIR := $(IOS_DEVELOPER_DIR)
+.PHONY: ios-app ios-app-run
+ios-app: $(IOS_APP)
+$(IOS_APP): $(IOS_APP_SRCS) $(IPA)
+	@test -f "$(IPA)" || { echo "The iOS app bundles the game: make ios-app IPA=<decrypted minecraftpe .ipa> (or put it in game-files/ios/)"; exit 1; }
+	bash ios/tools/build_app.sh "$(IPA)" $(CURDIR)/dist/ios $(IOS_BUNDLE_ID)
+# Installs the app on the connected iPhone/iPad and launches it with its console here.
+ios-app-run: $(IOS_APP)
+	xcrun devicectl device install app --device "$$(. ios/tools/signing.sh; mcfm_find_device)" $(IOS_APP)
+	xcrun devicectl device process launch --console --terminate-existing --device "$$(. ios/tools/signing.sh; mcfm_find_device)" $(IOS_BUNDLE_ID)
 
 # Compiles the iOS sources for the iOS target without linking (works without Xcode).
 ios-syntax:
@@ -273,7 +293,6 @@ $(ALAUNCH_OUT)/tests/audio_test: android/launcher/tests/audio_test.cpp android/l
 # mcfm_image.py imports on the game, minus libSystem/libc++/libz, which the launcher provides)
 # and the game from $(IPA) (minecraftpe2 and data/ in assets/game: Mojang's files, so the APK is a
 # local build, never committed). mcfm-debug.apk is the same app debuggable (run-as) for the checks.
-IPA ?= $(firstword $(wildcard $(GAME_FILES)/ios/*.ipa))
 APP_APK := $(CURDIR)/dist/android/mcfm.apk
 APP_DEBUG_APK := $(CURDIR)/dist/android/mcfm-debug.apk
 APP_STUBS := $(ALAUNCH_OUT)/app-stubs
@@ -469,6 +488,7 @@ $(BUILD)/test/layout_test: ios/tests/layout_test.cpp ios/launcher/layout.h
 
 test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS) $(IOS_TESTS))
 	@for t in $(SHARED_TESTS) $(MACOS_TESTS) $(IOS_TESTS); do $(BUILD)/test/$$t || exit 1; done
+	bash ios/tests/signing_test.sh
 	$(MAKE) --no-print-directory ios-syntax
 	bash tools/tests/inject_test.sh
 	bash tools/tests/check_game_test.sh $(GAME)
