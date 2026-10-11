@@ -1,7 +1,10 @@
 # Renderer: what we know (Minecraft PE 0.15.10)
 
-Status: **research notes, nothing implemented.** Facts are marked ✅ verified (with how) or
-❓ assumed / to verify.
+Status: **research notes; no renderer of our own yet.** Facts are marked ✅ verified (with how)
+or ❓ assumed / to verify. Since these notes, the launchers ([../LAUNCHER.md](../LAUNCHER.md))
+took the first half of approach A: the image's `gl*` imports bind to ANGLE on Metal (macOS, iOS)
+or the system GLES 3 (Android), and the iOS glue (`EAGLView`, the view controller) never runs;
+our launcher drives the frame itself (`shared/launcher/engine.cpp`).
 
 ## Frame loop on iOS / macOS
 
@@ -15,8 +18,8 @@ Status: **research notes, nothing implemented.** Facts are marked ✅ verified (
   `presentFramebuffer`, `layoutSubviews` (deletes the framebuffer → recreated next frame). Log
   line `Created an OpenGL ES 3 context` at startup. (IDA + runtime log.)
 - ✅ The engine learns its size only through App slots 21 `setRenderingSize(w, h)` and 20
-  `setUISizeAndScale(w, h, scale)`; the macOS mod calls them on every resize
-  (`macos/src/resize.mm`).
+  `setUISizeAndScale(w, h, scale)`; the Catalyst mod calls them on every resize
+  (`macos/src/resize.mm`), the launchers through `shared/launcher/engine.cpp`.
 - ✅ Swapping happens in the iOS glue (`presentFramebuffer`), not in the engine.
 
 ## Engine render architecture (from Android symbols)

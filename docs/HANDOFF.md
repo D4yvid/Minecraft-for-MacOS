@@ -11,8 +11,8 @@ first-class desktop game on Apple Silicon Macs, and share the work with iOS and 
 by modding the shipped engine — never redistributing it. Next goals set by the owner:
 
 0. **Mach-O launcher** — load the iOS binary ourselves, never run its iOS glue, and drive the
-   engine from our own launcher on macOS, then Android (target SDK 37, our own APK) and other
-   arm64 hosts. Plan and
+   engine from our own launcher on macOS, then Android (target SDK 37, our own APK), iOS (our
+   own app) and other arm64 hosts. Plan and
    status: [LAUNCHER.md](LAUNCHER.md); Stage 0 survey done
    ([research/macho-launcher.md](research/macho-launcher.md)). Goals 1–2 below become parts of it.
 1. **Generic AppPlatform** — our own platform layer instead of patching the iOS/Android ones
@@ -21,12 +21,12 @@ by modding the shipped engine — never redistributing it. Next goals set by the
 3. **A real module system** — features as modules with enable/disable and config (§6.3).
 4. **Feature completeness** and **bug fixing** (§6.4, §6.5).
 
-## 2. Current state (2026-10-10, `main` = `7992a2f`, public repo D4yvid/Minecraft-for-MacOS)
+## 2. Current state (2026-10-10, `main` = `b258c3c`, public repo D4yvid/Minecraft-for-MacOS)
 
 | Area | State | Verified how |
 |---|---|---|
 | macOS launcher (default, `make app`) | iOS binary loaded by our own launcher: no Catalyst/UIKit, every framework stubbed; ANGLE/Metal window, keyboard, raw mouse look, text entry, sound, no Xbox prompt | ✅ `make test`; `make check` (120 frames); owner played a world 2026-10-10 |
-| macOS Catalyst (deprecated, `make catalyst`) | Win10 UI, keyboard+mouse with pointer capture, resizable window that the engine follows, auto-hiding/fading title bar, App Store receipt prompt skipped | ✅ `make check` (bundle test + 15 s launch with log asserts); owner's screenshots (Win10 title screen, game filling the window). Hand checks M1–M7 below **not** all confirmed |
+| macOS Catalyst (deprecated, `make catalyst`) | Win10 UI, keyboard+mouse with pointer capture, resizable window that the engine follows, auto-hiding/fading title bar, App Store receipt prompt skipped | ✅ `make catalyst-check` (bundle test + 15 s launch with log asserts); owner's screenshots (Win10 title screen, game filling the window). Hand checks M1–M7 below **not** all confirmed |
 | iOS app (`make ios-app`) | Our own Swift app with the game bundled: the image converted for iOS, loaded by dyld; ANGLE on Metal; touch, keyboard, skins, splash | ✅ `make ios-app-check` on the owner's iPhone 16 Pro Max (iOS 27): title screen at 2868×1320; touch. ❓ hand checklist (lifecycle, keyboard, skins, sound) |
 | iOS, legacy mod | Win10 UI + receipt skip dylib injected into the IPA, `make ios-ipa` / `make ios-device` (signs and installs) | ✅ runs full screen on the iPhone 16 Pro Max (SDK field set to 11.0) |
 | Android app (`make android-app`) | Our own Kotlin APK (target SDK 37, min 28, 16 KB pages), a launcher with the game bundled (built from your IPA; local only), runs the iOS image with our loader over a Darwin libSystem layer and an Apple-ABI libc++; GLES 3 window, touch GUI, soft keyboard, a mouse and keys, FMOD on AAudio, saves in the background | ✅ `make android-app-check` on the Android 17 and 9 emulators (first start, title screen, a world created by touch, background/resume, errors); `make android-test`. ❓ never run on a physical device |
@@ -34,7 +34,7 @@ by modding the shipped engine — never redistributing it. Next goals set by the
 | Shared core | `Platform` interface, `win10_ui`, `keyboard_mouse`, input logic | ✅ host tests (C++11), ASan/UBSan clean |
 | Repo hygiene | Apache-2.0, no Mojang files, `make test` from a fresh clone | ✅ `no_game_files_test`, fresh-clone run |
 
-### Hand checks still open (macOS — ask the owner or do them with screen access)
+### Hand checks still open (Catalyst build — ask the owner or do them with screen access)
 M1 resize/full screen fills the window · M2 Win10 layout (✅ seen in a screenshot) · M3 menu
 hover/click once, mouse look direction/speed (`kLookScale` in `macos/src/mac_input.mm`) ·
 M4 WASD/Space/Shift/clicks/1–9/scroll/E/Esc · M5 typing in chat doesn't move the player ·
@@ -44,18 +44,28 @@ stays while the pointer is on it; still OK after full screen. No system beep on 
 ## 3. Getting set up
 
 ### Machine (owner's Mac, Apple Silicon, macOS 27)
-- Xcode Command Line Tools only (no Xcode → no iPhoneOS SDK). Python 3 (Homebrew).
+- Xcode at `/Applications/Xcode.app`: the iOS app targets use it through `DEVELOPER_DIR`;
+  `xcode-select` still points at the Command Line Tools, which the other targets use.
+  Python 3 (Homebrew).
 - IDA Professional 9.4 at `/Applications/IDA Professional 9.4.app` (idalib available).
 - NDK r10c at `~/Library/Android/ndk/android-ndk-r10c`. Its installer is a **32-bit** binary
   (won't run on modern macOS, not even under Rosetta): it was unpacked with
   `7zz x -snld …bin`, and 9 chained symlinks (incl. `arm-linux-androideabi-4.9/…/bin/ld`) had
   to be recreated by hand. `ndk-build` must run under `arch -x86_64` (the Makefile does).
-- `brew install apktool` (pulls OpenJDK; `keytool`/`jarsigner` live in `$(brew --prefix openjdk)/bin`).
+- For the legacy APK patch only: `brew install apktool` (pulls OpenJDK; `keytool`/`jarsigner`
+  live in `$(brew --prefix openjdk)/bin`).
+- Android launcher and app: SDK with NDK r27d in `~/Library/Android/sdk` (`make android-sdk`),
+  LLVM sources in `build/llvm-runtimes` (`make llvm-runtimes`), JDK 21 and kotlinc in
+  `~/Library/Android/jvm-tools` (`make android-app-sdk`); AVDs `mcfm37`/`mcfm28` in `~/.android/avd`.
+- iOS app: the owner's iPhone 16 Pro Max (iOS 27), a free Apple ID team in Xcode, a profile
+  for `io.github.d4yvid.mcfm.ios`.
 - `gh` logged in as D4yvid.
 
 ### Game inputs (never committed)
 Everything lives in the git-ignored **`game-files/`** — layout, provenance and how to
-rebuild it: [GAME_FILES.md](GAME_FILES.md). The Makefile uses it by default (`GAME`, `APK`).
+rebuild it: [GAME_FILES.md](GAME_FILES.md). The Makefile uses it by default (`GAME` for
+`make app`, `IPA` for `make android-app`/`ios-app`, `APK` for the legacy `make android-apk`); a
+worktree without its own `game-files/` uses the main checkout's.
 - iOS: decrypted 0.15.10 app, IPA, thin arm64 binary (arm64 UUID
   `01DFB489-A881-3BDD-8F98-6F016E409625`); the owner's source copy is
   `~/Downloads/Payload/minecraftpe2.app`.
@@ -75,26 +85,25 @@ idalib. Re-creating the database: `make game-files IOS=<app> IDA=1` (~2 min).
 
 ### Daily commands
 ```bash
-make test        # all host tests, no game files (~1 min)
+make test            # all host tests, no game files (~1 min)
+make game-files IOS=<ipa|app> [APK_IN=<apk>] [IDA=1]   # once: your game files (GAME_FILES.md)
 make angle           # once: ANGLE from the pinned Electron release (~130 MB download)
 make app             # = launcher: dist/launcher (converted image + stubs + ANGLE + mcfm-launch)
 make run             # = launcher-run: plays the game in a window (MCFM_LOOK_SCALE tunes turning)
 make check           # = launcher-check: renders 120 frames; census in build/launcher/census.txt
                      #   run/check use our own loader; LOADER=dyld uses Apple's
 make loader-check    # our loader vs dyld on the game: every fixup location compared
-make catalyst        # deprecated Catalyst build; refuses while that game runs
-make catalyst-check  # bundle/IPA/UUID tests + 15 s launch — CLOSES a running Catalyst game
-make catalyst-run
-# The Catalyst build is a deprecated build mode until the launcher replaces it (LAUNCHER.md).
-make android     # libmcfm.so + tests       make android-apk APK=…   make ios-ipa
-# iOS app (Stage 4): Xcode installed, your Apple ID in Xcode, the iPhone connected and trusted
-make angle-ios                   # once: ANGLE for iOS (Godot's static build, 4 MB)
-make ios-app IPA=…               # dist/ios/mcfm.app, signed (7-day free profile)
-make ios-app-run                 # install + launch with its console; ios-app-check: 300 frames + screenshot
+# iOS app (Stage 4): Xcode installed, your Apple ID in Xcode, the iPhone connected and unlocked
+make angle-ios                   # once: ANGLE for iOS (Godot's static build, 4 MB download)
+make ios-app IPA=…               # dist/ios/mcfm.app + mcfm.ipa, signed for the connected device (7-day free profile)
+make ios-app-run                 # install + launch with its console
+make ios-app-check               # on the device: 300 frames, screenshot of the title screen
 # Android launcher (Stage 3): toolchain once, then an emulator (or a device over adb)
 make android-sdk llvm-runtimes   # NDK r27d, adb, emulator, API 37/28 images; LLVM sources
 make android-emulator [API=28]   # boots the API 37 (16 KB pages) or API 28 emulator headless
+make android-emulator-window     # ... in a window with sound; make android-emulator-stop
 make android-test                # runtime, Darwin layer and loader tests on the device
+make darwin-abi                  # regenerates android/launcher/darwin/darwin_abi.h, ctype, strerror
 make android-boot-check          # the converted game (make app) initializes on the device
 make android-frames-check        # ... boots, renders 120 frames, screenshot in build/android-launcher
 make android-app-sdk             # once: JDK 21, kotlinc, build-tools/platform 37 (for the app)
@@ -102,12 +111,24 @@ make android-app IPA=…           # dist/android/mcfm.apk with the game bundled
 make android-app-debug           # dist/android/mcfm-debug.apk: debuggable (run-as)
 make android-app-run [API=28]    # play it in the emulator, in a window
 make android-app-check           # debug APK: first start, title, world by touch, lifecycle, errors
+# Deprecated / legacy builds (kept working)
+make catalyst        # deprecated Catalyst build (dist/minecraftpe.app); refuses while that game runs
+make catalyst-check  # bundle/IPA/UUID tests + 15 s launch — CLOSES a running Catalyst game
+make catalyst-run
+make ios             # legacy IPA mod: build/ios/libmcfm.dylib (needs Xcode; ios-syntax without)
+make ios-ipa         # ... dist/minecraftpe-mcfm.ipa (unsigned); make ios-device signs + installs it
+make android         # legacy APK patch: libmcfm.so (NDK r10c) + tests
+make android-apk APK=…   # ... dist/minecraftpe-mcfm.apk
 ```
 
 ## 4. How it works (beyond ARCHITECTURE.md)
 
 ### Loading
-- macOS: `macos/tools/convert.sh` copies the decrypted app, thins to arm64, retags every
+- The launchers (macOS, Android, iOS), see [LAUNCHER.md](LAUNCHER.md): the game binary is
+  converted to a dylib with our hooks (`tools/launcher/mcfm_image.py`; on the Android device
+  `shared/loader/convert.cpp`), its frameworks are stubbed, and our loader (macOS, Android) or
+  dyld (iOS; `LOADER=dyld` on macOS) loads it.
+- Catalyst build (deprecated): `macos/tools/convert.sh` copies the decrypted app, thins to arm64, retags every
   Mach-O to Mac Catalyst (`vtool -set-build-version maccatalyst 11.0 14.0`), deletes
   `UIRequiresFullScreen` (else the window can't resize), renames `minecraftpe2` →
   `minecraftpe` + display name "Minecraft PE" (bundle id `com.mojang.minecraftpe2` kept:
@@ -115,7 +136,8 @@ make android-app-check           # debug APK: first start, title, world by touch
   `LC_LOAD_DYLIB @executable_path/Frameworks/libmcfm.dylib`, clears xattrs (quarantine /
   provenance → AMFI SIGKILL otherwise) and signs ad hoc. Worlds are in
   `~/Documents/games/com.mojang/minecraftWorlds` (outside the bundle).
-- Entry points run as load-time constructors / `JNI_OnLoad`, **before the game's `main`**.
+- The mods' entry points (Catalyst, legacy iOS/Android) run as load-time constructors /
+  `JNI_OnLoad`, **before the game's `main`**.
 
 ### Engine facts (iOS addresses unslid; see `shared/apple/addresses_0_15_10.h`)
 - ✅ `AppPlatform*` singleton `0x100F5E850`; `AppPlatform_iOS` vtable `0x100EABE00`;
@@ -130,7 +152,8 @@ make android-app-check           # debug APK: first start, title, world by touch
 - ✅ Input (identical layout on armv7/arm64): `Keyboard::_inputs` `std::vector<{int32 state;
   u8 key}>` `0x100F59FF8`, `Keyboard::_states` `int32[256]` `0x100F59BF8` (Windows VK codes,
   Enter = 13), text input `std::vector<{std::string; bool}>` `0x100F5A010` (used by the iOS
-  `ShowKeyboardView`; **not** fed by the mod yet), `Mouse::_instance` `0x100F5A040` with
+  `ShowKeyboardView`; fed by the launchers' text entry, `shared/launcher/text_input.cpp`, not by
+  the Catalyst mod), `Mouse::_instance` `0x100F5A040` with
   16-byte `MouseAction{x,y,dx,dy,btn,data}` queue at `+0x18`, `MouseDevice::feed(dev,btn,
   state,x,y)` `0x1000201BC`. Mouse buttons 0 move/1 L/2 R/3 M/4 wheel. Keyboard and mouse
   mappers are always constructed (`sub_100017854`); `InputHandler+200` = input mode
@@ -190,8 +213,12 @@ launcher's AppPlatform and renders the title screen (GLES 3, FMOD on AAudio; `ma
 android-frames-check`). **Stage 3c landed (2026-10-10), Stage 3 done:** our own Kotlin APK
 (`android/app/`, built by `make android-app` without Gradle) bundles the game from your IPA and
 plays: window, touch, soft keyboard, lifecycle (`make android-app-check` on Android 17 and 9).
-Findings in research/macho-launcher.md and research/android-launcher.md. Next candidates: a
-physical-device run, world export/import in the app, the generic AppPlatform (6.1).
+**Stage 4 landed (2026-10-10):** our own Swift iOS app (`ios/app`, `ios/launcher`, `make
+ios-app`) bundles the game, loads it with dyld and draws through ANGLE on Metal; `make
+ios-app-check` reaches the title screen on the owner's iPhone. The IPA mod (`make ios-ipa`) is
+legacy. Findings in research/macho-launcher.md, research/android-launcher.md and
+research/ios-app.md. Next candidates: the iOS hand checklist (keys, skins, sound, lifecycle), a
+physical Android device run, world export/import in the apps, the generic AppPlatform (6.1).
 
 ### 6.1 Generic AppPlatform
 Goal: one shared, platform-neutral `AppPlatform` behaviour definition instead of ad-hoc slot
@@ -221,7 +248,9 @@ See [research/renderer.md](research/renderer.md): `mce::` abstraction with a com
 OpenGL backend (no vtables), 91 imported `gl*` functions on iOS, EAGLView owns the
 framebuffer. Suggested: instrument first (frame timing, GL call census), then choose between
 rebinding the GL imports to our own GLES-on-Metal (or ANGLE) and inline-hooking `mce::*OGL`.
-Prerequisite for both B-style hooks on Apple: an inline hooking library (none in the repo).
+Since the launchers, the `gl*` imports already bind to ANGLE (macOS, iOS) or the system GLES 3
+(Android), and engine functions can be replaced at conversion through the hook table
+(`shared/launcher/seams.cpp`), which covers B-style hooks without an inline hooking library.
 
 ### 6.3 Module system
 Deferred by the owner ("later we'll build a better module system"). The old injection
@@ -230,25 +259,30 @@ entry points. Requirements gathered so far: per-platform availability, enable/di
 runtime, persisted config, ordering/dependencies, C++11. Design it with the owner first.
 
 ### 6.4 Feature completeness (candidates)
-- Text input through `Keyboard` text vector (`0x100F5A010`) for desktop text boxes instead of
-  the iOS `ShowKeyboardView` popup.
-- Keyboard + mouse on iPad (UIKit `prefersPointerLocked`, no CoreGraphics on iOS) and on
-  Android (physical mice/keyboards; `getDefaultInputMode` now named).
+- ~~Text input through `Keyboard` text vector (`0x100F5A010`)~~: done in the launchers (macOS,
+  Android, iOS); only the Catalyst mod still uses the iOS popup.
+- Mouse look on iPad (UIKit `prefersPointerLocked`, no CoreGraphics on iOS) and Android
+  (pointer capture): the apps take hardware keys, the Android app a mouse's buttons, pointer
+  and wheel, but both stay in touch input mode.
 - In-game settings for the mod (needs a UI hook; the old injection project had an Options-screen toggle).
 - Clipboard, full-screen key, controller support, scroll/look sensitivity settings.
 - Xbox Live / Realms are not functional in these copies; decide whether to hide them.
 
 ### 6.5 Bugs / risks to look at
-- First launch after each `make app` sometimes exits ~5 s in after losing focus, no crash
-  report (seen with and without the receipt prompt; likely a one-time macOS prompt for the
-  re-signed app — ❓ unconfirmed). `make check` reruns usually pass.
-- Mouse look sign/speed (`kLookScale`, dy sign) and trackpad scroll units
-  (`MCFM_LOG_SCROLL=1` logs raw values) are untuned.
-- Title bar fade can jump if a resize happens mid-fade.
-- iOS mod requires iOS 15+ (libc++ floor) though the game runs on older iOS.
-- Android: only `AppPlatform_android23` (Android 6+); never run on a device.
-- `macos/tests/smoke.sh` (`make check`) starts with `pkill -x minecraftpe`, so it closes the
-  owner's running game; make it refuse like `convert.sh` does.
+- Catalyst (deprecated): the first launch after each `make catalyst` sometimes exits ~5 s in
+  after losing focus, no crash report (seen with and without the receipt prompt; likely a
+  one-time macOS prompt for the re-signed app — ❓ unconfirmed). `make catalyst-check` reruns
+  usually pass.
+- Catalyst: mouse look sign/speed (`kLookScale` in `macos/src/mac_input.mm`, dy sign) and
+  trackpad scroll units (`MCPEKBM_LOG_SCROLL=1` logs raw values; the variable still has the old
+  project's prefix) are untuned. The launcher's turn speed is `MCFM_LOOK_SCALE`.
+- Catalyst: title bar fade can jump if a resize happens mid-fade.
+- iOS (the app and the legacy mod) requires iOS 15+ (libc++ floor) though the game runs on
+  older iOS.
+- Legacy Android mod: only `AppPlatform_android23` (Android 6+); never run on a device.
+- Android app: run on emulators only, never on a physical device.
+- `macos/tests/smoke.sh` (`make catalyst-check`) starts with `pkill -x minecraftpe`, so it
+  closes the owner's running Catalyst game; make it refuse like `convert.sh` does.
 
 ## 7. Pitfalls we already hit (save yourself the time)
 
@@ -257,7 +291,7 @@ runtime, persisted config, ordering/dependencies, C++11. Design it with the owne
   function-local statics; keep other globals constant-initialised (`constexpr` ctors).
 - **Catalyst**: quarantine/provenance xattrs → SIGKILL (exit 137); `UIRequiresFullScreen` →
   fixed window; `UIScreen.bounds` is the display, not the window.
-- **NSLog from the launched binary** shows in stdout/stderr when run directly
+- **NSLog from the launched Catalyst binary** shows in stdout/stderr when run directly
   (`dist/minecraftpe.app/minecraftpe`), not reliably in `log show`.
 - **zsh**: a loop variable named `path` clobbers `$PATH`; `--include=*.h` globs fail
   ("no matches found") — quote them.
@@ -269,8 +303,9 @@ runtime, persisted config, ordering/dependencies, C++11. Design it with the owne
 - **apktool 3** chokes on apktool-2 `build/` caches (duplicate lib entries) — delete them.
 - **Android `dlsym` of a missing symbol returns NULL**; scanning a vtable for NULL matches the
   offset-to-top word — always use `vtable_scan.hpp`.
-- The owner may be playing: check `pgrep -x minecraftpe` before `make app` (refuses) and
-  before `make check` (would close the game).
+- The owner may be playing: `make app`/`check`/`run` refuse while `mcfm-launch` runs; for the
+  Catalyst build check `pgrep -x minecraftpe` before `make catalyst` (refuses) and before
+  `make catalyst-check` (would close the game).
 - **Android app**: no `INTERNET` permission → `socket()` EPERM and RakNet's null peer crashed the
   Play screen; an app's stdout/stderr go nowhere (forwarded to logcat, tag `mcfm`);
   `Android/data` is unreachable by adb/`run-as` on Android 11+ (worlds are in `files/home`);
@@ -288,7 +323,8 @@ runtime, persisted config, ordering/dependencies, C++11. Design it with the owne
 - Renderer target: Metal on Apple only, or one backend for all (Vulkan/ANGLE)?
 - Module system expectations (in-game UI? config file? hot reload?).
 - A physical Android device (arm64, Android 9+) for an on-device run of the app.
-- Install Xcode to link and sideload the iOS build?
+- ~~Install Xcode to link and sideload the iOS build?~~ Done: Xcode is installed and the iOS
+  app runs on the owner's iPhone (Stage 4).
 - Old public commits still contain `/Users/dayvid/...` paths and the author email; history
   rewrite was recommended against (owner hasn't decided).
 

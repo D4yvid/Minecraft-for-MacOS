@@ -4,7 +4,7 @@ Goal: run the **iOS arm64 Mach-O** of Minecraft PE 0.15.10 anywhere we write a l
 the way mcpelauncher runs the Android `.so` on Linux. The iOS glue in the binary (UIKit view
 controller, `AppPlatform_iOS`, EAGL, StoreKit, Xbox Live UI) is **never executed**; our launcher
 loads the image, provides libc/libc++/GL/audio, implements `AppPlatform` itself and drives the
-engine. First macOS, then Android, later any arm64 system.
+engine. First macOS, then Android, then iOS (all three done), later any arm64 system.
 
 Survey results behind this plan: [research/macho-launcher.md](research/macho-launcher.md).
 Status legend: ☐ to do · ◐ in progress · ☑ done.
@@ -25,7 +25,8 @@ Status legend: ☐ to do · ◐ in progress · ☑ done.
   hosts would need CPU emulation (out of scope).
 - **Users supply a decrypted IPA.** We never redistribute Mojang files (`no_game_files_test`).
 - Xbox Live / Realms do not work in these copies anyway: stubbed to "signed out / offline".
-- CLI only for now: no launcher UI; the IPA is imported by `make` targets.
+- CLI only for now: no launcher UI; the IPA is imported by `make` targets (the Android and iOS
+  apps bundle it at build time).
 
 ## Patch policy
 We control every import binding and may patch any call site (addresses are only valid for
@@ -43,9 +44,9 @@ We control every import binding and may patch any call site (addresses are only 
 ## Architecture
 
 ```
-launcher (per platform: macOS app, Android APK, …)
+launcher (per platform: macOS app, Android APK, iOS app, …)
  ├─ loader        maps the Mach-O, applies fixups, resolves imports, runs initializers,
- │                registers unwind info                         (Stage 1: Apple's dyld; Stage 2+: ours)
+ │                registers unwind info   (Stage 1: Apple's dyld; Stage 2+: ours; iOS: dyld)
  ├─ host runtime  what the imports bind to:
  │   ├─ libc      host libc on Apple; a Darwin→host translation layer elsewhere
  │   ├─ libc++    host libc++ on Apple; a libc++ built with Apple's ABI elsewhere
@@ -58,9 +59,10 @@ launcher (per platform: macOS app, Android APK, …)
 ```
 
 `shared/` grows a `launcher/` part (platform-free C++11: boot sequence, AppPlatform policy,
-stub tables), with per-host code under `macos/` and `android/`. The Mac Catalyst build
-(`make catalyst`) is a **deprecated build mode**: it is how the game runs today and keeps
-working until the launcher replaces it; `make app`/`run`/`check` are its aliases until then.
+stub tables), with per-host code under `macos/`, `android/` and `ios/`. The Mac Catalyst build
+(`make catalyst`) is a **deprecated build mode**, kept working. (Superseded: until Stage 1
+landed it was how the game ran on the Mac and `make app`/`run`/`check` built it; they now build
+and run the launcher.)
 
 ## Stage 0 — survey ☑
 Done 2026-10-10: imports, where Apple APIs are used, seams, boot sequence, layout, unwinding,

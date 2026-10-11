@@ -1,7 +1,8 @@
 # Minecraft for macOS — notes for Claude
 
-Mods for Minecraft PE 0.15.10 on macOS (the Mach-O launcher; Catalyst deprecated), iOS and
-Android from one C++11 core.
+Launchers for Minecraft PE 0.15.10 (the iOS arm64 image) from one C++11 core: macOS (the
+Mach-O launcher; Catalyst deprecated), our own Android app and our own iOS app. The IPA mod
+(`make ios-ipa`) and the Android APK patch (`make android-apk`) are legacy.
 Read docs/HANDOFF.md (state, knowledge base, roadmap, pitfalls) and docs/ARCHITECTURE.md first.
 Reverse-engineering notes: docs/research/. Local game files and the IDA database: game-files/ (git-ignored, see docs/GAME_FILES.md); idalib venv: .venv/.
 
@@ -37,8 +38,9 @@ Reverse-engineering notes: docs/research/. Local game files and the IDA database
   the app's files: `adb shell run-as io.github.d4yvid.mcfm`. One game per process: the render
   thread (`android/launcher/game_thread.cpp`) owns EGL and the engine; JNI only queues.
 - iOS app (Stage 4, `ios/app` Swift + `ios/launcher` Objective-C++): `make angle-ios` once,
-  `make ios-app` (signed `dist/ios/mcfm.app`, the game bundled), `make ios-app-run` /
-  `ios-app-check` on the connected iPhone (unlocked). The image is loaded by dyld (iOS runs no
+  `make ios-app IPA=…` (signed `dist/ios/mcfm.app` and `mcfm.ipa`, the game bundled: Mojang's
+  files, never commit it; the iPhone must be connected, the profile is chosen for it),
+  `make ios-app-run` / `ios-app-check` on the connected iPhone (unlocked). The image is loaded by dyld (iOS runs no
   unsigned code); all GL goes through ANGLE in `ios/launcher/egl_view.mm` (never link the
   system OpenGLES). Xcode at /Applications/Xcode.app is used through DEVELOPER_DIR.
 - `make ios` (the legacy IPA mod) needs Xcode; without it `make ios-syntax` (part of

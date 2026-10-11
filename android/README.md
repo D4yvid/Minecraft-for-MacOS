@@ -17,18 +17,25 @@ make android-app-run IPA=…                       # play it in the emulator, in
 make android-emulator && make android-app-check IPA=…   # the acceptance check
 ```
 
-- `app/`: the Kotlin app (`GameActivity`: the launcher, the game's surface, lifecycle, touch,
-  keys, mouse, soft keyboard and skin picker; `GameFiles`: preparing the bundled game), the
-  manifest and resources. The IPA is found in `game-files/ios/` when `IPA=` is not given. Built without Gradle by `tools/android/build_app.sh` (aapt2, kotlinc, d8,
-  zipalign -P 16, apksigner with the local debug key `build/android/debug.keystore`).
+- `app/`: the Kotlin app (`GameActivity`: the launcher, lifecycle, soft keyboard, skin picker,
+  fatal errors; `GameView`: the game's surface, touch, keys, mouse, text input; `GameFiles`:
+  preparing the bundled game; `SplashView`; `BackGesture`: back as Esc on Android 13+;
+  `Native`: the JNI calls), the manifest and resources. The IPA is found in `game-files/ios/`
+  when `IPA=` is not given. Built without Gradle by `tools/android/build_app.sh` (aapt2,
+  kotlinc, d8, zipalign -P 16, apksigner with the local debug key `build/android/debug.keystore`).
 - `launcher/`: `libmcfm_launcher.so` (the loader, the Darwin libSystem layer `darwin/`, the
   Apple-ABI libc++ `runtime/`, the render thread `game_thread.cpp`, the JNI entry points
   `app.cpp`) and the stubs of the game's Apple frameworks (`libmcfm_stub_*.so`, from
   `game_imports.tsv`).
 - Worlds and options: the app's internal storage (`adb shell run-as io.github.d4yvid.mcfm ls
   files/home/games/com.mojang`). Logs: `adb logcat -s mcfm`.
+- Controls: the game's touch controls; a hardware keyboard and a mouse (buttons, pointer,
+  wheel); the soft keyboard for text; back is the game's Esc.
+- Launcher checks without the app, on a running emulator (`make android-emulator [API=28]`):
+  `make android-test` (runtime, Darwin layer, loader), `make android-boot-check` and
+  `make android-frames-check` (both need `make app`'s converted game in `dist/launcher`).
 
-## Legacy: the Win10 UI mod for Mojang's APK (the rest of `android/`)
+## Legacy: the Win10 UI mod for Mojang's APK (`jni/`, `tools/`, `tests/`)
 
 Adds the Windows 10 (desktop) UI to Minecraft PE 0.15.10 for Android (armeabi-v7a).
 Requires **Android 6.0 or newer**: the mod patches `AppPlatform_android23`, the platform
