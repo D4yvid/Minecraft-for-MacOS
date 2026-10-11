@@ -15,7 +15,7 @@ OUT_APP ?= $(CURDIR)/dist/minecraftpe.app
 SHARED_INC   := -Ishared/include -Ishared/apple
 SHARED_CORE  := shared/src/platform.cpp shared/src/win10_ui.cpp shared/src/keyboard_mouse.cpp
 SHARED_HEADERS := $(wildcard shared/include/mcfm/*.h shared/include/mcfm/*/*.h shared/apple/*.h)
-SHARED_TESTS := keymap_test input_state_test features_test launcher_app_platform_test launcher_engine_test hook_table_test macho_uuid_bounds_test launcher_uuid_race_test launcher_platform_test launcher_text_test macho_file_test macho_fixups_test
+SHARED_TESTS := keymap_test input_state_test features_test launcher_app_platform_test launcher_engine_test hook_table_test macho_uuid_bounds_test launcher_uuid_race_test launcher_platform_test launcher_text_test touch_input_test macho_file_test macho_fixups_test
 MACOS_TESTS  := titlebar_test input_policy_test resize_math_test mac_keymap_test mouse_math_test image_pick_test
 
 # ---------------------------------------------------------------- macOS (Mac Catalyst) — DEPRECATED
@@ -246,7 +246,7 @@ $(ALAUNCH_OUT)/tests/%_test: android/launcher/tests/%_test.cpp $(RT_LIB)
 # points (android/launcher/launcher.map). mcfm-run is a C program that dlopens it.
 LAUNCHER_SO := $(ALAUNCH_OUT)/libmcfm_launcher.so
 LAUNCHER_SO_SRCS := android/launcher/run.cpp android/launcher/boot.cpp android/launcher/app.cpp android/launcher/game_thread.cpp \
-  android/launcher/input_events.cpp android/launcher/render_requests.cpp android/launcher/loader_android.cpp shared/launcher/launcher_platform.cpp \
+  android/launcher/input_events.cpp shared/launcher/touch_input.cpp android/launcher/render_requests.cpp android/launcher/loader_android.cpp shared/launcher/launcher_platform.cpp \
   shared/src/keyboard_mouse.cpp shared/src/platform.cpp \
   android/launcher/audio_toolbox.cpp $(LOADER_SRCS) shared/apple/macho_uuid.cpp shared/launcher/app_platform.cpp \
   shared/launcher/engine.cpp shared/launcher/seams.cpp shared/launcher/text_input.cpp shared/launcher/game_import.cpp \
@@ -381,6 +381,10 @@ $(BUILD)/test/launcher_platform_test: shared/tests/launcher_platform_test.cpp sh
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -Wextra -O1 $(LAUNCHER_SHARED_INC) $(SHARED_INC) shared/tests/launcher_platform_test.cpp shared/launcher/launcher_platform.cpp shared/src/keyboard_mouse.cpp shared/src/platform.cpp -o $@
 
+$(BUILD)/test/touch_input_test: shared/tests/touch_input_test.cpp shared/launcher/touch_input.cpp shared/launcher/touch_input.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -Wextra -O1 -Ishared/launcher shared/tests/touch_input_test.cpp shared/launcher/touch_input.cpp -o $@
+
 $(BUILD)/test/launcher_text_test: shared/tests/launcher_text_test.cpp shared/launcher/text_input.cpp shared/launcher/text_input.h shared/launcher/app_platform.cpp shared/launcher/app_platform.h
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -Wextra -O1 $(LAUNCHER_SHARED_INC) shared/tests/launcher_text_test.cpp shared/launcher/text_input.cpp shared/launcher/app_platform.cpp -o $@
@@ -421,9 +425,9 @@ $(BUILD)/test/game_import_test: shared/tests/game_import_test.cpp shared/launche
 	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=address,undefined -Ishared/loader -Ishared/launcher -Ishared/apple \
 	  shared/tests/game_import_test.cpp shared/launcher/game_import.cpp shared/loader/convert.cpp shared/apple/macho_uuid.cpp -o $@
 
-$(BUILD)/test/input_events_test: android/launcher/tests/input_events_test.cpp android/launcher/input_events.cpp android/launcher/input_events.h
+$(BUILD)/test/input_events_test: android/launcher/tests/input_events_test.cpp android/launcher/input_events.cpp android/launcher/input_events.h shared/launcher/touch_input.cpp shared/launcher/touch_input.h
 	@mkdir -p $(dir $@)
-	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=thread -Iandroid/launcher $< android/launcher/input_events.cpp -o $@
+	clang++ -std=c++11 -Wall -Wextra -O1 -g -fsanitize=thread -Iandroid/launcher -Ishared/launcher $< android/launcher/input_events.cpp shared/launcher/touch_input.cpp -o $@
 
 $(BUILD)/test/render_requests_test: android/launcher/tests/render_requests_test.cpp android/launcher/render_requests.cpp android/launcher/render_requests.h
 	@mkdir -p $(dir $@)

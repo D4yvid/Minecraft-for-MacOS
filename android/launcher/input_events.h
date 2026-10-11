@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "touch_input.h"
+
 namespace mcfm {
 namespace android {
 
@@ -29,25 +31,11 @@ class EventQueue {
   std::vector<Event> events_;
 };
 
-enum class TouchAction { Down = 0, Move = 1, Up = 2, Cancel = 3 };
-
-// The game tracks 12 touches (slots 0-11); Android pointer ids are arbitrary small integers.
-class TouchSlots {
- public:
-  int down(int pointer);   // a free slot, or -1 when all are taken
-  int find(int pointer) const;
-  int up(int pointer);     // the slot released, or -1
-
- private:
-  int pointers_[12] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
-};
-
-// Multitouch::feed(button, state, x, y, slot): iOS feeds (1,1) on touch down, (0,0) on move and
-// (1,0) on up/cancel, with x/y in pixels.
-struct FeedCall { int button, state, x, y, slot; };
-
-// false when the event does not reach the game (unknown pointer, no free slot).
-bool touch_feed(TouchSlots *slots, TouchAction action, int pointer, float x, float y, FeedCall *out);
+// Touches: shared with the iOS app (shared/launcher/touch_input.h).
+using launcher::TouchAction;
+using launcher::TouchSlots;
+using launcher::FeedCall;
+using launcher::touch_feed;
 
 // An Android KeyEvent key code -> the Windows virtual key the engine's Keyboard uses (0: none).
 // BACK is Escape (the game's "back" on desktop).
