@@ -177,6 +177,14 @@ By the work a shim does:
   mode. A hardware keyboard sends the VK and, as on the Mac, its text. The game's own Done button
   calls `hideKeyboard`. Typed on Android 9's keyboard and Gboard on Android 17 (letters,
   suggestions, backspace past the start, return, injected key text). ✅
+- **Skins (`pickImage`, AppPlatform slot 25)**: the game's only file picker, the skin screen's
+  "Choose New Skin". iOS (`-[minecraftpeViewController pickSkinImage:]`) shows a photo picker,
+  writes the picture as PNG to `tmp/newSkin.png` and calls the `ImagePickingCallback` on the main
+  queue: slot 2 `(const std::string &path)` when picked, slot 3 `()` when cancelled. The app
+  opens the photo picker (Android 13+, no permission) or `GET_CONTENT` for `image/*`, re-encodes
+  the picture as PNG in the game's temp directory and answers on the render thread; the game then
+  asks for the model type. A host without a picker (the Mac launcher for now) cancels at once.
+  Picked and cancelled on Android 9 (DocumentsUI) and 17 (photo picker). ✅
 - **Back**: from Android 16 (target SDK 36+) the back gesture never reaches `onKeyDown`; an
   `OnBackInvokedCallback` (API 33+, `enableOnBackInvokedCallback`) presses the game's Escape. The
   callback lives in its own class: a class implementing `OnBackInvokedCallback` fails

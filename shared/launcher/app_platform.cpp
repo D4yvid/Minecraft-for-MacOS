@@ -13,7 +13,16 @@ HostInfo &host() { static HostInfo info; return info; }
 
 std::string data_url(void *) { return host().data_dir; }
 void no_op(void *) {}
-void pick_image(void *, void *) {}
+// ImagePickingCallback: slot 2 picked(const std::string &png_path), slot 3 cancelled().
+using PickedFn = void (*)(void *, const std::string &);
+using CancelledFn = void (*)(void *);
+void *g_pick_callback = nullptr;  // the engine's thread only
+void (*g_show_picker)() = nullptr;
+void pick_image(void *, void *callback) {  // the skin screen's "Browse"
+  g_pick_callback = callback;
+  if (g_show_picker) g_show_picker();
+  else image_pick_cancelled();  // no picker here: the screen goes on
+}
 const std::string &region(void *) { return host().region; }
 const std::string &external_dir(void *) { return host().external_dir; }
 const std::string &internal_dir(void *) { return host().internal_dir; }
@@ -64,6 +73,20 @@ void hide_keyboard(void *self) {
 }  // namespace
 
 void set_host_info(const HostInfo &info) { host() = info; }
+void set_image_picker(void (*show_picker)()) { g_show_picker = show_picker; }
+
+// The engine's ImagePickingCallback, as iOS's picker answers it (-[minecraftpeViewController
+// imagePickerController:didFinishPickingMediaWithInfo:] / dismissImagePickerDialog).
+void image_picked(const std::string &png_path) {
+  void *cb = g_pick_callback;
+  g_pick_callback = nullptr;
+  if (cb) reinterpret_cast<PickedFn>((*reinterpret_cast<void ***>(cb))[2])(cb, png_path);
+}
+void image_pick_cancelled() {
+  void *cb = g_pick_callback;
+  g_pick_callback = nullptr;
+  if (cb) reinterpret_cast<CancelledFn>((*reinterpret_cast<void ***>(cb))[3])(cb);
+}
 
 HostInfo make_host_info(const std::string &documents_dir, const std::string &data_dir, const std::string &temp_dir) {
   HostInfo info;

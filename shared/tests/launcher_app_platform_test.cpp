@@ -12,6 +12,18 @@ static int fails = 0;
 static std::string fake_vendor(void *) { return "vendor"; }
 static int base_fn_marker[kBaseSlots];
 
+// The engine's ImagePickingCallback: slot 2 picked (const std::string &path), slot 3 cancelled.
+struct FakePickCallback {
+  void **vtable;
+  std::string picked;
+  int cancels = 0;
+};
+static void fake_picked(FakePickCallback *self, const std::string &path) { self->picked = path; }
+static void fake_cancelled(FakePickCallback *self) { self->cancels++; }
+static void *fake_pick_vtable[4] = {nullptr, nullptr, reinterpret_cast<void *>(&fake_picked), reinterpret_cast<void *>(&fake_cancelled)};
+static int picker_shown = 0;
+static void show_picker() { picker_shown++; }
+
 template <class R, class... A> R call(void **vt, int slot, A... a) {
   return reinterpret_cast<R (*)(void *, A...)>(vt[slot])(nullptr, a...);
 }
@@ -56,7 +68,23 @@ int main() {
   EXPECT(call<int>(vt, 96) == 1);  // mouse by default (macOS)
   EXPECT(call<int>(vt, 99) == 0);
   call<void>(vt, 18);
-  call<void, void *>(vt, 25, nullptr);
+  // pickImage (the skin screen): no host picker → cancelled at once (the screen never hangs).
+  FakePickCallback cb;
+  cb.vtable = fake_pick_vtable;
+  call<void, void *>(vt, 25, &cb);
+  EXPECT(cb.cancels == 1 && cb.picked.empty());
+  // A host picker: shown, and its answer goes to the callback once.
+  set_image_picker(&show_picker);
+  call<void, void *>(vt, 25, &cb);
+  EXPECT(picker_shown == 1 && cb.cancels == 1);
+  image_picked("/tmp/newSkin.png");
+  EXPECT(cb.picked == "/tmp/newSkin.png");
+  image_picked("/tmp/again.png");  // nothing pending: ignored
+  image_pick_cancelled();
+  EXPECT(cb.picked == "/tmp/newSkin.png" && cb.cancels == 1);
+  call<void, void *>(vt, 25, &cb);
+  image_pick_cancelled();
+  EXPECT(picker_shown == 2 && cb.cancels == 2);
   // Android (Stage 3c): the host chooses touch.
   {
     mcfm::launcher::HostInfo touch = mcfm::launcher::make_host_info("/s", "/game/data/", "/s/tmp");

@@ -4,10 +4,13 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
+import android.provider.MediaStore
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -20,6 +23,10 @@ import java.io.File
  * (singleTask): the native side runs one game, so after a fatal error the process ends.
  */
 class GameActivity : Activity() {
+    private companion object {
+        const val PICK_IMAGE = 1
+    }
+
     private lateinit var view: GameView
     /** Wi-Fi drops broadcasts without it: LAN games would not show on the Play screen. */
     private val lanLock by lazy {
@@ -88,6 +95,39 @@ class GameActivity : Activity() {
         val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
         imm.restartInput(view)  // a new text box: nothing composing
         imm.showSoftInput(view, 0)
+    }
+
+    /**
+     * The skin screen's "Browse": a picture from the photo picker (Android 13+) or any app that
+     * provides images, handed to the game as a PNG in its temp directory (as iOS's picker does).
+     */
+    fun pickImage() {
+        val intent = if (Build.VERSION.SDK_INT >= 33) Intent(MediaStore.ACTION_PICK_IMAGES)
+        else Intent(Intent.ACTION_GET_CONTENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*")
+        try {
+            startActivityForResult(intent, PICK_IMAGE)
+        } catch (e: android.content.ActivityNotFoundException) {
+            Native.nativeImagePicked(null)
+        }
+    }
+
+    @Deprecated("Activity result API of the platform (no AndroidX)")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != PICK_IMAGE) return
+        val uri = data?.data.takeIf { resultCode == RESULT_OK }
+        if (uri == null) return Native.nativeImagePicked(null)
+        val png = File(GameFiles.home(this), "tmp/newSkin.png")
+        Thread {
+            val ok = try {
+                val bitmap = contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+                png.parentFile?.mkdirs()
+                bitmap != null && png.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            } catch (e: Exception) {
+                false
+            }
+            Native.nativeImagePicked(if (ok) png.path else null)
+        }.start()
     }
 
     fun hideKeyboard() {

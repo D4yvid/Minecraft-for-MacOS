@@ -39,6 +39,13 @@ struct KeyboardCallbacks {
 };
 void set_keyboard_callbacks(const KeyboardCallbacks &callbacks);
 
+// The engine asks for an image (slot 25 pickImage: the skin screen's "Browse"). The host shows
+// its picker and answers later on the engine's thread: image_picked(path of a PNG) or
+// image_pick_cancelled(). Without a host picker the request is cancelled at once.
+void set_image_picker(void (*show_picker)());
+void image_picked(const std::string &png_path);
+void image_pick_cancelled();
+
 // out[i] = base[i] for every slot we do not implement.
 void build_vtable(void **out, void *const *base, const EngineFns &fns);
 

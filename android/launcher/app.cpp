@@ -31,7 +31,7 @@ std::string from_java(JNIEnv *env, jstring s) {
 // attached to the JVM until it ends (a thread that exits attached aborts the process).
 JavaVM *g_vm = nullptr;
 jclass g_native = nullptr;
-jmethodID g_show_keyboard = nullptr, g_hide_keyboard = nullptr, g_fatal = nullptr;
+jmethodID g_show_keyboard = nullptr, g_hide_keyboard = nullptr, g_fatal = nullptr, g_pick_image = nullptr;
 
 JNIEnv *thread_env() {
   JNIEnv *env = nullptr;
@@ -48,6 +48,7 @@ void show_keyboard(const std::string &text) {
 }
 
 void hide_keyboard() { thread_env()->CallStaticVoidMethod(g_native, g_hide_keyboard); }
+void pick_image() { thread_env()->CallStaticVoidMethod(g_native, g_pick_image); }
 
 void fatal(const std::string &message) {
   std::fprintf(stderr, "mcfm: %s\n", message.c_str());
@@ -114,13 +115,14 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *vm, void *) {
   g_show_keyboard = env->GetStaticMethodID(c, "showKeyboard", "(Ljava/lang/String;)V");
   g_hide_keyboard = env->GetStaticMethodID(c, "hideKeyboard", "()V");
   g_fatal = env->GetStaticMethodID(c, "fatal", "(Ljava/lang/String;)V");
+  g_pick_image = env->GetStaticMethodID(c, "pickImage", "()V");
   return JNI_VERSION_1_6;
 }
 
 // Starts the game's render thread (once). It draws when a window is set.
 JNIEXPORT void JNICALL Java_io_github_d4yvid_mcfm_Native_nativeStart(JNIEnv *env, jclass, jstring image, jstring data, jstring home) {
   mcfm::android::GamePaths paths{from_java(env, image), from_java(env, data), from_java(env, home)};
-  mcfm::android::start_game(paths, mcfm::android::AppCallbacks{&show_keyboard, &hide_keyboard, &fatal, &thread_exit});
+  mcfm::android::start_game(paths, mcfm::android::AppCallbacks{&show_keyboard, &hide_keyboard, &fatal, &thread_exit, &pick_image});
 }
 
 // surfaceChanged (a Surface) / surfaceDestroyed (null): returns once the game uses / let go of it.
@@ -178,6 +180,14 @@ JNIEXPORT void JNICALL Java_io_github_d4yvid_mcfm_Native_nativeReturn(JNIEnv *, 
     push(mcfm::android::EventType::Key, 0x0D, 1);
     push(mcfm::android::EventType::Key, 0x0D, 0);
   }
+}
+
+// The image picker's answer: the path of a PNG, or null (cancelled).
+JNIEXPORT void JNICALL Java_io_github_d4yvid_mcfm_Native_nativeImagePicked(JNIEnv *env, jclass, jstring png_path) {
+  mcfm::android::Event e;
+  e.type = mcfm::android::EventType::ImagePicked;
+  e.text = from_java(env, png_path);
+  mcfm::android::push_event(e);
 }
 
 // Converts the extracted game binary into <dir>/minecraftpe.dylib. Returns null, or a message.

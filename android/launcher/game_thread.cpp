@@ -167,6 +167,7 @@ bool attach_surface(ANativeWindow *window) {
 typedef void (*MultitouchFeed)(int, int, int, int, int);
 
 void show_keyboard(const std::string &text) { g_callbacks.show_keyboard(text); }
+void pick_image() { g_callbacks.pick_image(); }
 void hide_keyboard() { g_callbacks.hide_keyboard(); }
 
 void apply(const Event &e, uintptr_t slide, TouchSlots *touches) {
@@ -184,6 +185,7 @@ void apply(const Event &e, uintptr_t slide, TouchSlots *touches) {
     case EventType::Text: push_text(addr::kKeyboardText + slide, e.text); break;
     case EventType::Backspace: push_backspace(addr::kKeyboardText + slide); break;
     case EventType::Return: push_return(addr::kKeyboardText + slide); break;
+    case EventType::ImagePicked: e.text.empty() ? image_pick_cancelled() : image_picked(e.text); break;
   }
 }
 
@@ -242,6 +244,7 @@ void run() {
         info.input_mode = 2;  // touch; keys and a mouse still work
         for (const std::string &d : {info.internal_dir, info.userdata_dir, info.temp_dir}) make_dirs(d);
         set_keyboard_callbacks(KeyboardCallbacks{&show_keyboard, &hide_keyboard});
+        set_image_picker(&pick_image);
         if (!engine.start(EngineAddresses::for_slide(slide), info, width, height)) {
           release_surface();
           ANativeWindow_release(window);

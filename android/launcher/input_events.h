@@ -9,14 +9,14 @@
 namespace mcfm {
 namespace android {
 
-enum class EventType { Touch, Key, MouseButton, MouseMove, MouseWheel, Text, Backspace, Return };
+enum class EventType { Touch, Key, MouseButton, MouseMove, MouseWheel, Text, Backspace, Return, ImagePicked };
 
 struct Event {
   EventType type = EventType::Key;
   int a = 0, b = 0;      // Touch: action, pointer id; Key: vk, down; MouseButton: button, down;
                          // MouseWheel: notches
   float x = 0, y = 0;    // pixels (MouseMove: relative when a != 0)
-  std::string text;      // Text
+  std::string text;      // Text; ImagePicked: the PNG path (empty: cancelled)
 };
 
 class EventQueue {

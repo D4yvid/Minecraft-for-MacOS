@@ -207,6 +207,7 @@ our loader; fixture tests cover fixups, imports, initializers, exceptions and ho
    and its `data/`); `GameActivity` hands its surface, lifecycle and input to a native render
    thread (`android/launcher/game_thread.cpp`) that owns EGL and the engine. Touch goes to
    `Multitouch::feed`; keys, a mouse and soft-keyboard text through `shared/` keyboard_mouse;
+   custom skins through the system photo picker (`pickImage`);
    the game saves when the app goes to the background. Worlds live in internal storage
    (`files/home`); an update that changes the launcher's hooks converts the kept binary again.
    `make android-app` builds the release APK (`mcfm.apk`), `make android-app-debug` the
