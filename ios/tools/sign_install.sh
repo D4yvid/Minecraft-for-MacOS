@@ -18,8 +18,7 @@ DEVICE="$(mcfm_find_device)"
 PROFILE="$(mcfm_require_profile "$BUNDLE_ID" "$DEVICE")" || exit 1
 mcfm_profile_entitlements "$PROFILE" "$T/entitlements.plist"
 TEAM="$(mcfm_profile_team "$PROFILE")"
-IDENTITY="$(mcfm_identity)"
-[ -n "$IDENTITY" ] || { echo "sign_install: no Apple Development identity (sign in to Xcode › Settings › Accounts)" >&2; exit 1; }
+IDENTITY="$(mcfm_identity "$PROFILE" "$BUNDLE_ID")" || exit 1
 
 # The app: our bundle id, the profile embedded, the frameworks signed first, then the app.
 mkdir "$T/x" && unzip -q "$IPA" -d "$T/x"

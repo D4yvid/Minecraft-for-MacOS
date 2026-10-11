@@ -1,6 +1,7 @@
 # Signing helpers for the iOS builds (sourced by ios/tools/build_app.sh and sign_install.sh):
 # the connected device, the provisioning profile Xcode made for a bundle id, the identity.
-# MCFM_DECODE_PROFILE (default: security cms -D -i) and MCFM_PROFILE_DIRS (colon-separated)
+# MCFM_DECODE_PROFILE (default: security cms -D -i), MCFM_PROFILE_DIRS (colon-separated) and
+# MCFM_FIND_IDENTITY (default: security find-identity -v -p codesigning)
 # are for the tests.
 MCFM_PROFILE_DIRS="${MCFM_PROFILE_DIRS:-$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles:$HOME/Library/MobileDevice/Provisioning Profiles}"
 
@@ -75,7 +76,37 @@ mcfm_profile_entitlements() {  # <profile> <out.plist>
   rm -f "$plist"
 }
 
-# The SHA-1 of an Apple Development identity (empty if none).
-mcfm_identity() {
-  security find-identity -v -p codesigning | awk '/Apple Development/ {print $2; exit}'
+mcfm_find_identities() {  # the keychain's code signing identities, as security prints them
+  if [ -n "${MCFM_FIND_IDENTITY:-}" ]; then $MCFM_FIND_IDENTITY; else security find-identity -v -p codesigning 2>/dev/null; fi
+}
+
+# The SHA-1 of the signing identity whose certificate <profile> was made for (one of its
+# DeveloperCertificates), or a message saying what to do (exit 1). Another team's or an older
+# certificate's identity would sign an app iOS refuses to install.
+mcfm_identity() {  # <profile> <bundle id>
+  local plist ids rc=0; plist="$(mktemp)"; ids="$(mktemp)"
+  mcfm_find_identities > "$ids" || true
+  if ! grep -q 'Apple Development' "$ids"; then
+    echo "no Apple Development identity in the keychain: sign in to Xcode › Settings › Accounts with your Apple ID" >&2
+    rc=1
+  elif ! mcfm_decode_profile "$1" > "$plist" || ! python3 -I - "$plist" "$ids" <<'PY'
+import hashlib, plistlib, re, sys
+try:
+    certs = plistlib.load(open(sys.argv[1], 'rb')).get('DeveloperCertificates', [])
+except Exception:
+    certs = []
+wanted = {hashlib.sha1(bytes(c)).hexdigest().upper() for c in certs}
+for line in open(sys.argv[2]):
+    m = re.match(r'\s*\d+\)\s+([0-9A-Fa-f]{40})\s+"', line)
+    if m and m.group(1).upper() in wanted:
+        print(m.group(1).upper())
+        sys.exit(0)
+sys.exit(1)
+PY
+  then
+    echo "the profile for $2 was made for another certificate than the keychain's: open a project with bundle id $2 in Xcode and choose your team again under Signing & Capabilities ($1)" >&2
+    rc=1
+  fi
+  rm -f "$plist" "$ids"
+  return $rc
 }

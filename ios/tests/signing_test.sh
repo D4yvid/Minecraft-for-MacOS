@@ -1,17 +1,24 @@
 #!/bin/bash
 # ios/tools/signing.sh: the provisioning profile lookup picks the newest unexpired profile for
-# the bundle id that includes the device, and finds none otherwise. Fixture profiles are plain
-# plists (MCFM_DECODE_PROFILE=cat instead of security cms -D). No device or Xcode needed.
+# the bundle id that includes the device, and finds none otherwise; the signing identity is the
+# one whose certificate the profile was made for. Fixture profiles are plain plists
+# (MCFM_DECODE_PROFILE=cat instead of security cms -D), the identity list a file
+# (MCFM_FIND_IDENTITY=cat … instead of security find-identity). No device or Xcode needed.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 fails=0
 fail() { echo "FAIL: $*"; fails=$((fails+1)); }
+CERT_A="$(printf 'certificate A' | base64)"; SHA_A="$(printf 'certificate A' | shasum -a 1 | awk '{print toupper($1)}')"
+CERT_B="$(printf 'certificate B' | base64)"; SHA_B="$(printf 'certificate B' | shasum -a 1 | awk '{print toupper($1)}')"
+SHA_C="$(printf 'certificate C' | shasum -a 1 | awk '{print toupper($1)}')"
+CERTS="$CERT_B"  # the certificates the next profile() call embeds (space-separated base64)
 profile() {  # <file> <app id> <expiry> <device...>
-  local f="$1" app="$2" exp="$3"; shift 3
+  local f="$1" app="$2" exp="$3" c; shift 3
   { echo '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict>'
     echo "<key>ExpirationDate</key><date>$exp</date><key>TeamIdentifier</key><array><string>TEAM123456</string></array>"
     echo "<key>Entitlements</key><dict><key>application-identifier</key><string>TEAM123456.$app</string></dict>"
+    echo '<key>DeveloperCertificates</key><array>'; for c in $CERTS; do echo "<data>$c</data>"; done; echo '</array>'
     echo '<key>ProvisionedDevices</key><array>'; for d in "$@"; do echo "<string>$d</string>"; done; echo '</array>'
     echo '</dict></plist>'; } > "$T/profiles/$f"
 }
@@ -19,8 +26,9 @@ mkdir -p "$T/profiles"
 profile a-expired.mobileprovision io.example.app 2001-01-01T00:00:00Z DEV1
 profile b-other-app.mobileprovision io.example.other 2099-01-01T00:00:00Z DEV1
 profile c-no-device.mobileprovision io.example.app 2099-01-01T00:00:00Z DEV2
-profile d-good.mobileprovision io.example.app 2098-01-01T00:00:00Z DEV2 DEV1
+CERTS="$CERT_A $CERT_B" profile d-good.mobileprovision io.example.app 2098-01-01T00:00:00Z DEV2 DEV1
 profile e-wildcard-team.mobileprovision '*' 2099-01-01T00:00:00Z DEV1
+CERTS="" profile f-no-certs.mobileprovision io.example.app 2098-01-01T00:00:00Z DEV1
 export MCFM_DECODE_PROFILE=cat MCFM_PROFILE_DIRS="$T/profiles"
 # shellcheck source=/dev/null
 . "$ROOT/ios/tools/signing.sh"
@@ -30,4 +38,25 @@ export MCFM_DECODE_PROFILE=cat MCFM_PROFILE_DIRS="$T/profiles"
 [ "$(mcfm_profile_team "$T/profiles/d-good.mobileprovision")" = TEAM123456 ] || fail "team not read"
 msg="$(mcfm_require_profile io.example.none DEV1 2>&1 >/dev/null)"; rc=$?
 [ $rc != 0 ] && grep -q "io.example.none" <<<"$msg" && grep -qi "xcode" <<<"$msg" || fail "no clear message without a profile (rc $rc): $msg"
+
+# The identity: the one whose certificate is in the profile, not the first in the keychain.
+identities() {  # <sha1 "name"...> as security find-identity -v -p codesigning prints them
+  local i=1
+  { while [ $# -gt 0 ]; do printf '  %d) %s "%s"\n' $i "$1" "$2"; i=$((i+1)); shift 2; done
+    echo "     $((i-1)) valid identities found"; } > "$T/identities.txt"
+}
+export MCFM_FIND_IDENTITY="cat $T/identities.txt"
+identities "$SHA_C" "Apple Development: someone@else (OTHERTEAM1)" "$SHA_B" "Apple Development: me (TEAM123456)"
+id="$(mcfm_identity "$T/profiles/d-good.mobileprovision" io.example.app)"; rc=$?
+[ $rc = 0 ] && [ "$id" = "$SHA_B" ] || fail "did not pick the profile's identity (rc $rc): '$id'"
+identities "$SHA_C" "Apple Development: someone@else (OTHERTEAM1)"
+msg="$(mcfm_identity "$T/profiles/d-good.mobileprovision" io.example.app 2>&1 >/dev/null)"; rc=$?
+[ $rc != 0 ] && grep -q "io.example.app" <<<"$msg" && grep -q "another certificate" <<<"$msg" && grep -qi "xcode" <<<"$msg" \
+  || fail "no clear message when the profile's certificate is not in the keychain (rc $rc): $msg"
+[ -z "$(mcfm_identity "$T/profiles/d-good.mobileprovision" io.example.app 2>/dev/null)" ] || fail "an identity of another certificate was picked"
+id="$(mcfm_identity "$T/profiles/f-no-certs.mobileprovision" io.example.app 2>/dev/null)"; rc=$?
+[ $rc != 0 ] && [ -z "$id" ] || fail "a profile without certificates gave an identity: '$id'"
+identities
+msg="$(mcfm_identity "$T/profiles/d-good.mobileprovision" io.example.app 2>&1 >/dev/null)"; rc=$?
+[ $rc != 0 ] && grep -q "Apple Development" <<<"$msg" && grep -qi "xcode" <<<"$msg" || fail "no clear message without identities (rc $rc): $msg"
 [ $fails = 0 ] && echo "signing_test: passed" || { echo "$fails failure(s)"; exit 1; }

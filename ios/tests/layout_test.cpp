@@ -1,5 +1,5 @@
-// The iOS app's drawable size (ios/launcher/layout.h): points x the screen's native scale, in
-// landscape (width >= height) whatever the view reports. Host test.
+// The iOS app's drawable size (ios/launcher/layout.h): points x the screen's native scale,
+// rounded, in the view's own orientation. Host test.
 #include <cstdio>
 
 #include "layout.h"
@@ -12,8 +12,10 @@ using mcfm::launcher::pixel_size;
 int main() {
   auto p = pixel_size(956, 440, 3);  // iPhone 16 Pro Max, landscape
   EXPECT(p.w == 2868 && p.h == 1320);
-  p = pixel_size(440, 956, 3);  // the view still in portrait during rotation
-  EXPECT(p.w == 2868 && p.h == 1320);
+  // The view's own shape, never swapped: ANGLE sizes the Metal drawable from the layer's bounds
+  // x contentsScale, and a swapped size would be stretched onto the layer.
+  p = pixel_size(440, 956, 3);
+  EXPECT(p.w == 1320 && p.h == 2868);
   p = pixel_size(1024.5, 768, 2);  // rounded, not truncated
   EXPECT(p.w == 2049 && p.h == 1536);
   p = pixel_size(0, 0, 3);

@@ -85,12 +85,14 @@ ios-device: ios-ipa
 # the game from $(IPA) bundled (Mojang's files: a local build), signed for the connected device.
 IOS_BUNDLE_ID ?= io.github.d4yvid.mcfm.ios
 IOS_APP := $(CURDIR)/dist/ios/mcfm.app
-IOS_APP_SRCS := $(wildcard ios/app/* ios/launcher/* shared/launcher/*.cpp shared/launcher/*.h shared/src/*.cpp shared/apple/*.cpp shared/apple/*.h) \
-  ios/tools/build_app.sh ios/tools/signing.sh ios/tools/print_hooks.cpp tools/launcher/mcfm_image.py tools/launcher/build_stubs.sh
-IOS_DEVELOPER_DIR := $(or $(DEVELOPER_DIR),/Applications/Xcode.app/Contents/Developer)
-$(IOS_APP) $(ANGLE_IOS) ios-app-run ios-app-check: export DEVELOPER_DIR := $(IOS_DEVELOPER_DIR)
+IOS_APP_SRCS := $(wildcard ios/app/* ios/launcher/* shared/launcher/*.cpp shared/launcher/*.h shared/src/*.cpp shared/apple/*.cpp shared/apple/*.h \
+  shared/include/mcfm/*.h shared/include/mcfm/input/*.h) macos/launcher/egl_min.h \
+  ios/tools/build_app.sh ios/tools/signing.sh ios/tools/print_hooks.cpp tools/launcher/mcfm_image.py tools/launcher/build_stubs.sh \
+  tools/launcher/thin_arm64.sh
 # ANGLE for iOS (Godot's static build, linked into one dylib): make angle-ios once.
 ANGLE_IOS := $(BUILD)/angle-ios/libGLESv2.dylib
+IOS_DEVELOPER_DIR := $(or $(DEVELOPER_DIR),/Applications/Xcode.app/Contents/Developer)
+$(IOS_APP) $(ANGLE_IOS) ios-app-run ios-app-check: export DEVELOPER_DIR := $(IOS_DEVELOPER_DIR)
 .PHONY: angle-ios
 angle-ios: $(ANGLE_IOS)
 $(ANGLE_IOS): tools/launcher/fetch_angle_ios.sh tools/launcher/angle_ios_shims.cpp
@@ -106,8 +108,10 @@ ios-app-check: $(IOS_APP)
 	bash ios/tools/app_check.sh $(IOS_APP) $(BUILD)/ios-app
 # Installs the app on the connected iPhone/iPad and launches it with its console here.
 ios-app-run: $(IOS_APP)
-	xcrun devicectl device install app --device "$$(. ios/tools/signing.sh; mcfm_find_device)" $(IOS_APP)
-	xcrun devicectl device process launch --console --terminate-existing --device "$$(. ios/tools/signing.sh; mcfm_find_device)" $(IOS_BUNDLE_ID)
+	@device="$$(. ios/tools/signing.sh; mcfm_find_device)"; \
+	  [ -n "$$device" ] || { echo "ios-app-run: no paired iPhone/iPad connected (xcrun devicectl list devices)" >&2; exit 1; }; \
+	  xcrun devicectl device install app --device "$$device" $(IOS_APP) && \
+	  xcrun devicectl device process launch --console --terminate-existing --device "$$device" $(IOS_BUNDLE_ID)
 
 # Compiles the iOS sources for the iOS target without linking (works without Xcode).
 ios-syntax:
@@ -488,13 +492,19 @@ $(BUILD)/test/input_policy_test: macos/tests/input_policy_test.cpp macos/src/inp
 	clang++ -std=c++17 -Wall -O1 $(SHARED_INC) macos/tests/input_policy_test.cpp -o $@
 
 # Host tests of the iOS app's platform-free parts (Stage 4).
-IOS_TESTS := ios_keymap_test layout_test
+IOS_TESTS := ios_keymap_test layout_test ios_keys_test lifecycle_test
 $(BUILD)/test/ios_keymap_test: ios/tests/ios_keymap_test.cpp ios/launcher/ios_keymap.cpp ios/launcher/ios_keymap.h
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -Wextra -O1 -Iios/launcher ios/tests/ios_keymap_test.cpp ios/launcher/ios_keymap.cpp -o $@
 $(BUILD)/test/layout_test: ios/tests/layout_test.cpp ios/launcher/layout.h
 	@mkdir -p $(dir $@)
 	clang++ -std=c++11 -Wall -Wextra -O1 -Iios/launcher ios/tests/layout_test.cpp -o $@
+$(BUILD)/test/ios_keys_test: ios/tests/ios_keys_test.cpp ios/launcher/ios_keys.h ios/launcher/ios_keymap.cpp ios/launcher/ios_keymap.h shared/include/mcfm/input/input_state.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -Wextra -O1 -Iios/launcher $(SHARED_INC) ios/tests/ios_keys_test.cpp ios/launcher/ios_keymap.cpp -o $@
+$(BUILD)/test/lifecycle_test: ios/tests/lifecycle_test.cpp ios/launcher/lifecycle.h
+	@mkdir -p $(dir $@)
+	clang++ -std=c++11 -Wall -Wextra -O1 -Iios/launcher ios/tests/lifecycle_test.cpp -o $@
 
 test: $(addprefix $(BUILD)/test/,$(SHARED_TESTS) $(MACOS_TESTS) $(IOS_TESTS))
 	@for t in $(SHARED_TESTS) $(MACOS_TESTS) $(IOS_TESTS); do $(BUILD)/test/$$t || exit 1; done

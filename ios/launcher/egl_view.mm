@@ -19,6 +19,9 @@ EGLSurface eglCreateWindowSurface(EGLDisplay, EGLConfig, void *, const EGLint *)
 EGLBoolean eglMakeCurrent(EGLDisplay, EGLSurface, EGLSurface, EGLContext);
 EGLBoolean eglSwapBuffers(EGLDisplay, EGLSurface);
 EGLBoolean eglQuerySurface(EGLDisplay, EGLSurface, EGLint, EGLint *);
+EGLBoolean eglDestroySurface(EGLDisplay, EGLSurface);
+EGLBoolean eglDestroyContext(EGLDisplay, EGLContext);
+EGLBoolean eglTerminate(EGLDisplay);
 EGLint eglGetError(void);
 void glBindFramebuffer(unsigned, unsigned);
 void glViewport(int, int, int, int);
@@ -34,34 +37,43 @@ constexpr EGLint kEGL_SURFACE_TYPE = 0x3033, kEGL_WINDOW_BIT = 0x0004, kEGL_WIDT
 EGLDisplay g_display = nullptr;
 EGLContext g_context = nullptr;
 EGLSurface g_surface = nullptr;
+bool g_tried = false;
+
+// A failed init leaves nothing behind (and is not tried again: the app shows why it cannot run).
+int fail(const char *what) {
+  std::fprintf(stderr, "mcfm: ANGLE: %s (0x%x)\n", what, eglGetError());
+  if (g_display) {
+    eglMakeCurrent(g_display, nullptr, nullptr, nullptr);
+    if (g_surface) eglDestroySurface(g_display, g_surface);
+    if (g_context) eglDestroyContext(g_display, g_context);
+    eglTerminate(g_display);
+  }
+  g_display = g_context = g_surface = nullptr;
+  return 0;
+}
 }  // namespace
 
 extern "C" {
 
 int mcfm_ios_egl_init(void *metal_layer) {
+  if (g_tried) return g_surface != nullptr;
+  g_tried = true;
   const EGLAttrib display_attribs[] = {EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE, EGL_NONE};
   g_display = eglGetPlatformDisplay(EGL_PLATFORM_ANGLE_ANGLE, nullptr, display_attribs);
   EGLint major = 0, minor = 0;
-  if (!g_display || !eglInitialize(g_display, &major, &minor)) {
-    std::fprintf(stderr, "mcfm: ANGLE: no EGL display (0x%x)\n", eglGetError());
-    return 0;
-  }
+  if (!g_display) return fail("no EGL display");
+  if (!eglInitialize(g_display, &major, &minor)) return fail("EGL does not initialize");
   const EGLint config_attribs[] = {kEGL_SURFACE_TYPE, kEGL_WINDOW_BIT, EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
                                    EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
                                    EGL_DEPTH_SIZE, 24, EGL_STENCIL_SIZE, 8, EGL_NONE};
   EGLConfig config = nullptr;
   EGLint count = 0;
-  if (!eglChooseConfig(g_display, config_attribs, &config, 1, &count) || count < 1) {
-    std::fprintf(stderr, "mcfm: ANGLE: no EGL config\n");
-    return 0;
-  }
+  if (!eglChooseConfig(g_display, config_attribs, &config, 1, &count) || count < 1) return fail("no EGL config");
   const EGLint context_attribs[] = {EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE};
   g_context = eglCreateContext(g_display, config, nullptr, context_attribs);
   g_surface = eglCreateWindowSurface(g_display, config, metal_layer, nullptr);
-  if (!g_context || !g_surface || !eglMakeCurrent(g_display, g_surface, g_surface, g_context)) {
-    std::fprintf(stderr, "mcfm: ANGLE: cannot draw into the view (0x%x)\n", eglGetError());
-    return 0;
-  }
+  if (!g_context || !g_surface || !eglMakeCurrent(g_display, g_surface, g_surface, g_context))
+    return fail("cannot draw into the view");
   std::fprintf(stderr, "mcfm: EGL %d.%d (ANGLE, Metal)\n", major, minor);
   return 1;
 }
@@ -77,6 +89,7 @@ void mcfm_ios_egl_size(int *w_px, int *h_px) {
 }
 
 void mcfm_ios_egl_begin_frame(void) {
+  if (!g_surface) return;
   int w = 0, h = 0;
   eglMakeCurrent(g_display, g_surface, g_surface, g_context);
   mcfm_ios_egl_size(&w, &h);
@@ -85,6 +98,7 @@ void mcfm_ios_egl_begin_frame(void) {
 }
 
 unsigned mcfm_ios_egl_end_frame(void) {
+  if (!g_surface) return 0;
   unsigned error = glGetError();
   eglSwapBuffers(g_display, g_surface);
   return error;

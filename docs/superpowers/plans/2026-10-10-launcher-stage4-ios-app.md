@@ -1,5 +1,11 @@
 # Stage 4 — Our Own iOS App (Swift) Implementation Plan
 
+> **Note (as built, 2026-10-10):** the implementation departs from this plan in two places. The
+> system OpenGL ES drew nothing (the engine binds framebuffer 0, which iOS does not have), so
+> graphics go through **ANGLE** (OpenGL ES 3 on Metal, an EGL window surface on a `CAMetalLayer`;
+> the owner's call), not EAGL / `CAEAGLLayer`. The Swift app builds with `swiftc -swift-version 5`,
+> not Swift 6. See docs/research/ios-app.md and docs/LAUNCHER.md (Stage 4) for what was built.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A Swift iOS app of our own (like the Android app) that runs Minecraft PE 0.15.10's iOS game image, bundled in the app, with our launcher's AppPlatform — no patched Mojang IPA, no game UI glue.

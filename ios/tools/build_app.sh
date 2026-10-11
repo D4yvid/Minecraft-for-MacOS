@@ -14,6 +14,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 IPA="$1"; OUT="$2"; BUNDLE_ID="${3:-io.github.d4yvid.mcfm.ios}"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 [ -f "$IPA" ] || { echo "build_app: no IPA at $IPA" >&2; exit 2; }
+mkdir -p "$OUT" && OUT="$(cd "$OUT" && pwd)"  # absolute: the zip step runs in another directory
 ANGLE_IOS="${ANGLE_IOS:-$ROOT/build/angle-ios/libGLESv2.dylib}"
 [ -f "$ANGLE_IOS" ] || { echo "build_app: no ANGLE for iOS at $ANGLE_IOS (make angle-ios)" >&2; exit 2; }
 SDK="$(xcrun --sdk iphoneos --show-sdk-path 2>/dev/null)" || { echo "build_app: no iPhoneOS SDK (install Xcode)" >&2; exit 2; }
@@ -76,7 +77,7 @@ run xcrun --sdk iphoneos swiftc -swift-version 5 -O -target "$TARGET" -sdk "$SDK
 VERSION="0.1"
 sed -e "s/@BUNDLE_ID@/$BUNDLE_ID/" -e "s/@VERSION@/$VERSION/" "$ROOT/ios/app/Info.plist" > "$APP/Info.plist"
 run xcrun ibtool --compile "$APP/LaunchScreen.storyboardc" "$ROOT/ios/app/LaunchScreen.storyboard" \
-  --target-device iphone --target-device ipad --minimum-deployment-target 15.0
+  --target-device iphone --minimum-deployment-target 15.0
 ICONS=()
 for f in "$GAME_APP"/AppIcon*.png; do [ -f "$f" ] && cp "$f" "$APP/" && ICONS+=("$(basename "$f" .png)"); done
 if [ ${#ICONS[@]} -gt 0 ]; then
@@ -94,8 +95,7 @@ printf 'APPL????' > "$APP/PkgInfo"
 DEVICE="${MCFM_DEVICE:-$(mcfm_find_device)}"
 [ -n "$DEVICE" ] || { echo "build_app: no paired iPhone/iPad connected: the profile is chosen for it" >&2; exit 1; }
 PROFILE="$(mcfm_require_profile "$BUNDLE_ID" "$DEVICE")" || exit 1
-IDENTITY="$(mcfm_identity)"
-[ -n "$IDENTITY" ] || { echo "build_app: no Apple Development identity (Xcode › Settings › Accounts)" >&2; exit 1; }
+IDENTITY="$(mcfm_identity "$PROFILE" "$BUNDLE_ID")" || exit 1
 cp "$PROFILE" "$APP/embedded.mobileprovision"
 mcfm_profile_entitlements "$PROFILE" "$W/entitlements.plist"
 for f in "$APP"/Frameworks/*.dylib; do run codesign -f -s "$IDENTITY" --timestamp=none "$f"; done
